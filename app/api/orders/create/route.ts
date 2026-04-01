@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getMPPayment, MERCADOPAGO_ENV, type MPPaymentResponse } from "@/lib/mercadopago";
+import { sendOrderCreatedEmail } from "@/lib/email/send";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -361,7 +362,38 @@ export async function POST(request: NextRequest) {
       console.error("[orders/create] Failed to insert order_items:", itemsErr);
     }
 
-    // ── 6. Montar resposta por método de pagamento ──
+    // ── 6. Disparar e-mail de confirmação (não bloqueia resposta) ──
+    try {
+      await sendOrderCreatedEmail({
+        to: customer.email,
+        orderNumber: String(order.order_number),
+        customerName: customer.nome,
+        items: items.map((i) => ({
+          name: i.productName,
+          variant: i.size,
+          quantity: i.quantity,
+          unit_price: i.price,
+        })),
+        subtotal,
+        shippingCost: shipping.preco,
+        discount,
+        total,
+        paymentMethod: payment.method,
+        pixCode: payment.method === "pix"
+          ? mpResponse.point_of_interaction?.transaction_data?.qr_code ?? undefined
+          : undefined,
+        boletoUrl: payment.method === "boleto"
+          ? (mpResponse.transaction_details?.external_resource_url ?? undefined)
+          : undefined,
+        boletoBarcode: payment.method === "boleto"
+          ? (mpResponse.barcode?.content ?? undefined)
+          : undefined,
+      });
+    } catch (emailErr) {
+      console.error("[orders/create] Falha ao enviar e-mail de confirmação:", emailErr);
+    }
+
+    // ── 7. Montar resposta por método de pagamento ──
     const base = { orderId: order.id, orderNumber: order.order_number };
 
     if (payment.method === "pix") {

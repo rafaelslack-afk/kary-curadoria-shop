@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sendOrderShippedEmail } from "@/lib/email/send";
 
 // Desabilita qualquer cache estático do Next.js nesta rota
 export const dynamic = "force-dynamic";
@@ -123,12 +124,27 @@ export async function PUT(
     .from("orders")
     .update(patch)
     .eq("id", id)
-    .select("id, order_number, status, tracking_code, nf_number, nf_key, nf_status, notes")
+    .select("id, order_number, status, tracking_code, nf_number, nf_key, nf_status, notes, guest_name, guest_email, shipping_service")
     .single();
 
   if (error) {
     console.error(`[Orders PUT] Erro ao atualizar pedido ${id}:`, error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // Enviar e-mail de envio quando tracking_code é definido pela primeira vez
+  if (patch.tracking_code && data?.guest_email) {
+    try {
+      await sendOrderShippedEmail({
+        to: data.guest_email,
+        orderNumber: String(data.order_number),
+        customerName: data.guest_name ?? "Cliente",
+        trackingCode: String(patch.tracking_code),
+        carrier: data.shipping_service ?? undefined,
+      });
+    } catch (emailErr) {
+      console.error(`[Orders PUT] Falha ao enviar e-mail de envio:`, emailErr);
+    }
   }
 
   console.log(`[Orders PUT] id=${id} patch=${JSON.stringify(patch)}`);

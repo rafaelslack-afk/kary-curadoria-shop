@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sendPaymentConfirmedEmail, sendOrderCancelledEmail, sendLowStockAlertEmail } from "@/lib/email/send";
 
 // ── Mercado Pago Webhook (IPN) ────────────────────────────────────────────────
 // MP envia POST com body: { "type": "payment", "data": { "id": "12345678" } }
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
     const admin = createAdminClient();
     const { data: order } = await admin
       .from("orders")
-      .select("id, status, order_number")
+      .select("id, status, order_number, guest_name, guest_email, total, order_items(product_name, size_snapshot, quantity, unit_price)")
       .eq("pagbank_charge_id", String(paymentId))
       .single();
 
@@ -71,6 +72,50 @@ export async function POST(request: Request) {
         .eq("id", order.id);
 
       console.log(`[Webhook MP] Pedido #${order.order_number} marcado como PAGO`);
+
+      // E-mail de pagamento confirmado
+      if (order.guest_email) {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const items = (order as any).order_items ?? [];
+          await sendPaymentConfirmedEmail({
+            to: order.guest_email,
+            orderNumber: String(order.order_number),
+            customerName: order.guest_name ?? "Cliente",
+            items: items.map((i: { product_name: string; size_snapshot?: string; quantity: number; unit_price: number }) => ({
+              name: i.product_name,
+              variant: i.size_snapshot ?? undefined,
+              quantity: i.quantity,
+              unit_price: i.unit_price,
+            })),
+            total: order.total,
+          });
+        } catch (emailErr) {
+          console.error("[Webhook MP] Falha ao enviar e-mail de pagamento confirmado:", emailErr);
+        }
+      }
+
+      // Verificar estoque baixo após débito (trigger Supabase já rodou)
+      try {
+        const { data: lowStock } = await admin
+          .from("product_variants")
+          .select("id, sku, size, color, stock_qty, products!inner(name)")
+          .lte("stock_qty", 3)
+          .eq("active", true);
+
+        if (lowStock && lowStock.length > 0) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const items = lowStock.map((v: any) => ({
+            productName: Array.isArray(v.products) ? v.products[0]?.name ?? "—" : v.products?.name ?? "—",
+            variantLabel: [v.size, v.color].filter(Boolean).join(" / ") || "—",
+            sku: v.sku ?? "—",
+            stock: v.stock_qty,
+          }));
+          await sendLowStockAlertEmail(items);
+        }
+      } catch (stockErr) {
+        console.error("[Webhook MP] Falha ao verificar/enviar alerta de estoque:", stockErr);
+      }
     } else if (
       payment.status === "rejected" ||
       payment.status === "cancelled"
@@ -86,6 +131,21 @@ export async function POST(request: Request) {
       console.log(
         `[Webhook MP] Pedido #${order.order_number} marcado como CANCELADO (${payment.status})`
       );
+
+      // E-mail de cancelamento
+      if (order.guest_email) {
+        try {
+          await sendOrderCancelledEmail({
+            to: order.guest_email,
+            orderNumber: String(order.order_number),
+            customerName: order.guest_name ?? "Cliente",
+            total: order.total,
+            reason: payment.status === "rejected" ? "Pagamento recusado" : undefined,
+          });
+        } catch (emailErr) {
+          console.error("[Webhook MP] Falha ao enviar e-mail de cancelamento:", emailErr);
+        }
+      }
     }
 
     // Sempre retornar 200 para o MP não reenviar
