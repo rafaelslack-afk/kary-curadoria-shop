@@ -1,5 +1,6 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { isStorePrelaunchActive } from "@/lib/store-launch";
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
@@ -9,6 +10,18 @@ export async function middleware(request: NextRequest) {
   // Rotas de API admin não passam pelo middleware de auth
   // (protegidas pelo service role key no server)
   const pathname = request.nextUrl.pathname;
+
+  if (
+    isStorePrelaunchActive() &&
+    !pathname.startsWith("/admin") &&
+    !pathname.startsWith("/api") &&
+    pathname !== "/"
+  ) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

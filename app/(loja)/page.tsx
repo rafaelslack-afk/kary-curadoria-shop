@@ -3,7 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ProductCard } from "@/components/loja/product-card";
 import { BannerCarousel } from "@/components/loja/banner-carousel";
+import { PrelaunchHome } from "@/components/loja/prelaunch-home";
 import { buildWhatsAppUrl, INSTAGRAM_URL } from "@/lib/site";
+import { formatLaunchDatePtBr, isStorePrelaunchActive } from "@/lib/store-launch";
 import type { Product, Banner } from "@/types/database";
 
 async function getActiveBanners(): Promise<Banner[]> {
@@ -46,6 +48,10 @@ async function getFeaturedProducts() {
 const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
 
 export default async function Home() {
+  if (isStorePrelaunchActive()) {
+    return <PrelaunchHome launchLabel={formatLaunchDatePtBr()} />;
+  }
+
   const [featured, banners] = await Promise.all([
     getFeaturedProducts(),
     getActiveBanners(),
