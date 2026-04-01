@@ -240,6 +240,14 @@ export default function NovoProdutoPage() {
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
 
+    const MAX_SIZE = 4 * 1024 * 1024; // 4MB
+    const tooBig = files.find((f) => f.size > MAX_SIZE);
+    if (tooBig) {
+      setError(`"${tooBig.name}" excede 4MB. Use JPG com qualidade 80% para reduzir o tamanho.`);
+      if (imagesInputRef.current) imagesInputRef.current.value = "";
+      return;
+    }
+
     setImagesUploading(true);
     setError("");
 
@@ -536,7 +544,8 @@ export default function NovoProdutoPage() {
               onChange={handleImagesSelected}
             />
             <p className="text-[11px] text-gray-400">
-              JPG, PNG ou WEBP. A primeira imagem continua sendo a capa principal.
+              JPG, PNG ou WEBP · máx. 4MB por imagem · use JPG 80% para melhores resultados.
+              A primeira imagem é a capa principal.
             </p>
           </div>
 

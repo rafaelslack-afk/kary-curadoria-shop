@@ -1,7 +1,8 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export const dynamic = "force-dynamic";
+export const dynamic    = "force-dynamic";
+export const maxDuration = 60; // segundos — necessário para uploads grandes na Vercel
 
 const BUCKET = "products";
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
