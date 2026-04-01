@@ -1,20 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { withRetry } from "@/lib/supabase/retry";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const code = searchParams.get("code")?.toUpperCase();
+  const code = searchParams.get("code")?.trim().toUpperCase();
   const subtotal = parseFloat(searchParams.get("subtotal") ?? "0");
 
   if (!code) {
     return NextResponse.json({ error: "Informe o código do cupom." }, { status: 400 });
   }
 
-  const supabase = createClient();
-  const { data: coupon, error } = await withRetry(() =>
-    supabase.from("coupons").select("*").eq("code", code).eq("active", true).single()
-  );
+  console.log("[cupom] código recebido:", code, "| subtotal:", subtotal);
+
+  // Admin client bypassa RLS (tabela coupons tem RLS ativada)
+  const admin = createAdminClient();
+  const { data: coupon, error } = await admin
+    .from("coupons")
+    .select("*")
+    .ilike("code", code)
+    .eq("active", true)
+    .single();
+
+  console.log("[cupom] resultado:", coupon, "| error:", error?.message);
 
   if (error || !coupon) {
     return NextResponse.json({ error: "Cupom não encontrado ou inativo." }, { status: 404 });

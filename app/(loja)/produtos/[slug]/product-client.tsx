@@ -3,7 +3,8 @@
 import { useState, useMemo } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ChevronLeft, ShoppingBag, Check } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ChevronLeft, ShoppingBag, Check, Zap } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { useCartStore } from "@/lib/store/cart";
 import { buildWhatsAppUrl } from "@/lib/site";
@@ -22,6 +23,7 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
   const [added, setAdded] = useState(false);
 
   const addItem = useCartStore((s) => s.addItem);
+  const router = useRouter();
 
   // ── Detecção de modo: único tamanho ou grade cor×tamanho ──────────────────
 
@@ -82,6 +84,26 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
     });
     setAdded(true);
     setTimeout(() => setAdded(false), 2000);
+  }
+
+  function handleBuyNow() {
+    if (!selectedVariant || outOfStock) return;
+    addItem({
+      variantId: selectedVariant.id,
+      productId: product.id,
+      productName: product.name,
+      slug: product.slug,
+      size: selectedVariant.size,
+      color: selectedVariant.color ?? null,
+      sku: selectedVariant.sku,
+      price: product.price,
+      image: product.images?.[0] ?? null,
+      weight_g: product.weight_g,
+      length_cm: product.length_cm,
+      width_cm: product.width_cm,
+      height_cm: product.height_cm,
+    });
+    router.push("/checkout");
   }
 
   const images = product.images?.length > 0 ? product.images : [];
@@ -275,30 +297,48 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
             </div>
           )}
 
-          {/* ── Add to cart ── */}
-          <button
-            onClick={handleAddToCart}
-            disabled={!canAddToCart}
-            className={`flex items-center justify-center gap-2.5 py-4 text-[11px] tracking-[0.2em] uppercase transition-colors ${
-              added
-                ? "bg-emerald-600 text-white"
-                : !canAddToCart
-                ? "bg-kc-cream text-kc-muted cursor-not-allowed"
-                : "bg-kc text-white hover:bg-kc-dark"
-            }`}
-          >
-            {added ? (
-              <>
-                <Check size={14} />
-                Adicionado ao carrinho
-              </>
-            ) : (
-              <>
-                <ShoppingBag size={14} />
-                {cartButtonLabel()}
-              </>
-            )}
-          </button>
+          {/* ── Botões de ação ── */}
+          {/* Mobile: empilhado (Comprar Agora primeiro); Desktop: lado a lado */}
+          <div className="flex flex-col-reverse sm:flex-row gap-3">
+            {/* Adicionar ao Carrinho — outline terracota */}
+            <button
+              onClick={handleAddToCart}
+              disabled={!canAddToCart}
+              className={`flex-1 flex items-center justify-center gap-2.5 py-4 text-[11px] tracking-[0.2em] uppercase border transition-colors ${
+                added
+                  ? "border-emerald-600 bg-emerald-600 text-white"
+                  : !canAddToCart
+                  ? "border-kc-line text-kc-muted cursor-not-allowed bg-transparent"
+                  : "border-[#A0622A] text-[#A0622A] bg-transparent hover:bg-[#A0622A]/5"
+              }`}
+            >
+              {added ? (
+                <>
+                  <Check size={14} />
+                  Adicionado
+                </>
+              ) : (
+                <>
+                  <ShoppingBag size={14} />
+                  {canAddToCart ? "Adicionar ao Carrinho" : cartButtonLabel()}
+                </>
+              )}
+            </button>
+
+            {/* Comprar Agora — sólido terracota */}
+            <button
+              onClick={handleBuyNow}
+              disabled={!canAddToCart}
+              className={`flex-1 flex items-center justify-center gap-2.5 py-4 text-[11px] tracking-[0.2em] uppercase transition-colors ${
+                !canAddToCart
+                  ? "bg-kc-cream text-kc-muted cursor-not-allowed"
+                  : "bg-[#A0622A] text-white hover:bg-[#8a5224]"
+              }`}
+            >
+              <Zap size={14} />
+              Comprar Agora
+            </button>
+          </div>
 
           {/* WhatsApp CTA */}
           <a
