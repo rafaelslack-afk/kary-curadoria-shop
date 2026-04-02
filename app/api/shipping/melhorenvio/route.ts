@@ -108,9 +108,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ opcoes: mockOptions(cepDestino) });
     }
 
-    // Filtra apenas serviços sem erro e mapeia para formato interno
-    const opcoes: ShippingOption[] = (data as Record<string, unknown>[])
-      .filter((s) => !s.error)
+    // Filtra apenas serviços dos Correios (company.id === 1 ou nome contém "correios")
+    const CORREIOS_COMPANY_ID = 1;
+    const allValid = (data as Record<string, unknown>[]).filter((s) => !s.error);
+    const correiosOnly = allValid.filter((s) => {
+      const company = s.company as { id?: number; name?: string } | undefined;
+      return (
+        company?.id === CORREIOS_COMPANY_ID ||
+        company?.name?.toLowerCase().includes("correios")
+      );
+    });
+    // Fallback: se nenhum serviço dos Correios disponível, usa todos
+    const filtered = correiosOnly.length > 0 ? correiosOnly : allValid;
+
+    const opcoes: ShippingOption[] = filtered
       .map((s) => ({
         id: s.id as number,
         name: s.name as string,
