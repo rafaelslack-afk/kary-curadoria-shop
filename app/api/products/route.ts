@@ -4,6 +4,8 @@ import { withRetry } from "@/lib/supabase/retry";
 import type { ProductInsert } from "@/types/database";
 
 // GET /api/products — List products with optional filters
+export const runtime = "nodejs";
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = createAdminClient();

@@ -4,6 +4,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getMPPayment, MERCADOPAGO_ENV, type MPPaymentResponse } from "@/lib/mercadopago";
 import { sendOrderCreatedEmail } from "@/lib/email/send";
 
+export const runtime = "nodejs";
+export const maxDuration = 30;
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface OrderItem {

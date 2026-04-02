@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+export const runtime = "nodejs";
+
 // ── Melhor Envio — Cálculo de frete ──────────────────────────────────────────
 // Docs: https://docs.melhorenvio.com.br/reference/calculo-de-frete-por-produto
 // POST /api/v2/me/shipment/calculate

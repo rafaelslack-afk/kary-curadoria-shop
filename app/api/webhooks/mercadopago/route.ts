@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendPaymentConfirmedEmail, sendOrderCancelledEmail, sendLowStockAlertEmail } from "@/lib/email/send";
 
+export const runtime = "nodejs";
+export const maxDuration = 30;
+
 // ── Mercado Pago Webhook (IPN) ────────────────────────────────────────────────
 // MP envia POST com body: { "type": "payment", "data": { "id": "12345678" } }
 // Sempre retornar HTTP 200 para evitar reenvios.

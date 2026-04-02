@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // Public — returns only active banners ordered by order_index

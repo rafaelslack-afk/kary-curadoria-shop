@@ -3,6 +3,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { CategoryUpdate } from "@/types/database";
 
 // GET /api/categories/[id] — Get a single category
+export const runtime = "nodejs";
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: { id: string } }

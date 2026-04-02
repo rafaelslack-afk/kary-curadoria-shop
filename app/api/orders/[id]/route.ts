@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sendOrderShippedEmail } from "@/lib/email/send";
 
 // Desabilita qualquer cache estático do Next.js nesta rota
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 

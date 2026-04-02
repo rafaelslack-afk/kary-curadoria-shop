@@ -3,6 +3,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { ProductUpdate } from "@/types/database";
 
 // GET /api/products/[id] — Get a single product with variants
+export const runtime = "nodejs";
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: { id: string } }
