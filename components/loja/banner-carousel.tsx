@@ -158,6 +158,7 @@ export function BannerCarousel({ banners }: BannerCarouselProps) {
                       fill
                       className="object-cover object-top md:hidden"
                       priority={idx === 0}
+                      quality={95}
                       sizes="100vw"
                     />
                   )}
@@ -169,6 +170,7 @@ export function BannerCarousel({ banners }: BannerCarouselProps) {
                       banner.image_mobile ? "hidden md:block" : ""
                     }`}
                     priority={idx === 0}
+                    quality={95}
                     sizes="100vw"
                   />
                 </>

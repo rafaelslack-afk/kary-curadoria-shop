@@ -102,9 +102,13 @@ async function prepareBannerForUpload(
   file: File,
   type: "desktop" | "mobile"
 ): Promise<File> {
+  if (file.size <= TRANSPORT_LIMIT_BYTES) {
+    return file;
+  }
+
   const preparedSource = await fileToImageSource(file);
-  const maxWidth = type === "desktop" ? 2400 : 1200;
-  const maxHeight = type === "desktop" ? 1600 : 1400;
+  const maxWidth = type === "desktop" ? 3200 : 1600;
+  const maxHeight = type === "desktop" ? 2200 : 1600;
 
   const scale = Math.min(
     1,
@@ -130,11 +134,11 @@ async function prepareBannerForUpload(
   ctx.drawImage(preparedSource.source, 0, 0, width, height);
   preparedSource.dispose();
 
-  let quality = 0.9;
+  let quality = 0.96;
   let prepared = await canvasToFile(canvas, file.name, quality);
 
-  while (prepared.size > TRANSPORT_LIMIT_BYTES && quality > 0.55) {
-    quality -= 0.08;
+  while (prepared.size > TRANSPORT_LIMIT_BYTES && quality > 0.82) {
+    quality -= 0.04;
     prepared = await canvasToFile(canvas, file.name, quality);
   }
 

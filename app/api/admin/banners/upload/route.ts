@@ -35,7 +35,8 @@ export async function POST(request: NextRequest) {
         position: "top",
       })
       .jpeg({
-        quality: 90,
+        quality: 94,
+        chromaSubsampling: "4:4:4",
         mozjpeg: true,
       })
       .toBuffer();
