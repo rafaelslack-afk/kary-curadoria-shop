@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import type { Banner } from "@/types/database";
@@ -11,13 +11,13 @@ interface BannerCarouselProps {
 
 function FallbackHero() {
   return (
-    <section className="bg-kc-light border-b border-kc-line">
-      <div className="max-w-7xl mx-auto px-6 py-16 md:py-20 text-center">
+    <section className="border-b border-kc-line bg-kc-light">
+      <div className="mx-auto max-w-7xl px-6 py-16 text-center md:py-20">
         <p className="mb-5 text-[10px] uppercase tracking-[0.3em] text-kc-muted">
-          Nova Coleção · Outono 2026
+          Nova Colecao - Outono 2026
         </p>
         <h1 className="mb-5 font-serif text-4xl font-medium leading-tight text-kc-dark md:text-[52px]">
-          Elegância que
+          Elegancia que
           <br />
           nunca{" "}
           <em className="italic text-kc" style={{ fontStyle: "italic" }}>
@@ -25,30 +25,58 @@ function FallbackHero() {
           </em>
         </h1>
         <p className="mx-auto mb-8 max-w-md text-sm leading-relaxed tracking-wide text-kc-muted">
-          Conjuntos de linho e alfaiataria casual com acabamento impecável.
+          Conjuntos de linho e alfaiataria casual com acabamento impecavel.
           Do dia a dia ao evento especial.
         </p>
         <Link
           href="/produtos"
           className="inline-block bg-kc px-8 py-4 text-[11px] uppercase tracking-[0.2em] text-white transition-colors hover:bg-kc-dark"
         >
-          Ver Coleção
+          Ver Colecao
         </Link>
-        <div className="mt-6 flex items-center justify-center gap-5">
-          <span className="text-[10px] tracking-wider text-kc-muted">
-            Frete grátis acima de R$&nbsp;299
-          </span>
-          <span className="h-3 w-px bg-kc-line" />
-          <span className="text-[10px] tracking-wider text-kc-muted">
-            Troca grátis
-          </span>
-          <span className="h-3 w-px bg-kc-line" />
-          <span className="text-[10px] tracking-wider text-kc-muted">
-            Parcelamento sem juros
-          </span>
-        </div>
       </div>
     </section>
+  );
+}
+
+function positionClasses(position: Banner["text_position"]) {
+  if (position === "left") {
+    return {
+      content: "justify-start md:justify-start",
+      text: "text-left",
+    };
+  }
+
+  if (position === "right") {
+    return {
+      content: "justify-start md:justify-end",
+      text: "text-left md:text-right",
+    };
+  }
+
+  return {
+    content: "justify-start md:justify-center",
+    text: "text-left md:text-center",
+  };
+}
+
+function SlideWrapper({
+  href,
+  label,
+  children,
+}: {
+  href?: string | null;
+  label: string;
+  children: ReactNode;
+}) {
+  if (!href) {
+    return <div className="absolute inset-0">{children}</div>;
+  }
+
+  return (
+    <Link href={href} className="absolute inset-0 block" aria-label={label}>
+      {children}
+    </Link>
   );
 }
 
@@ -71,6 +99,7 @@ export function BannerCarousel({ banners }: BannerCarouselProps) {
 
   useEffect(() => {
     if (paused || total <= 1) return;
+
     timerRef.current = setTimeout(next, 5000);
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
@@ -81,26 +110,23 @@ export function BannerCarousel({ banners }: BannerCarouselProps) {
 
   return (
     <section
-      className="relative h-[clamp(320px,88vw,430px)] w-full overflow-hidden md:h-[420px] lg:h-[520px]"
+      className="relative w-full overflow-hidden aspect-[4/5] min-h-[420px] max-h-[78svh] md:h-[420px] md:min-h-0 md:max-h-none md:aspect-auto lg:h-[520px]"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
       {banners.map((banner, idx) => {
-        const imgSrc = banner.image_desktop ?? "";
-
-        const Wrapper = banner.button_link
-          ? ({ children }: { children: React.ReactNode }) => (
-              <Link
-                href={banner.button_link!}
-                className="absolute inset-0 block group"
-                aria-label={banner.title ?? "Ver banner"}
-              >
-                {children}
-              </Link>
-            )
-          : ({ children }: { children: React.ReactNode }) => (
-              <div className="absolute inset-0 group">{children}</div>
-            );
+        const layout = positionClasses(banner.text_position);
+        const textColor =
+          banner.text_color === "dark"
+            ? "text-kc-dark"
+            : "text-white";
+        const buttonClass =
+          banner.text_color === "dark"
+            ? "bg-kc-dark text-white hover:bg-kc"
+            : "bg-white text-kc-dark hover:bg-kc-cream";
+        const label = banner.title ?? banner.button_text ?? "Ver banner";
+        const desktopSrc = banner.image_desktop ?? banner.image_mobile ?? "";
+        const mobileSrc = banner.image_mobile ?? "";
 
         return (
           <div
@@ -112,90 +138,123 @@ export function BannerCarousel({ banners }: BannerCarouselProps) {
             }}
             aria-hidden={idx !== current}
           >
-            <Wrapper>
-              {imgSrc ? (
-                <>
-                  {banner.image_mobile && (
-                    <Image
-                      src={banner.image_mobile}
-                      alt={banner.title ?? "Banner"}
-                      fill
-                      className="object-cover object-top md:hidden"
-                      priority={idx === 0}
-                      quality={95}
-                      sizes="100vw"
-                    />
-                  )}
-                  <Image
-                    src={imgSrc}
-                    alt={banner.title ?? "Banner"}
-                    fill
-                    className={`object-cover object-top ${
-                      banner.image_mobile ? "hidden md:block" : ""
-                    }`}
-                    priority={idx === 0}
-                    quality={95}
-                    sizes="100vw"
-                  />
-                </>
+            <SlideWrapper href={banner.button_link} label={label}>
+              {mobileSrc ? (
+                <Image
+                  src={mobileSrc}
+                  alt={banner.title ?? "Banner"}
+                  fill
+                  className="object-cover object-top md:hidden"
+                  priority={idx === 0}
+                  quality={95}
+                  sizes="(max-width: 767px) 100vw, 0px"
+                />
+              ) : null}
+
+              {desktopSrc ? (
+                <Image
+                  src={desktopSrc}
+                  alt={banner.title ?? "Banner"}
+                  fill
+                  className={`object-cover object-top ${mobileSrc ? "hidden md:block" : ""}`}
+                  priority={idx === 0}
+                  quality={95}
+                  sizes={mobileSrc ? "(max-width: 767px) 0px, 100vw" : "100vw"}
+                />
               ) : (
                 <div className="absolute inset-0 bg-kc-cream" />
               )}
 
-              {/* Título visível apenas no hover */}
-              {banner.title && (
-                <div className="absolute inset-0 flex items-end justify-center pb-10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-black/20">
-                  <span className="bg-black/60 text-white text-sm tracking-wide px-5 py-2 rounded-full backdrop-blur-sm">
-                    {banner.title}
-                  </span>
+              <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/15 to-transparent md:bg-gradient-to-r md:from-black/40 md:via-black/10 md:to-transparent" />
+
+              {(banner.title || banner.subtitle || banner.button_text) && (
+                <div
+                  className={`absolute inset-0 flex items-end px-5 pb-6 md:items-center md:px-10 lg:px-14 ${layout.content}`}
+                >
+                  <div
+                    className={`w-full max-w-[14rem] min-[420px]:max-w-[16rem] md:max-w-[30rem] lg:max-w-[36rem] ${layout.text} ${textColor}`}
+                  >
+                    {banner.title ? (
+                      <h2 className="font-serif text-[clamp(2rem,8vw,3rem)] leading-[0.96] md:text-[42px] lg:text-[52px]">
+                        {banner.title}
+                      </h2>
+                    ) : null}
+
+                    {banner.subtitle ? (
+                      <p className="mt-3 hidden text-sm leading-relaxed opacity-90 min-[360px]:block md:text-base">
+                        {banner.subtitle}
+                      </p>
+                    ) : null}
+
+                    {banner.button_text ? (
+                      <span
+                        className={`mt-5 inline-flex items-center justify-center px-5 py-3 text-[10px] uppercase tracking-[0.22em] transition-colors md:px-6 md:py-3.5 ${buttonClass}`}
+                      >
+                        {banner.button_text}
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
               )}
-            </Wrapper>
+            </SlideWrapper>
           </div>
         );
       })}
 
-      {/* Setas — apenas com múltiplos banners */}
-      {total > 1 && (
+      {total > 1 ? (
         <>
           <button
             onClick={prev}
-            className="absolute left-3 top-1/2 -translate-y-1/2 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/30 text-white hover:bg-black/50 transition-colors"
+            className="absolute left-4 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white transition-colors hover:bg-black/50 md:flex"
             aria-label="Banner anterior"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <polyline points="15 18 9 12 15 6" />
             </svg>
           </button>
+
           <button
             onClick={next}
-            className="absolute right-3 top-1/2 -translate-y-1/2 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/30 text-white hover:bg-black/50 transition-colors"
-            aria-label="Próximo banner"
+            className="absolute right-4 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white transition-colors hover:bg-black/50 md:flex"
+            aria-label="Proximo banner"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <polyline points="9 18 15 12 9 6" />
             </svg>
           </button>
         </>
-      )}
+      ) : null}
 
-      {/* Bullets */}
-      {total > 1 && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex gap-2">
+      {total > 1 ? (
+        <div className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 gap-2">
           {banners.map((_, idx) => (
             <button
               key={idx}
               onClick={() => go(idx)}
               className={`rounded-full transition-all ${
                 idx === current
-                  ? "w-5 h-2 bg-white"
-                  : "w-2 h-2 bg-white/50 hover:bg-white/75"
+                  ? "h-2 w-5 bg-white"
+                  : "h-2 w-2 bg-white/55 hover:bg-white/80"
               }`}
               aria-label={`Ir para banner ${idx + 1}`}
             />
           ))}
         </div>
-      )}
+      ) : null}
     </section>
   );
 }

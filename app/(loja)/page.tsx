@@ -23,9 +23,9 @@ const FALLBACK_SECTIONS: HomeSection[] = [
   {
     id: "1",
     title: "Conjuntos de Linho",
-    description: "Frescor e elegância na fibra natural que mais respira",
+    description: "Frescor e elegancia na fibra natural que mais respira",
     href: "/produtos?categoria=conjuntos-de-linho",
-    button_text: "Ver Coleção →",
+    button_text: "Ver Colecao ->",
     icon_type: "linen",
     order_index: 1,
     active: true,
@@ -33,9 +33,9 @@ const FALLBACK_SECTIONS: HomeSection[] = [
   {
     id: "2",
     title: "Alfaiataria Casual",
-    description: "Cortes precisos para um estilo sofisticado sem esforço",
+    description: "Cortes precisos para um estilo sofisticado sem esforco",
     href: "/produtos?categoria=alfaiataria-casual",
-    button_text: "Ver Coleção →",
+    button_text: "Ver Colecao ->",
     icon_type: "suit",
     order_index: 2,
     active: true,
@@ -93,7 +93,7 @@ function SectionIcon({ type }: { type: string }) {
       </svg>
     );
   }
-  // linen (default)
+
   return (
     <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
       <rect x="10" y="4" width="16" height="28" rx="1" stroke="#A0622A" strokeWidth="1.2" />
@@ -123,7 +123,7 @@ async function getFeaturedProducts() {
     const supabase = createClient();
     const { data } = await supabase
       .from("products")
-      .select(`*, product_variants(stock_qty)`)
+      .select("*, product_variants(stock_qty)")
       .eq("active", true)
       .eq("featured", true)
       .order("created_at", { ascending: false })
@@ -137,11 +137,45 @@ async function getFeaturedProducts() {
       ),
     }));
   } catch {
-    return []; // banco acordando — mostra placeholders
+    return [];
   }
 }
 
 const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
+
+function HomeCategories({ homeSections }: { homeSections: HomeSection[] }) {
+  if (homeSections.length === 0) return null;
+
+  return (
+    <section className="max-w-7xl mx-auto px-6 py-10">
+      <p className="mb-1.5 text-[10px] uppercase tracking-[0.26em] text-kc-muted">Explore</p>
+      <h2 className="mb-6 font-serif text-[22px] font-medium text-kc-dark">
+        Nossas Categorias
+      </h2>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        {homeSections.map((s) => (
+          <Link
+            key={s.id}
+            href={s.href}
+            className="group relative overflow-hidden border border-kc-line bg-kc-light p-8 text-center transition-colors hover:border-kc"
+          >
+            <div className="absolute left-0 right-0 top-0 h-0.5 origin-left scale-x-0 bg-kc transition-transform duration-300 group-hover:scale-x-100" />
+            <div className="mb-4 flex justify-center">
+              <SectionIcon type={s.icon_type} />
+            </div>
+            <h3 className="mb-2 font-serif text-[17px] font-medium tracking-wide text-kc-dark">
+              {s.title}
+            </h3>
+            <p className="mb-4 text-[11px] leading-relaxed text-kc-muted">{s.description}</p>
+            <span className="text-[10px] uppercase tracking-[0.18em] text-kc underline-offset-2 group-hover:underline">
+              {s.button_text}
+            </span>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 export default async function Home() {
   if (isStorePrelaunchActive()) {
@@ -156,83 +190,49 @@ export default async function Home() {
 
   return (
     <>
-      {/* ── HERO / BANNER CAROUSEL ── */}
       <BannerCarousel banners={banners} />
 
-      {/* ── CATEGORIAS ── */}
-      {homeSections.length > 0 && (
-        <section className="max-w-7xl mx-auto px-6 py-10">
-          <p className="text-[10px] tracking-[0.26em] text-kc-muted mb-1.5 uppercase">Explore</p>
-          <h2 className="font-serif text-[22px] font-medium text-kc-dark mb-6">
-            Nossas Categorias
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {homeSections.map((s) => (
-              <Link
-                key={s.id}
-                href={s.href}
-                className="group bg-kc-light border border-kc-line p-8 text-center relative overflow-hidden hover:border-kc transition-colors"
-              >
-                <div className="absolute top-0 left-0 right-0 h-0.5 bg-kc scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left" />
-                <div className="flex justify-center mb-4">
-                  <SectionIcon type={s.icon_type} />
-                </div>
-                <h3 className="font-serif text-[17px] font-medium text-kc-dark mb-2 tracking-wide">
-                  {s.title}
-                </h3>
-                <p className="text-[11px] text-kc-muted leading-relaxed mb-4">{s.description}</p>
-                <span className="text-[10px] tracking-[0.18em] text-kc uppercase group-hover:underline underline-offset-2">
-                  {s.button_text}
-                </span>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
-
-      <div className="h-px bg-kc-line mx-6" />
-
       <section id="nossa-loja" className="max-w-7xl mx-auto px-6 py-10 scroll-mt-24">
-        <div className="grid grid-cols-1 lg:grid-cols-[1.15fr_0.85fr] gap-6 items-stretch">
-          <div className="bg-kc-light border border-kc-line p-8 md:p-10">
-            <p className="text-[10px] tracking-[0.26em] text-kc-muted mb-1.5 uppercase">Nossa Loja</p>
-            <h2 className="font-serif text-[24px] font-medium text-kc-dark mb-4">
-              Kary Curadoria no coração do Brás
+        <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+          <div className="border border-kc-line bg-kc-light p-8 md:p-10">
+            <p className="mb-1.5 text-[10px] uppercase tracking-[0.26em] text-kc-muted">Nossa Loja</p>
+            <h2 className="mb-4 font-serif text-[24px] font-medium text-kc-dark">
+              Kary Curadoria no coracao do Bras
             </h2>
-            <p className="text-sm text-kc-dark/80 leading-relaxed max-w-xl">
-              A loja virtual nasce para ampliar o atendimento da nossa curadoria, mas a essência
-              continua a mesma: atendimento próximo, alfaiataria impecável e peças atemporais com
-              excelente custo-benefício.
+            <p className="max-w-xl text-sm leading-relaxed text-kc-dark/80">
+              A loja virtual nasce para ampliar o atendimento da nossa curadoria, mas a essencia
+              continua a mesma: atendimento proximo, alfaiataria impecavel e pecas atemporais com
+              excelente custo-beneficio.
             </p>
             <div className="mt-6 space-y-2 text-xs text-kc-muted">
               <p>Rua Min. Firmino Whitaker, 49/55</p>
-              <p>Box 142, Brás, São Paulo - SP</p>
+              <p>Box 142, Bras, Sao Paulo - SP</p>
             </div>
           </div>
 
-          <div className="bg-kc-cream border border-kc-line p-8 md:p-10 flex flex-col justify-between">
+          <div className="flex flex-col justify-between border border-kc-line bg-kc-cream p-8 md:p-10">
             <div>
-              <p className="text-[10px] tracking-[0.22em] text-kc-muted uppercase mb-2">Atendimento</p>
-              <p className="text-sm text-kc-dark/80 leading-relaxed">
+              <p className="mb-2 text-[10px] uppercase tracking-[0.22em] text-kc-muted">Atendimento</p>
+              <p className="text-sm leading-relaxed text-kc-dark/80">
                 Instagram e loja virtual trabalham juntos: descubra no Instagram, finalize com
-                segurança na loja e conte com nosso WhatsApp para um atendimento mais consultivo.
+                seguranca na loja e conte com nosso WhatsApp para um atendimento mais consultivo.
               </p>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-3 mt-6">
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
               <a
                 href={INSTAGRAM_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center justify-center bg-kc text-white text-[10px] tracking-[0.18em] px-5 py-3 uppercase hover:bg-kc-dark transition-colors"
+                className="inline-flex items-center justify-center bg-kc px-5 py-3 text-[10px] uppercase tracking-[0.18em] text-white transition-colors hover:bg-kc-dark"
               >
                 Ver Instagram
               </a>
               <a
-                href={buildWhatsAppUrl("Olá! Vim pelo site e quero falar com a Kary Curadoria.")}
+                href={buildWhatsAppUrl("Ola! Vim pelo site e quero falar com a Kary Curadoria.")}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center justify-center border border-kc text-kc text-[10px] tracking-[0.18em] px-5 py-3 uppercase hover:bg-kc hover:text-white transition-colors"
+                className="inline-flex items-center justify-center border border-kc px-5 py-3 text-[10px] uppercase tracking-[0.18em] text-kc transition-colors hover:bg-kc hover:text-white"
               >
                 Falar no WhatsApp
               </a>
@@ -241,21 +241,20 @@ export default async function Home() {
         </div>
       </section>
 
-      <div className="h-px bg-kc-line mx-6" />
+      <div className="mx-6 h-px bg-kc-line" />
 
-      {/* ── VITRINE ── */}
       <section className="max-w-7xl mx-auto px-6 py-10">
-        <p className="text-[10px] tracking-[0.26em] text-kc-muted mb-1.5 uppercase">Destaques</p>
-        <h2 className="font-serif text-[22px] font-medium text-kc-dark mb-6">
-          Peças Selecionadas
+        <p className="mb-1.5 text-[10px] uppercase tracking-[0.26em] text-kc-muted">Destaques</p>
+        <h2 className="mb-6 font-serif text-[22px] font-medium text-kc-dark">
+          Pecas Selecionadas
         </h2>
 
         {featured.length > 0 ? (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             {featured.map((product) => {
               const isNew =
-                Date.now() - new Date(product.created_at).getTime() <
-                THIRTY_DAYS;
+                Date.now() - new Date(product.created_at).getTime() < THIRTY_DAYS;
+
               return (
                 <ProductCard
                   key={product.id}
@@ -266,24 +265,25 @@ export default async function Home() {
             })}
           </div>
         ) : (
-          // Placeholder se ainda não houver produtos cadastrados
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             {[
               { name: "Conjunto Linho Off-White Premium", price: 389 },
               { name: "Blazer Alfaiataria Caramelo", price: 459 },
               { name: "Conjunto Linho Terracota", price: 349, original: 420 },
-              { name: "Calça Alfaiataria Creme", price: 289 },
+              { name: "Calca Alfaiataria Creme", price: 289 },
             ].map((p) => (
-              <div key={p.name} className="bg-kc-light border border-kc-line">
-                <div className="w-full aspect-[3/4] bg-kc-cream flex items-center justify-center">
+              <div key={p.name} className="border border-kc-line bg-kc-light">
+                <div className="flex aspect-[3/4] w-full items-center justify-center bg-kc-cream">
                   <span className="text-[9px] tracking-[0.18em] text-kc-muted opacity-40">FOTO</span>
                 </div>
                 <div className="p-3">
-                  <h3 className="font-serif text-[14px] font-medium text-kc-dark leading-snug mb-1.5">{p.name}</h3>
+                  <h3 className="mb-1.5 font-serif text-[14px] font-medium leading-snug text-kc-dark">
+                    {p.name}
+                  </h3>
                   <div className="flex items-baseline gap-1.5">
-                    {p.original && (
+                    {p.original ? (
                       <span className="text-[11px] text-kc-muted line-through">R$ {p.original},00</span>
-                    )}
+                    ) : null}
                     <span className="text-sm font-medium text-kc">R$ {p.price},00</span>
                   </div>
                 </div>
@@ -292,29 +292,35 @@ export default async function Home() {
           </div>
         )}
 
-        <div className="text-center mt-6">
+        <div className="mt-6 text-center">
           <Link
             href="/produtos"
-            className="inline-block bg-kc text-white text-[10px] tracking-[0.2em] px-6 py-3 hover:bg-kc-dark transition-colors uppercase"
+            className="inline-block bg-kc px-6 py-3 text-[10px] uppercase tracking-[0.2em] text-white transition-colors hover:bg-kc-dark"
           >
             Ver Todos os Produtos
           </Link>
         </div>
       </section>
 
-      {/* ── SELOS DE PAGAMENTO ── */}
+      {homeSections.length > 0 ? (
+        <>
+          <div className="mx-6 h-px bg-kc-line" />
+          <HomeCategories homeSections={homeSections} />
+        </>
+      ) : null}
+
       <section className="border-t border-kc-line bg-kc-cream">
-        <div className="max-w-7xl mx-auto px-6 py-6 flex flex-wrap items-center justify-center gap-6">
+        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-center gap-6 px-6 py-6">
           {[
-            { label: "PIX", desc: "Pagamento instantâneo" },
-            { label: "CARTÃO", desc: "Até 3x sem juros" },
-            { label: "BOLETO", desc: "Vence em 3 dias úteis" },
+            { label: "PIX", desc: "Pagamento instantaneo" },
+            { label: "CARTAO", desc: "Ate 3x sem juros" },
+            { label: "BOLETO", desc: "Vence em 3 dias uteis" },
           ].map(({ label, desc }) => (
             <div key={label} className="flex items-center gap-2.5 text-kc-muted">
-              <div className="border border-kc-line bg-kc-light px-3 py-1.5 text-[9px] tracking-[0.16em] text-kc-dark font-medium">
+              <div className="border border-kc-line bg-kc-light px-3 py-1.5 text-[9px] font-medium tracking-[0.16em] text-kc-dark">
                 {label}
               </div>
-              <span className="text-[10px] tracking-wide hidden sm:block">{desc}</span>
+              <span className="hidden text-[10px] tracking-wide sm:block">{desc}</span>
             </div>
           ))}
           <div className="flex items-center gap-2 text-kc-muted">

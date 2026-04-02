@@ -42,7 +42,7 @@ const EMPTY: FormState = {
 
 const DIMENSIONS = {
   desktop: { w: 1920, h: 520 },
-  mobile: { w: 768, h: 380 },
+  mobile: { w: 1080, h: 1350 },
 };
 
 const TRANSPORT_LIMIT_BYTES = 3.8 * 1024 * 1024;
@@ -107,8 +107,8 @@ async function prepareBannerForUpload(
   }
 
   const preparedSource = await fileToImageSource(file);
-  const maxWidth = type === "desktop" ? 3200 : 1600;
-  const maxHeight = type === "desktop" ? 2200 : 1600;
+  const maxWidth = type === "desktop" ? 3200 : 1800;
+  const maxHeight = type === "desktop" ? 2200 : 2400;
 
   const scale = Math.min(
     1,
@@ -415,8 +415,9 @@ export default function BannersPage() {
             Antes do envio, a imagem e reduzida no navegador para evitar erro
             de limite na Vercel. O recorte final continua acontecendo no
             servidor, em {DIMENSIONS.desktop.w}x{DIMENSIONS.desktop.h}px no
-            desktop e {DIMENSIONS.mobile.w}x{DIMENSIONS.mobile.h}px no mobile,
-            sempre priorizando o topo da foto.
+            desktop e {DIMENSIONS.mobile.w}x{DIMENSIONS.mobile.h}px no mobile.
+            No celular, o banner agora usa formato vertical para preencher bem
+            a tela em modo retrato, sempre priorizando o topo da foto.
           </div>
 
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">

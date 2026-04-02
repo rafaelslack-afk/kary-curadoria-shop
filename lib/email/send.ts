@@ -6,10 +6,13 @@ import { OrderShippedEmail } from "./templates/order-shipped";
 import { OrderCancelledEmail } from "./templates/order-cancelled";
 import { LowStockAlertEmail } from "./templates/low-stock-alert";
 
-const FROM = process.env.EMAIL_FROM ?? "contato@karycuradoria.com.br";
+const FROM = process.env.EMAIL_FROM
+  ? process.env.EMAIL_FROM.includes("<")
+    ? process.env.EMAIL_FROM
+    : `Kary Curadoria <${process.env.EMAIL_FROM}>`
+  : "Kary Curadoria <contato@karycuradoria.com.br>";
 const ADMIN = process.env.EMAIL_ADMIN ?? "contato@karycuradoria.com.br";
-
-// ─── Types ───────────────────────────────────────────────────────────────────
+const REPLY_TO = process.env.EMAIL_REPLY_TO ?? undefined;
 
 export interface EmailOrderItem {
   name: string;
@@ -64,14 +67,13 @@ export interface LowStockItem {
   stock: number;
 }
 
-// ─── Send functions ───────────────────────────────────────────────────────────
-
 export async function sendOrderCreatedEmail(params: SendOrderCreatedParams) {
   const resend = getResend();
   await resend.emails.send({
     from: FROM,
     to: params.to,
-    subject: `Pedido #${params.orderNumber} recebido — Kary Curadoria`,
+    replyTo: REPLY_TO,
+    subject: `Pedido #${params.orderNumber} recebido - Kary Curadoria`,
     react: createElement(OrderCreatedEmail, params),
   });
 }
@@ -81,7 +83,8 @@ export async function sendPaymentConfirmedEmail(params: SendPaymentConfirmedPara
   await resend.emails.send({
     from: FROM,
     to: params.to,
-    subject: `Pagamento aprovado — Pedido #${params.orderNumber}`,
+    replyTo: REPLY_TO,
+    subject: `Pagamento aprovado - Pedido #${params.orderNumber}`,
     react: createElement(PaymentConfirmedEmail, params),
   });
 }
@@ -91,6 +94,7 @@ export async function sendOrderShippedEmail(params: SendOrderShippedParams) {
   await resend.emails.send({
     from: FROM,
     to: params.to,
+    replyTo: REPLY_TO,
     subject: `Seu pedido #${params.orderNumber} foi enviado!`,
     react: createElement(OrderShippedEmail, params),
   });
@@ -101,6 +105,7 @@ export async function sendOrderCancelledEmail(params: SendOrderCancelledParams) 
   await resend.emails.send({
     from: FROM,
     to: params.to,
+    replyTo: REPLY_TO,
     subject: `Pedido #${params.orderNumber} cancelado`,
     react: createElement(OrderCancelledEmail, params),
   });
@@ -108,11 +113,13 @@ export async function sendOrderCancelledEmail(params: SendOrderCancelledParams) 
 
 export async function sendLowStockAlertEmail(items: LowStockItem[]) {
   if (items.length === 0) return;
+
   const resend = getResend();
   await resend.emails.send({
     from: FROM,
     to: ADMIN,
-    subject: `⚠ Alerta: ${items.length} variação(ões) com estoque baixo`,
+    replyTo: REPLY_TO,
+    subject: `Alerta: ${items.length} variacao(oes) com estoque baixo`,
     react: createElement(LowStockAlertEmail, { items }),
   });
 }

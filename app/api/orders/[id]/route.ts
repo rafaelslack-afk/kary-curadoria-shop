@@ -121,6 +121,21 @@ export async function PUT(
   }
 
   const admin = createAdminClient();
+  const requestedTrackingCode =
+    typeof patch.tracking_code === "string" ? patch.tracking_code.trim() : "";
+
+  const { data: previousOrder, error: previousOrderError } = await admin
+    .from("orders")
+    .select("tracking_code, guest_name, guest_email, order_number, shipping_service")
+    .eq("id", id)
+    .single();
+
+  if (previousOrderError || !previousOrder) {
+    console.error(`[Orders PUT] Pedido nÃ£o encontrado para atualizar ${id}:`, previousOrderError?.message);
+    return NextResponse.json({ error: "Pedido nÃ£o encontrado." }, { status: 404 });
+  }
+
+  const previousTrackingCode = previousOrder.tracking_code?.trim() ?? "";
   const { data, error } = await admin
     .from("orders")
     .update(patch)
@@ -134,14 +149,19 @@ export async function PUT(
   }
 
   // Enviar e-mail de envio quando tracking_code é definido pela primeira vez
-  if (patch.tracking_code && data?.guest_email) {
+  const shouldSendTrackingEmail =
+    requestedTrackingCode.length > 0 &&
+    requestedTrackingCode !== previousTrackingCode &&
+    Boolean(previousOrder.guest_email);
+
+  if (shouldSendTrackingEmail && previousOrder.guest_email) {
     try {
       await sendOrderShippedEmail({
-        to: data.guest_email,
-        orderNumber: String(data.order_number),
-        customerName: data.guest_name ?? "Cliente",
-        trackingCode: String(patch.tracking_code),
-        carrier: data.shipping_service ?? undefined,
+        to: previousOrder.guest_email,
+        orderNumber: String(previousOrder.order_number),
+        customerName: previousOrder.guest_name ?? "Cliente",
+        trackingCode: requestedTrackingCode,
+        carrier: previousOrder.shipping_service ?? undefined,
       });
     } catch (emailErr) {
       console.error(`[Orders PUT] Falha ao enviar e-mail de envio:`, emailErr);

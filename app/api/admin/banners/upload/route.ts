@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 const TARGET_SIZES = {
   desktop: { width: 1920, height: 520 },
-  mobile: { width: 768, height: 380 },
+  mobile: { width: 1080, height: 1350 },
 } as const;
 
 export async function POST(request: NextRequest) {
