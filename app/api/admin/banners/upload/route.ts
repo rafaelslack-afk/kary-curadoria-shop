@@ -6,8 +6,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const TARGET_SIZES = {
-  desktop: { width: 1920, height: 680 },
-  mobile: { width: 768, height: 500 },
+  desktop: { width: 1920, height: 520 },
+  mobile: { width: 768, height: 380 },
 } as const;
 
 export async function POST(request: NextRequest) {
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
       .rotate()
       .resize(target.width, target.height, {
         fit: "cover",
-        position: sharp.strategy.attention,
+        position: "top",
       })
       .jpeg({
         quality: 90,
@@ -56,5 +56,9 @@ export async function POST(request: NextRequest) {
   }
 
   const { data } = admin.storage.from("banners").getPublicUrl(path);
-  return NextResponse.json({ url: data.publicUrl });
+  return NextResponse.json({
+    url: data.publicUrl,
+    width: target.width,
+    height: target.height,
+  });
 }
