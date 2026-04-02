@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { ChevronLeft, ChevronRight, Save, Package2, Layers, RefreshCw, Upload, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Save, Package2, Layers, RefreshCw, Upload, X, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn, slugify } from "@/lib/utils";
 import type { Category, ProductVariant, Color, Size, ProductType } from "@/types/database";
@@ -376,6 +376,19 @@ export default function EditarProdutoPage() {
       body: JSON.stringify({ variant_id: variant.id, active: !variant.active }),
     });
     setVariants((prev) => prev.map((v) => (v.id === variant.id ? { ...v, active: !v.active } : v)));
+  }
+
+  // ── Excluir variante ─────────────────────────────────────────────────────
+
+  async function deleteVariant(variant: VariantRow) {
+    if (!confirm(`Excluir variante ${variant.sku || variant.size}? Esta ação não pode ser desfeita.`)) return;
+    const res = await fetch(`/api/admin/products/${id}/variants/${variant.id}`, { method: "DELETE" });
+    const json = await res.json();
+    if (!res.ok) {
+      alert(json.error ?? "Erro ao excluir variante.");
+      return;
+    }
+    setVariants((prev) => prev.filter((v) => v.id !== variant.id));
   }
 
   // ── Adicionar novas variantes da grade ──────────────────────────────────
@@ -807,6 +820,11 @@ export default function EditarProdutoPage() {
                                       v.active ? "border-gray-200 text-gray-500 hover:border-red-300 hover:text-red-500" : "border-green-200 text-green-600 hover:bg-green-50"
                                     )}>
                                     {v.active ? "Desativar" : "Ativar"}
+                                  </button>
+                                  <button type="button" onClick={() => deleteVariant(v)}
+                                    title="Excluir variante"
+                                    className="p-0.5 text-gray-300 hover:text-red-500 transition-colors">
+                                    <Trash2 size={12} />
                                   </button>
                                 </div>
                               </div>
