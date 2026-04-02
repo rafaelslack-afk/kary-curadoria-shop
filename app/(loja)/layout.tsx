@@ -2,6 +2,7 @@ import { Navbar } from "@/components/loja/navbar";
 import { Footer } from "@/components/loja/footer";
 import { WhatsAppFloat } from "@/components/loja/whatsapp-float";
 import { isStorePrelaunchActive } from "@/lib/store-launch";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const revalidate = 60;
 
@@ -20,13 +21,15 @@ const FALLBACK_LINKS: NavLink[] = [
 
 async function getNavLinks(): Promise<NavLink[]> {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-    const res = await fetch(`${baseUrl}/api/nav-links`, {
-      next: { revalidate: 60 },
-    });
-    if (!res.ok) return FALLBACK_LINKS;
-    const data: NavLink[] = await res.json();
-    return data.length > 0 ? data : FALLBACK_LINKS;
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("nav_links")
+      .select("id, label, href")
+      .eq("active", true)
+      .order("order_index", { ascending: true });
+
+    if (error || !data || data.length === 0) return FALLBACK_LINKS;
+    return data;
   } catch {
     return FALLBACK_LINKS;
   }
