@@ -27,7 +27,8 @@ function getTextPalette(color: Banner["text_color"]) {
       title: "text-kc-dark",
       body: "text-kc-dark/80",
       button: "bg-kc text-white",
-      overlay: "bg-gradient-to-r from-white/75 via-white/35 to-transparent",
+      overlay:
+        "bg-gradient-to-t from-white/88 via-white/50 to-white/10 md:bg-gradient-to-r md:from-white/75 md:via-white/35 md:to-transparent",
     };
   }
 
@@ -36,7 +37,8 @@ function getTextPalette(color: Banner["text_color"]) {
     title: "text-white",
     body: "text-white/90",
     button: "bg-white text-kc-dark",
-    overlay: "bg-gradient-to-r from-black/45 via-black/20 to-transparent",
+    overlay:
+      "bg-gradient-to-t from-black/58 via-black/28 to-black/10 md:bg-gradient-to-r md:from-black/45 md:via-black/20 md:to-transparent",
   };
 }
 
@@ -112,7 +114,7 @@ export function BannerCarousel({ banners }: BannerCarouselProps) {
 
   return (
     <section
-      className="relative h-[380px] w-full overflow-hidden md:h-[420px] lg:h-[520px]"
+      className="relative h-[400px] w-full overflow-hidden md:h-[420px] lg:h-[520px]"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
@@ -183,33 +185,33 @@ export function BannerCarousel({ banners }: BannerCarouselProps) {
                   <div className={`absolute inset-0 ${palette.overlay}`} />
                   <div className="absolute inset-0">
                     <div
-                      className={`mx-auto flex h-full max-w-7xl px-6 ${textAlign}`}
+                      className={`mx-auto flex h-full max-w-7xl px-5 md:px-6 ${textAlign}`}
                     >
-                      <div className="w-full max-w-[560px] py-8 md:py-10">
+                      <div className="w-full max-w-[320px] self-end pb-14 pt-10 md:max-w-[560px] md:self-auto md:py-10">
                         {banner.subtitle && (
                           <p
-                            className={`mb-3 text-[10px] uppercase tracking-[0.28em] ${palette.eyebrow}`}
+                            className={`mb-2 text-[9px] uppercase tracking-[0.22em] md:mb-3 md:text-[10px] md:tracking-[0.28em] ${palette.eyebrow}`}
                           >
                             {banner.subtitle}
                           </p>
                         )}
                         {banner.title && (
                           <h2
-                            className={`font-serif text-3xl leading-tight md:text-4xl lg:text-5xl ${palette.title}`}
+                            className={`font-serif text-[28px] leading-[1.05] md:text-4xl lg:text-5xl ${palette.title}`}
                           >
                             {banner.title}
                           </h2>
                         )}
                         {banner.button_text && (
                           <span
-                            className={`mt-5 inline-flex items-center px-5 py-3 text-[10px] uppercase tracking-[0.2em] ${palette.button}`}
+                            className={`mt-4 inline-flex items-center px-4 py-2.5 text-[9px] uppercase tracking-[0.16em] md:mt-5 md:px-5 md:py-3 md:text-[10px] md:tracking-[0.2em] ${palette.button}`}
                           >
                             {banner.button_text}
                           </span>
                         )}
                         {banner.button_link && banner.title && (
                           <p
-                            className={`mt-4 text-[11px] tracking-[0.18em] uppercase ${palette.body}`}
+                            className={`mt-3 hidden text-[11px] uppercase tracking-[0.18em] md:block ${palette.body}`}
                           >
                             Toque para acessar
                           </p>
@@ -232,7 +234,7 @@ export function BannerCarousel({ banners }: BannerCarouselProps) {
         <>
           <button
             onClick={prev}
-            className="absolute left-3 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white transition-colors hover:bg-black/50"
+            className="absolute left-3 top-1/2 z-10 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white transition-colors hover:bg-black/50 md:flex"
             aria-label="Banner anterior"
           >
             <svg
@@ -248,7 +250,7 @@ export function BannerCarousel({ banners }: BannerCarouselProps) {
           </button>
           <button
             onClick={next}
-            className="absolute right-3 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white transition-colors hover:bg-black/50"
+            className="absolute right-3 top-1/2 z-10 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white transition-colors hover:bg-black/50 md:flex"
             aria-label="Proximo banner"
           >
             <svg
