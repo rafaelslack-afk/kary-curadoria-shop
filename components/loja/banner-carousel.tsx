@@ -9,48 +9,15 @@ interface BannerCarouselProps {
   banners: Banner[];
 }
 
-function getTextAlign(position: Banner["text_position"]) {
-  switch (position) {
-    case "left":
-      return "items-end justify-start text-left md:items-center md:justify-start md:text-left";
-    case "right":
-      return "items-end justify-start text-left md:items-center md:justify-end md:text-right";
-    default:
-      return "items-end justify-start text-left md:items-center md:justify-center md:text-center";
-  }
-}
-
-function getTextPalette(color: Banner["text_color"]) {
-  if (color === "dark") {
-    return {
-      eyebrow: "text-kc-dark/70",
-      title: "text-kc-dark",
-      body: "text-kc-dark/80",
-      button: "bg-kc text-white",
-      overlay:
-        "bg-gradient-to-t from-white/88 via-white/50 to-white/10 md:bg-gradient-to-r md:from-white/75 md:via-white/35 md:to-transparent",
-    };
-  }
-
-  return {
-    eyebrow: "text-white/80",
-    title: "text-white",
-    body: "text-white/90",
-    button: "bg-white text-kc-dark",
-    overlay:
-      "bg-gradient-to-t from-black/58 via-black/28 to-black/10 md:bg-gradient-to-r md:from-black/45 md:via-black/20 md:to-transparent",
-  };
-}
-
 function FallbackHero() {
   return (
     <section className="bg-kc-light border-b border-kc-line">
       <div className="max-w-7xl mx-auto px-6 py-16 md:py-20 text-center">
         <p className="mb-5 text-[10px] uppercase tracking-[0.3em] text-kc-muted">
-          Nova Colecao - Outono 2026
+          Nova Coleção · Outono 2026
         </p>
         <h1 className="mb-5 font-serif text-4xl font-medium leading-tight text-kc-dark md:text-[52px]">
-          Elegancia que
+          Elegância que
           <br />
           nunca{" "}
           <em className="italic text-kc" style={{ fontStyle: "italic" }}>
@@ -58,22 +25,22 @@ function FallbackHero() {
           </em>
         </h1>
         <p className="mx-auto mb-8 max-w-md text-sm leading-relaxed tracking-wide text-kc-muted">
-          Conjuntos de linho e alfaiataria casual com acabamento impecavel.
+          Conjuntos de linho e alfaiataria casual com acabamento impecável.
           Do dia a dia ao evento especial.
         </p>
         <Link
           href="/produtos"
           className="inline-block bg-kc px-8 py-4 text-[11px] uppercase tracking-[0.2em] text-white transition-colors hover:bg-kc-dark"
         >
-          Ver Colecao
+          Ver Coleção
         </Link>
         <div className="mt-6 flex items-center justify-center gap-5">
           <span className="text-[10px] tracking-wider text-kc-muted">
-            Frete gratis acima de R$ 299
+            Frete grátis acima de R$&nbsp;299
           </span>
           <span className="h-3 w-px bg-kc-line" />
           <span className="text-[10px] tracking-wider text-kc-muted">
-            Troca gratis
+            Troca grátis
           </span>
           <span className="h-3 w-px bg-kc-line" />
           <span className="text-[10px] tracking-wider text-kc-muted">
@@ -120,11 +87,6 @@ export function BannerCarousel({ banners }: BannerCarouselProps) {
     >
       {banners.map((banner, idx) => {
         const imgSrc = banner.image_desktop ?? "";
-        const hasContent = Boolean(
-          banner.title || banner.subtitle || banner.button_text
-        );
-        const palette = getTextPalette(banner.text_color);
-        const textAlign = getTextAlign(banner.text_position);
 
         const Wrapper = banner.button_link
           ? ({ children }: { children: React.ReactNode }) => (
@@ -180,109 +142,54 @@ export function BannerCarousel({ banners }: BannerCarouselProps) {
                 <div className="absolute inset-0 bg-kc-cream" />
               )}
 
-              {hasContent && (
-                <>
-                  <div className={`absolute inset-0 ${palette.overlay}`} />
-                  <div className="absolute inset-0">
-                    <div
-                      className={`mx-auto flex h-full max-w-7xl px-4 md:px-6 ${textAlign}`}
-                    >
-                      <div className="w-full max-w-[78vw] self-end pb-14 pt-10 md:max-w-[560px] md:self-auto md:py-10">
-                        {banner.subtitle && (
-                          <p
-                            className={`mb-2 hidden text-[9px] uppercase tracking-[0.22em] sm:block md:mb-3 md:text-[10px] md:tracking-[0.28em] ${palette.eyebrow}`}
-                          >
-                            {banner.subtitle}
-                          </p>
-                        )}
-                        {banner.title && (
-                          <h2
-                            className={`font-serif text-[24px] leading-[1.08] sm:text-[28px] md:text-4xl lg:text-5xl ${palette.title}`}
-                            style={{
-                              display: "-webkit-box",
-                              WebkitLineClamp: 3,
-                              WebkitBoxOrient: "vertical",
-                              overflow: "hidden",
-                            }}
-                          >
-                            {banner.title}
-                          </h2>
-                        )}
-                        {banner.button_text && (
-                          <span
-                            className={`mt-3 inline-flex items-center px-4 py-2 text-[9px] uppercase tracking-[0.14em] sm:mt-4 sm:py-2.5 sm:text-[9px] md:mt-5 md:px-5 md:py-3 md:text-[10px] md:tracking-[0.2em] ${palette.button}`}
-                          >
-                            {banner.button_text}
-                          </span>
-                        )}
-                        {banner.button_link && banner.title && (
-                          <p
-                            className={`mt-3 hidden text-[11px] uppercase tracking-[0.18em] md:block ${palette.body}`}
-                          >
-                            Toque para acessar
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {banner.button_link && (
-                <div className="absolute inset-0 cursor-pointer" />
+              {/* Título visível apenas no hover */}
+              {banner.title && (
+                <div className="absolute inset-0 flex items-end justify-center pb-10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-black/20">
+                  <span className="bg-black/60 text-white text-sm tracking-wide px-5 py-2 rounded-full backdrop-blur-sm">
+                    {banner.title}
+                  </span>
+                </div>
               )}
             </Wrapper>
           </div>
         );
       })}
 
+      {/* Setas — apenas com múltiplos banners */}
       {total > 1 && (
         <>
           <button
             onClick={prev}
-            className="absolute left-3 top-1/2 z-10 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white transition-colors hover:bg-black/50 md:flex"
+            className="absolute left-3 top-1/2 -translate-y-1/2 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/30 text-white hover:bg-black/50 transition-colors"
             aria-label="Banner anterior"
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="15 18 9 12 15 6" />
             </svg>
           </button>
           <button
             onClick={next}
-            className="absolute right-3 top-1/2 z-10 hidden h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white transition-colors hover:bg-black/50 md:flex"
-            aria-label="Proximo banner"
+            className="absolute right-3 top-1/2 -translate-y-1/2 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/30 text-white hover:bg-black/50 transition-colors"
+            aria-label="Próximo banner"
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="9 18 15 12 9 6" />
             </svg>
           </button>
         </>
       )}
 
+      {/* Bullets */}
       {total > 1 && (
-        <div className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 gap-2">
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex gap-2">
           {banners.map((_, idx) => (
             <button
               key={idx}
               onClick={() => go(idx)}
               className={`rounded-full transition-all ${
                 idx === current
-                  ? "h-2 w-5 bg-white"
-                  : "h-2 w-2 bg-white/50 hover:bg-white/75"
+                  ? "w-5 h-2 bg-white"
+                  : "w-2 h-2 bg-white/50 hover:bg-white/75"
               }`}
               aria-label={`Ir para banner ${idx + 1}`}
             />

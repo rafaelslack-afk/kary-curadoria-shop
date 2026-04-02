@@ -15,6 +15,7 @@ import {
   Palette,
   Ruler,
   LayoutTemplate,
+  Menu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -53,6 +54,11 @@ const menuItems = [
     href: "/admin/banners",
     label: "Banners",
     icon: LayoutTemplate,
+  },
+  {
+    href: "/admin/menus",
+    label: "Menus",
+    icon: Menu,
   },
   {
     href: "/admin/tamanhos",

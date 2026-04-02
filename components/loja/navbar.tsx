@@ -16,7 +16,17 @@ interface SearchResult {
   image: string | null;
 }
 
-export function Navbar() {
+interface NavLinkItem {
+  id: string;
+  label: string;
+  href: string;
+}
+
+interface NavbarProps {
+  navLinks: NavLinkItem[];
+}
+
+export function Navbar({ navLinks }: NavbarProps) {
   const totalItems = useCartStore((s) => s.totalItems());
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -28,13 +38,6 @@ export function Navbar() {
   const searchRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const navLinks = [
-    { href: "/produtos", label: "Coleções" },
-    { href: "/produtos?categoria=conjuntos-de-linho", label: "Linho" },
-    { href: "/produtos?categoria=alfaiataria-casual", label: "Alfaiataria" },
-    { href: "/#nossa-loja", label: "Nossa Loja" },
-  ];
 
   const openSearch = () => {
     setSearchOpen(true);
