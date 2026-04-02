@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getMPPayment, MERCADOPAGO_ENV, type MPPaymentResponse } from "@/lib/mercadopago";
 import { sendOrderCreatedEmail } from "@/lib/email/send";
@@ -19,7 +18,6 @@ interface OrderItem {
   quantity: number;
 }
 
-// Estrutura do formData entregue pelo Payment Brick do MP
 interface BrickFormData {
   token: string;
   issuer_id?: string;
@@ -56,7 +54,6 @@ interface CreateOrderBody {
   };
   payment: {
     method: "pix" | "credit_card" | "boleto";
-    // Payment Brick entrega o formData diretamente (token já incluído)
     brickFormData?: BrickFormData;
   };
   items: OrderItem[];
@@ -76,19 +73,50 @@ function splitName(nome: string): { firstName: string; lastName: string } {
 }
 
 function boletoExpiry(): string {
-  // 3 dias corridos a partir de agora, horário de Brasília (UTC-3)
   const d = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
   return d.toISOString().replace("Z", "-03:00");
+}
+
+interface ReservedItem {
+  variantId: string;
+  productId: string;
+  quantity: number;
+  prevStock: number;
 }
 
 // ── POST /api/orders/create ───────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
+  // Admin client bypassa RLS — usado em todas as operações de estoque e pedido
+  const admin = createAdminClient();
+  // Reservas realizadas (para rollback em caso de falha)
+  const reservedItems: ReservedItem[] = [];
+
+  // Helper: desfaz todas as reservas de estoque feitas nesta requisição
+  async function rollbackReservations() {
+    if (reservedItems.length === 0) return;
+    for (const r of reservedItems) {
+      await admin
+        .from("product_variants")
+        .update({ stock_qty: r.prevStock })
+        .eq("id", r.variantId);
+      await admin.from("inventory_log").insert({
+        variant_id: r.variantId,
+        product_id: r.productId,
+        type: "ajuste",
+        sales_channel: "online",
+        quantity: r.quantity,
+        reason: "Reserva cancelada - pagamento não realizado",
+      });
+    }
+    console.log(`[orders/create] Rollback de ${reservedItems.length} reserva(s) concluído.`);
+  }
+
   try {
     const body = (await request.json()) as CreateOrderBody;
     const { customer, address, shipping, payment, items, subtotal, discount, couponCode } = body;
 
-    // ── 1. Validação básica ──
+    // ── 1. Validação básica ──────────────────────────────────────────────────
     if (!items?.length) {
       return NextResponse.json({ error: "Carrinho vazio." }, { status: 400 });
     }
@@ -99,13 +127,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Token do cartão não informado (brickFormData.token ausente)." }, { status: 400 });
     }
 
-    // ── 2. Verificação de estoque (somente leitura) ──
-    const supabase = createClient();
+    // ── 2. Validar estoque (leitura atômica via adminClient) ─────────────────
     const variantIds = items.map((i) => i.variantId);
 
-    const { data: variants, error: variantsErr } = await supabase
+    const { data: variants, error: variantsErr } = await admin
       .from("product_variants")
-      .select("id, stock_qty, size, product_id")
+      .select("id, stock_qty, size, color, product_id")
       .in("id", variantIds);
 
     if (variantsErr || !variants) {
@@ -113,29 +140,61 @@ export async function POST(request: NextRequest) {
     }
 
     for (const item of items) {
-      const variant = variants.find((v) => v.id === item.variantId);
-      if (!variant) {
+      const v = variants.find((x) => x.id === item.variantId);
+      if (!v) {
         return NextResponse.json(
-          { error: `Variação não encontrada: ${item.productName} (${item.size}).` },
-          { status: 400 }
+          { error: `Variação não encontrada: ${item.productName} (${item.size}).`, code: "OUT_OF_STOCK", variantId: item.variantId },
+          { status: 409 }
         );
       }
-      if (variant.stock_qty < item.quantity) {
+      if (v.stock_qty < item.quantity) {
         return NextResponse.json(
           {
-            error: `Estoque insuficiente para "${item.productName}" (${item.size}). Disponível: ${variant.stock_qty}.`,
+            error: `"${item.productName} — ${[v.color, v.size].filter(Boolean).join("/")}" está esgotado ou sem estoque suficiente. Remova-o do carrinho e tente novamente.`,
+            code: "OUT_OF_STOCK",
+            variantId: item.variantId,
           },
           { status: 409 }
         );
       }
     }
 
-    // ── 3. Criar pagamento no Mercado Pago ANTES de salvar no banco ──
+    // ── 3. Reservar estoque ANTES de chamar o Mercado Pago ──────────────────
+    // Decrementa imediatamente para evitar overselling durante o processamento.
+    for (const item of items) {
+      const v = variants.find((x) => x.id === item.variantId)!;
+      const newStock = v.stock_qty - item.quantity;
+
+      const { error: stockErr } = await admin
+        .from("product_variants")
+        .update({ stock_qty: newStock })
+        .eq("id", item.variantId);
+
+      if (stockErr) {
+        console.error("[orders/create] Falha ao reservar estoque:", stockErr.message);
+        // Reverter reservas já feitas
+        await rollbackReservations();
+        return NextResponse.json({ error: "Erro ao reservar estoque. Tente novamente." }, { status: 500 });
+      }
+
+      await admin.from("inventory_log").insert({
+        variant_id: item.variantId,
+        product_id: item.productId,
+        type: "reserva",
+        sales_channel: "online",
+        quantity: -item.quantity,
+        reason: "Reserva para pagamento em processamento",
+      });
+
+      reservedItems.push({ variantId: item.variantId, productId: item.productId, quantity: item.quantity, prevStock: v.stock_qty });
+    }
+
+    console.log(`[orders/create] ${reservedItems.length} item(s) reservado(s).`);
+
+    // ── 4. Chamar Mercado Pago ───────────────────────────────────────────────
     const total = subtotal - discount + shipping.preco;
     const { firstName, lastName } = splitName(customer.nome);
 
-    // CPF: sanitizar aqui independente de como chegou do frontend
-    // (remove pontos, traços e qualquer não-dígito)
     const cpfLimpo = customer.cpf.replace(/\D/g, "");
     const emailLimpo = customer.email.trim().toLowerCase();
 
@@ -143,6 +202,7 @@ export async function POST(request: NextRequest) {
     console.log("[orders/create] Email enviado ao MP:", emailLimpo);
 
     if (cpfLimpo.length !== 11) {
+      await rollbackReservations();
       return NextResponse.json(
         { error: `CPF inválido: esperado 11 dígitos, recebido ${cpfLimpo.length}.` },
         { status: 400 }
@@ -150,8 +210,8 @@ export async function POST(request: NextRequest) {
     }
 
     const mpPayment = getMPPayment();
-
     let mpResponse: MPPaymentResponse;
+
     try {
       const commonPayer = {
         email: emailLimpo,
@@ -172,8 +232,6 @@ export async function POST(request: NextRequest) {
 
       } else if (payment.method === "credit_card") {
         const brick = payment.brickFormData!;
-
-        // CPF que veio dentro do formData do Brick (pode ter máscara se usuário editou)
         const brickCpf = brick.payer?.identification?.number?.replace(/\D/g, "") ?? cpfLimpo;
 
         console.log("[orders/create] Credit card via Brick");
@@ -182,10 +240,7 @@ export async function POST(request: NextRequest) {
         console.log("  installments:", brick.installments);
         console.log("  issuer_id:", brick.issuer_id);
         console.log("  CPF (customer):", cpfLimpo, "| CPF (brick payer):", brickCpf);
-        console.log("  email:", emailLimpo);
 
-        // Usamos sempre o CPF do nosso form (já validado acima),
-        // garantindo que está limpo mesmo que o Brick devolva com máscara
         mpResponse = (await mpPayment.create({
           body: {
             transaction_amount: parseFloat(total.toFixed(2)),
@@ -196,24 +251,25 @@ export async function POST(request: NextRequest) {
             issuer_id: brick.issuer_id ? Number(brick.issuer_id) : undefined,
             payer: {
               email: emailLimpo,
-              identification: {
-                type: "CPF",
-                number: cpfLimpo,   // sempre dígitos puros, validado acima
-              },
+              identification: { type: "CPF", number: cpfLimpo },
             },
           },
         })) as MPPaymentResponse;
 
-        // Cartão recusado → retornar erro imediatamente (não criar pedido)
+        // Cartão recusado → reverter reservas e retornar erro
         if (mpResponse.status === "rejected") {
+          await rollbackReservations();
           return NextResponse.json(
-            { error: `Pagamento recusado: ${mpResponse.status_detail ?? "cartão não autorizado"}.` },
+            {
+              error: `Pagamento recusado: ${mpResponse.status_detail ?? "cartão não autorizado"}.`,
+              code: "PAYMENT_FAILED",
+            },
             { status: 402 }
           );
         }
 
       } else {
-        // boleto — o MP exige endereço completo no payer para boleto registrado
+        // boleto
         const zipCode = address.cep.replace(/\D/g, "");
         const streetName = address.logradouro?.trim();
         const streetNumber = address.numero?.trim();
@@ -221,16 +277,6 @@ export async function POST(request: NextRequest) {
         const city = address.cidade?.trim();
         const state = address.estado?.trim();
 
-        console.log("[orders/create] Boleto address:", {
-          zip_code: zipCode,
-          street: streetName,
-          number: streetNumber,
-          neighborhood,
-          city,
-          state,
-        });
-
-        // Validação antecipada — retorna 400 em vez de deixar o MP devolver 400/422
         const missingFields: string[] = [];
         if (!zipCode || zipCode.length < 8) missingFields.push("CEP");
         if (!streetName) missingFields.push("Logradouro");
@@ -240,6 +286,7 @@ export async function POST(request: NextRequest) {
         if (!state) missingFields.push("Estado");
 
         if (missingFields.length > 0) {
+          await rollbackReservations();
           return NextResponse.json(
             {
               error: `Endereço incompleto para emissão do boleto. Campo(s) faltando: ${missingFields.join(", ")}.`,
@@ -273,8 +320,9 @@ export async function POST(request: NextRequest) {
       const errMsg = (err as Error).message ?? "";
       console.error("[orders/create] Mercado Pago error:", errMsg);
 
-      // Código 2067: CPF inválido matematicamente → retornar 400 (erro do cliente)
-      // Também cobre mensagens como "Invalid user identification number"
+      // Reverter reservas em qualquer exceção do MP
+      await rollbackReservations();
+
       if (
         errMsg.includes("2067") ||
         errMsg.toLowerCase().includes("identification") ||
@@ -287,7 +335,7 @@ export async function POST(request: NextRequest) {
       }
 
       return NextResponse.json(
-        { error: `Erro no pagamento: ${errMsg}` },
+        { error: `Erro no pagamento: ${errMsg}`, code: "PAYMENT_FAILED" },
         { status: 502 }
       );
     }
@@ -295,9 +343,7 @@ export async function POST(request: NextRequest) {
     const mpPaymentId = String(mpResponse.id);
     const mpStatus = mpResponse.status ?? "pending";
 
-    // ── 4. Salvar pedido no banco (admin client bypassa RLS) ──
-    const admin = createAdminClient();
-
+    // ── 5. Salvar pedido no banco ────────────────────────────────────────────
     const shippingAddress = {
       cep: address.cep,
       logradouro: address.logradouro,
@@ -308,7 +354,7 @@ export async function POST(request: NextRequest) {
       estado: address.estado,
     };
 
-    // Cartão aprovado → status 'paid' direto; pix/boleto → 'pending'
+    // Cartão aprovado → 'paid'; pix/boleto → 'pending'
     const orderStatus =
       payment.method === "credit_card" && mpStatus === "approved" ? "paid" : "pending";
 
@@ -327,26 +373,23 @@ export async function POST(request: NextRequest) {
         coupon_code: couponCode ?? null,
         total,
         payment_method: payment.method,
-        pagbank_charge_id: mpPaymentId,   // reutiliza coluna para ID do MP
-        pagbank_status: mpStatus,          // reutiliza coluna para status do MP
+        pagbank_charge_id: mpPaymentId,
+        pagbank_status: mpStatus,
         shipping_address_json: shippingAddress,
       })
       .select("id, order_number")
       .single();
 
     if (orderErr || !order) {
-      console.error("[orders/create] DB insert failed after MP charge:", {
-        mpPaymentId,
-        mpStatus,
-        orderErr,
-      });
+      console.error("[orders/create] DB insert failed after MP charge:", { mpPaymentId, mpStatus, orderErr });
+      // Não reverter estoque aqui — pagamento foi aprovado; equipe precisa resolver manualmente
       return NextResponse.json(
         { error: "Pagamento processado, mas houve erro ao salvar o pedido. Entre em contato com o suporte." },
         { status: 500 }
       );
     }
 
-    // ── 5. Inserir itens do pedido ──
+    // ── 6. Inserir itens do pedido ───────────────────────────────────────────
     const orderItems = items.map((i) => ({
       order_id: order.id,
       product_id: i.productId,
@@ -365,7 +408,23 @@ export async function POST(request: NextRequest) {
       console.error("[orders/create] Failed to insert order_items:", itemsErr);
     }
 
-    // ── 6. Disparar e-mail de confirmação (não bloqueia resposta) ──
+    // ── 7. Vincular reservas ao pedido (inventory_log) ───────────────────────
+    // Atualiza os registros de 'reserva' com o order_id e muda tipo para 'saida'
+    // para que o trigger não faça dupla baixa.
+    for (const item of items) {
+      await admin
+        .from("inventory_log")
+        .update({
+          order_id: order.id,
+          type: "saida",
+          reason: `Venda online pedido #${order.order_number}`,
+        })
+        .eq("variant_id", item.variantId)
+        .eq("type", "reserva")
+        .is("order_id", null);
+    }
+
+    // ── 8. Disparar e-mail de confirmação ───────────────────────────────────
     try {
       await sendOrderCreatedEmail({
         to: customer.email,
@@ -396,15 +455,15 @@ export async function POST(request: NextRequest) {
       console.error("[orders/create] Falha ao enviar e-mail de confirmação:", emailErr);
     }
 
-    // ── 7. Montar resposta por método de pagamento ──
+    // ── 9. Montar resposta por método de pagamento ───────────────────────────
     const base = { orderId: order.id, orderNumber: order.order_number };
 
     if (payment.method === "pix") {
       const txData = mpResponse.point_of_interaction?.transaction_data;
       return NextResponse.json({
         ...base,
-        qrCode: txData?.qr_code_base64 ?? null,      // base64 puro (sem prefixo)
-        qrCodeText: txData?.qr_code ?? null,          // copia-e-cola
+        qrCode: txData?.qr_code_base64 ?? null,
+        qrCodeText: txData?.qr_code ?? null,
         expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
       });
     }
@@ -419,8 +478,10 @@ export async function POST(request: NextRequest) {
 
     // credit_card
     return NextResponse.json({ ...base, mpEnv: MERCADOPAGO_ENV });
+
   } catch (err) {
     console.error("[orders/create] Unexpected error:", err);
+    await rollbackReservations();
     return NextResponse.json(
       { error: `Erro interno: ${(err as Error).message}` },
       { status: 500 }

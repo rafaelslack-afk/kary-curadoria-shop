@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Minus, Plus, Trash2, ShoppingBag, Tag, ChevronRight } from "lucide-react";
+import { Minus, Plus, Trash2, ShoppingBag, Tag, ChevronRight, AlertTriangle } from "lucide-react";
 import { useCartStore } from "@/lib/store/cart";
 import { calculateCouponDiscount } from "@/lib/coupons";
 import { formatCurrency } from "@/lib/utils";
@@ -21,6 +21,33 @@ export default function CarrinhoPage() {
   const [couponCode, setCouponCode] = useState("");
   const [couponError, setCouponError] = useState("");
   const [couponLoading, setCouponLoading] = useState(false);
+
+  // Estoque em tempo real
+  const [stockMap, setStockMap] = useState<Record<string, number>>({});
+
+  const checkStock = useCallback(async () => {
+    if (items.length === 0) return;
+    const ids = items.map((i) => i.variantId).join(",");
+    try {
+      const res = await fetch(`/api/products/variants/stock?ids=${ids}`);
+      if (!res.ok) return;
+      const data: { id: string; stock_qty: number }[] = await res.json();
+      const map: Record<string, number> = {};
+      for (const v of data) map[v.id] = v.stock_qty;
+      setStockMap(map);
+    } catch {
+      // silently fail — não bloquear o carrinho
+    }
+  }, [items]);
+
+  useEffect(() => {
+    checkStock();
+  }, [checkStock]);
+
+  const outOfStockItems = items.filter(
+    (item) => item.variantId in stockMap && stockMap[item.variantId] < item.quantity
+  );
+  const hasOutOfStock = outOfStockItems.length > 0;
 
   const sub = subtotal();
   const discountAmount = calculateCouponDiscount(sub, appliedCoupon);
@@ -141,7 +168,22 @@ export default function CarrinhoPage() {
                 <p className="text-[10px] text-kc-muted mb-0.5">
                   {[item.color, item.size].filter(Boolean).join(" / ")}
                 </p>
-                <p className="text-[10px] text-kc-muted mb-3">{formatCurrency(item.price)} / un.</p>
+                <p className="text-[10px] text-kc-muted mb-2">{formatCurrency(item.price)} / un.</p>
+                {/* Badge de estoque */}
+                {item.variantId in stockMap && stockMap[item.variantId] === 0 && (
+                  <span className="inline-flex items-center gap-1 text-[9px] tracking-[0.1em] uppercase bg-red-50 text-red-600 border border-red-200 px-2 py-0.5 mb-2">
+                    <AlertTriangle size={9} />
+                    Esgotado
+                  </span>
+                )}
+                {item.variantId in stockMap && stockMap[item.variantId] > 0 && stockMap[item.variantId] < item.quantity && (
+                  <span className="inline-flex items-center gap-1 text-[9px] tracking-[0.1em] uppercase bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 mb-2">
+                    <AlertTriangle size={9} />
+                    Apenas {stockMap[item.variantId]} disponível
+                  </span>
+                )}
+                {/* mb-1 spacer when no badge */}
+                {!(item.variantId in stockMap) && <div className="mb-1" />}
 
                 {/* Mobile: quantity + price */}
                 <div className="md:hidden flex items-center justify-between">
@@ -277,13 +319,31 @@ export default function CarrinhoPage() {
             </div>
 
             {/* Checkout CTA */}
-            <Link
-              href="/checkout"
-              className="flex items-center justify-center gap-2 bg-kc text-white text-[11px] tracking-[0.18em] uppercase py-4 hover:bg-kc-dark transition-colors w-full"
-            >
-              Finalizar pedido
-              <ChevronRight size={13} />
-            </Link>
+            {hasOutOfStock ? (
+              <div className="space-y-2">
+                <div className="flex items-start gap-2 bg-red-50 border border-red-200 p-3">
+                  <AlertTriangle size={13} className="text-red-500 mt-0.5 shrink-0" />
+                  <p className="text-[10px] text-red-700 leading-relaxed">
+                    {outOfStockItems.map((i) => i.productName).join(", ")} não {outOfStockItems.length === 1 ? "está" : "estão"} mais disponível{outOfStockItems.length > 1 ? "is" : ""}. Remova {outOfStockItems.length === 1 ? "o item" : "os itens"} para continuar.
+                  </p>
+                </div>
+                <button
+                  disabled
+                  className="flex items-center justify-center gap-2 bg-kc-line text-kc-muted text-[11px] tracking-[0.18em] uppercase py-4 cursor-not-allowed w-full"
+                >
+                  Finalizar pedido
+                  <ChevronRight size={13} />
+                </button>
+              </div>
+            ) : (
+              <Link
+                href="/checkout"
+                className="flex items-center justify-center gap-2 bg-kc text-white text-[11px] tracking-[0.18em] uppercase py-4 hover:bg-kc-dark transition-colors w-full"
+              >
+                Finalizar pedido
+                <ChevronRight size={13} />
+              </Link>
+            )}
 
             {/* Payment methods */}
             <div className="flex items-center justify-center gap-3 pt-1">
