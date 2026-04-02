@@ -12,11 +12,11 @@ interface BannerCarouselProps {
 function getTextAlign(position: Banner["text_position"]) {
   switch (position) {
     case "left":
-      return "items-center justify-start text-left";
+      return "items-end justify-start text-left md:items-center md:justify-start md:text-left";
     case "right":
-      return "items-center justify-end text-right";
+      return "items-end justify-start text-left md:items-center md:justify-end md:text-right";
     default:
-      return "items-center justify-center text-center";
+      return "items-end justify-start text-left md:items-center md:justify-center md:text-center";
   }
 }
 
@@ -114,7 +114,7 @@ export function BannerCarousel({ banners }: BannerCarouselProps) {
 
   return (
     <section
-      className="relative h-[400px] w-full overflow-hidden md:h-[420px] lg:h-[520px]"
+      className="relative h-[clamp(320px,88vw,430px)] w-full overflow-hidden md:h-[420px] lg:h-[520px]"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
@@ -185,26 +185,32 @@ export function BannerCarousel({ banners }: BannerCarouselProps) {
                   <div className={`absolute inset-0 ${palette.overlay}`} />
                   <div className="absolute inset-0">
                     <div
-                      className={`mx-auto flex h-full max-w-7xl px-5 md:px-6 ${textAlign}`}
+                      className={`mx-auto flex h-full max-w-7xl px-4 md:px-6 ${textAlign}`}
                     >
-                      <div className="w-full max-w-[320px] self-end pb-14 pt-10 md:max-w-[560px] md:self-auto md:py-10">
+                      <div className="w-full max-w-[78vw] self-end pb-14 pt-10 md:max-w-[560px] md:self-auto md:py-10">
                         {banner.subtitle && (
                           <p
-                            className={`mb-2 text-[9px] uppercase tracking-[0.22em] md:mb-3 md:text-[10px] md:tracking-[0.28em] ${palette.eyebrow}`}
+                            className={`mb-2 hidden text-[9px] uppercase tracking-[0.22em] sm:block md:mb-3 md:text-[10px] md:tracking-[0.28em] ${palette.eyebrow}`}
                           >
                             {banner.subtitle}
                           </p>
                         )}
                         {banner.title && (
                           <h2
-                            className={`font-serif text-[28px] leading-[1.05] md:text-4xl lg:text-5xl ${palette.title}`}
+                            className={`font-serif text-[24px] leading-[1.08] sm:text-[28px] md:text-4xl lg:text-5xl ${palette.title}`}
+                            style={{
+                              display: "-webkit-box",
+                              WebkitLineClamp: 3,
+                              WebkitBoxOrient: "vertical",
+                              overflow: "hidden",
+                            }}
                           >
                             {banner.title}
                           </h2>
                         )}
                         {banner.button_text && (
                           <span
-                            className={`mt-4 inline-flex items-center px-4 py-2.5 text-[9px] uppercase tracking-[0.16em] md:mt-5 md:px-5 md:py-3 md:text-[10px] md:tracking-[0.2em] ${palette.button}`}
+                            className={`mt-3 inline-flex items-center px-4 py-2 text-[9px] uppercase tracking-[0.14em] sm:mt-4 sm:py-2.5 sm:text-[9px] md:mt-5 md:px-5 md:py-3 md:text-[10px] md:tracking-[0.2em] ${palette.button}`}
                           >
                             {banner.button_text}
                           </span>
