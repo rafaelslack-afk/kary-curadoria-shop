@@ -8,6 +8,102 @@ import { buildWhatsAppUrl, INSTAGRAM_URL } from "@/lib/site";
 import { formatLaunchDatePtBr, isStorePrelaunchActive } from "@/lib/store-launch";
 import type { Product, Banner } from "@/types/database";
 
+interface HomeSection {
+  id: string;
+  title: string;
+  description: string;
+  href: string;
+  button_text: string;
+  icon_type: string;
+  order_index: number;
+  active: boolean;
+}
+
+const FALLBACK_SECTIONS: HomeSection[] = [
+  {
+    id: "1",
+    title: "Conjuntos de Linho",
+    description: "Frescor e elegância na fibra natural que mais respira",
+    href: "/produtos?categoria=conjuntos-de-linho",
+    button_text: "Ver Coleção →",
+    icon_type: "linen",
+    order_index: 1,
+    active: true,
+  },
+  {
+    id: "2",
+    title: "Alfaiataria Casual",
+    description: "Cortes precisos para um estilo sofisticado sem esforço",
+    href: "/produtos?categoria=alfaiataria-casual",
+    button_text: "Ver Coleção →",
+    icon_type: "suit",
+    order_index: 2,
+    active: true,
+  },
+];
+
+async function getHomeSections(): Promise<HomeSection[]> {
+  try {
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("home_sections")
+      .select("*")
+      .eq("active", true)
+      .order("order_index", { ascending: true });
+    if (error || !data || data.length === 0) return FALLBACK_SECTIONS;
+    return data as HomeSection[];
+  } catch {
+    return FALLBACK_SECTIONS;
+  }
+}
+
+function SectionIcon({ type }: { type: string }) {
+  if (type === "suit") {
+    return (
+      <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+        <path d="M12 4 L8 10 L8 28 L28 28 L28 10 L24 4" stroke="#A0622A" strokeWidth="1.2" fill="none" />
+        <path d="M12 4 L14 10 L18 8 L22 10 L24 4" stroke="#A0622A" strokeWidth="1.2" fill="none" />
+        <line x1="8" y1="16" x2="28" y2="16" stroke="#A0622A" strokeWidth="0.8" />
+        <line x1="14" y1="22" x2="22" y2="22" stroke="#A0622A" strokeWidth="0.8" />
+      </svg>
+    );
+  }
+  if (type === "dress") {
+    return (
+      <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+        <path d="M13 4 L10 10 L6 28 L30 28 L26 10 L23 4" stroke="#A0622A" strokeWidth="1.2" fill="none" />
+        <line x1="13" y1="4" x2="23" y2="4" stroke="#A0622A" strokeWidth="1.2" />
+        <line x1="9" y1="16" x2="27" y2="16" stroke="#A0622A" strokeWidth="0.8" />
+      </svg>
+    );
+  }
+  if (type === "bag") {
+    return (
+      <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+        <rect x="6" y="12" width="24" height="18" rx="2" stroke="#A0622A" strokeWidth="1.2" />
+        <path d="M13 12 Q13 6 18 6 Q23 6 23 12" stroke="#A0622A" strokeWidth="1.2" fill="none" />
+        <line x1="6" y1="19" x2="30" y2="19" stroke="#A0622A" strokeWidth="0.8" />
+      </svg>
+    );
+  }
+  if (type === "star") {
+    return (
+      <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+        <path d="M18 4 L21 13 L31 13 L23 19 L26 28 L18 22 L10 28 L13 19 L5 13 L15 13 Z" stroke="#A0622A" strokeWidth="1.2" fill="none" />
+      </svg>
+    );
+  }
+  // linen (default)
+  return (
+    <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+      <rect x="10" y="4" width="16" height="28" rx="1" stroke="#A0622A" strokeWidth="1.2" />
+      <line x1="10" y1="16" x2="26" y2="16" stroke="#A0622A" strokeWidth="0.8" />
+      <path d="M10 8 Q6 10 6 16 Q6 24 10 28" stroke="#A0622A" strokeWidth="1" fill="none" />
+      <path d="M26 8 Q30 10 30 16 Q30 24 26 28" stroke="#A0622A" strokeWidth="1" fill="none" />
+    </svg>
+  );
+}
+
 async function getActiveBanners(): Promise<Banner[]> {
   try {
     const admin = createAdminClient();
@@ -52,9 +148,10 @@ export default async function Home() {
     return <PrelaunchHome launchLabel={formatLaunchDatePtBr()} />;
   }
 
-  const [featured, banners] = await Promise.all([
+  const [featured, banners, homeSections] = await Promise.all([
     getFeaturedProducts(),
     getActiveBanners(),
+    getHomeSections(),
   ]);
 
   return (
@@ -63,58 +160,35 @@ export default async function Home() {
       <BannerCarousel banners={banners} />
 
       {/* ── CATEGORIAS ── */}
-      <section className="max-w-7xl mx-auto px-6 py-10">
-        <p className="text-[10px] tracking-[0.26em] text-kc-muted mb-1.5 uppercase">Explore</p>
-        <h2 className="font-serif text-[22px] font-medium text-kc-dark mb-6">
-          Nossas Categorias
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {[
-            {
-              href: "/produtos?categoria=conjuntos-de-linho",
-              title: "Conjuntos de Linho",
-              desc: "Frescor e elegância na fibra natural que mais respira",
-              icon: (
-                <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-                  <rect x="10" y="4" width="16" height="28" rx="1" stroke="#A0622A" strokeWidth="1.2" />
-                  <line x1="10" y1="16" x2="26" y2="16" stroke="#A0622A" strokeWidth="0.8" />
-                  <path d="M10 8 Q6 10 6 16 Q6 24 10 28" stroke="#A0622A" strokeWidth="1" fill="none" />
-                  <path d="M26 8 Q30 10 30 16 Q30 24 26 28" stroke="#A0622A" strokeWidth="1" fill="none" />
-                </svg>
-              ),
-            },
-            {
-              href: "/produtos?categoria=alfaiataria-casual",
-              title: "Alfaiataria Casual",
-              desc: "Cortes precisos para um estilo sofisticado sem esforço",
-              icon: (
-                <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-                  <path d="M12 4 L8 10 L8 28 L28 28 L28 10 L24 4" stroke="#A0622A" strokeWidth="1.2" fill="none" />
-                  <path d="M12 4 L14 10 L18 8 L22 10 L24 4" stroke="#A0622A" strokeWidth="1.2" fill="none" />
-                  <line x1="8" y1="16" x2="28" y2="16" stroke="#A0622A" strokeWidth="0.8" />
-                  <line x1="14" y1="22" x2="22" y2="22" stroke="#A0622A" strokeWidth="0.8" />
-                </svg>
-              ),
-            },
-          ].map(({ href, title, desc, icon }) => (
-            <Link
-              key={href}
-              href={href}
-              className="group bg-kc-light border border-kc-line p-8 text-center relative overflow-hidden hover:border-kc transition-colors"
-            >
-              <div className="absolute top-0 left-0 right-0 h-0.5 bg-kc scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left" />
-              <div className="flex justify-center mb-4">{icon}</div>
-              <h3 className="font-serif text-[17px] font-medium text-kc-dark mb-2 tracking-wide">
-                {title}
-              </h3>
-              <p className="text-[11px] text-kc-muted leading-relaxed mb-4">{desc}</p>
-              <span className="text-[10px] tracking-[0.18em] text-kc uppercase group-hover:underline underline-offset-2">
-                Ver Coleção →
-              </span>
-            </Link>
-          ))}
-        </div>
-      </section>
+      {homeSections.length > 0 && (
+        <section className="max-w-7xl mx-auto px-6 py-10">
+          <p className="text-[10px] tracking-[0.26em] text-kc-muted mb-1.5 uppercase">Explore</p>
+          <h2 className="font-serif text-[22px] font-medium text-kc-dark mb-6">
+            Nossas Categorias
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {homeSections.map((s) => (
+              <Link
+                key={s.id}
+                href={s.href}
+                className="group bg-kc-light border border-kc-line p-8 text-center relative overflow-hidden hover:border-kc transition-colors"
+              >
+                <div className="absolute top-0 left-0 right-0 h-0.5 bg-kc scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left" />
+                <div className="flex justify-center mb-4">
+                  <SectionIcon type={s.icon_type} />
+                </div>
+                <h3 className="font-serif text-[17px] font-medium text-kc-dark mb-2 tracking-wide">
+                  {s.title}
+                </h3>
+                <p className="text-[11px] text-kc-muted leading-relaxed mb-4">{s.description}</p>
+                <span className="text-[10px] tracking-[0.18em] text-kc uppercase group-hover:underline underline-offset-2">
+                  {s.button_text}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       <div className="h-px bg-kc-line mx-6" />
 

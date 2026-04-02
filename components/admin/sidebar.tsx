@@ -16,6 +16,7 @@ import {
   Ruler,
   LayoutTemplate,
   Menu,
+  Home,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -59,6 +60,11 @@ const menuItems = [
     href: "/admin/menus",
     label: "Menus",
     icon: Menu,
+  },
+  {
+    href: "/admin/home",
+    label: "Home",
+    icon: Home,
   },
   {
     href: "/admin/tamanhos",
