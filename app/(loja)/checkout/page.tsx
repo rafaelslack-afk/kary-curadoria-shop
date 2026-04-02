@@ -160,11 +160,17 @@ function OrderSummary({ shipping, discount }: { shipping: ShippingOption | null;
 }
 
 // ── Chave pública MP (client-side) ────────────────────────────────────────────
+// Usa variável única NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY (definida na Vercel com a
+// key correta para cada ambiente). Fallback legacy por ENV para compatibilidade.
 const MP_ENV = process.env.NEXT_PUBLIC_MERCADOPAGO_ENV ?? "sandbox";
 const MP_PUBLIC_KEY =
-  MP_ENV === "production"
+  process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY ||
+  (MP_ENV === "production"
     ? process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY_PRODUCTION ?? ""
-    : process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY_SANDBOX ?? "";
+    : process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY_SANDBOX ?? "");
+
+console.log("[MP Brick] env:", MP_ENV);
+console.log("[MP Brick] key prefix:", MP_PUBLIC_KEY.substring(0, 15));
 
 // ── Componente principal ──────────────────────────────────────────────────────
 
