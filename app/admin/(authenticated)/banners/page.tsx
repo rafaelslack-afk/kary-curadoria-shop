@@ -45,6 +45,106 @@ const DIMENSIONS = {
   mobile: { w: 768, h: 380 },
 };
 
+const TRANSPORT_LIMIT_BYTES = 3.8 * 1024 * 1024;
+
+async function loadImageElement(file: File) {
+  const image = document.createElement("img");
+  const url = URL.createObjectURL(file);
+
+  await new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve();
+    image.onerror = () => reject(new Error("Falha ao carregar imagem."));
+    image.src = url;
+  });
+
+  return { image, url };
+}
+
+async function fileToImageSource(file: File) {
+  if ("createImageBitmap" in window) {
+    const bitmap = await createImageBitmap(file);
+    return {
+      source: bitmap,
+      width: bitmap.width,
+      height: bitmap.height,
+      dispose: () => bitmap.close(),
+    };
+  }
+
+  const { image, url } = await loadImageElement(file);
+  return {
+    source: image,
+    width: image.naturalWidth,
+    height: image.naturalHeight,
+    dispose: () => URL.revokeObjectURL(url),
+  };
+}
+
+async function canvasToFile(
+  canvas: HTMLCanvasElement,
+  name: string,
+  quality: number
+) {
+  const blob = await new Promise<Blob | null>((resolve) =>
+    canvas.toBlob(resolve, "image/jpeg", quality)
+  );
+
+  if (!blob) {
+    throw new Error("Falha ao preparar imagem para envio.");
+  }
+
+  return new File([blob], name.replace(/\.[^.]+$/, "") + ".jpg", {
+    type: "image/jpeg",
+  });
+}
+
+async function prepareBannerForUpload(
+  file: File,
+  type: "desktop" | "mobile"
+): Promise<File> {
+  const preparedSource = await fileToImageSource(file);
+  const maxWidth = type === "desktop" ? 2400 : 1200;
+  const maxHeight = type === "desktop" ? 1600 : 1400;
+
+  const scale = Math.min(
+    1,
+    maxWidth / preparedSource.width,
+    maxHeight / preparedSource.height
+  );
+
+  const width = Math.max(1, Math.round(preparedSource.width * scale));
+  const height = Math.max(1, Math.round(preparedSource.height * scale));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    preparedSource.dispose();
+    throw new Error("Canvas 2D indisponivel.");
+  }
+
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, width, height);
+  ctx.drawImage(preparedSource.source, 0, 0, width, height);
+  preparedSource.dispose();
+
+  let quality = 0.9;
+  let prepared = await canvasToFile(canvas, file.name, quality);
+
+  while (prepared.size > TRANSPORT_LIMIT_BYTES && quality > 0.55) {
+    quality -= 0.08;
+    prepared = await canvasToFile(canvas, file.name, quality);
+  }
+
+  if (prepared.size > TRANSPORT_LIMIT_BYTES) {
+    throw new Error("A imagem ainda ficou grande demais. Tente um arquivo mais leve.");
+  }
+
+  return prepared;
+}
+
 async function uploadImage(
   file: File,
   folder: "desktop" | "mobile"
@@ -77,6 +177,8 @@ export default function BannersPage() {
   const [mobileFile, setMobileFile] = useState<File | null>(null);
   const [desktopPreview, setDesktopPreview] = useState("");
   const [mobilePreview, setMobilePreview] = useState("");
+  const [desktopPreparing, setDesktopPreparing] = useState(false);
+  const [mobilePreparing, setMobilePreparing] = useState(false);
 
   const desktopInputRef = useRef<HTMLInputElement>(null);
   const mobileInputRef = useRef<HTMLInputElement>(null);
@@ -101,6 +203,8 @@ export default function BannersPage() {
     setMobileFile(null);
     setDesktopPreview("");
     setMobilePreview("");
+    setDesktopPreparing(false);
+    setMobilePreparing(false);
   }
 
   function openCreate() {
@@ -138,7 +242,7 @@ export default function BannersPage() {
     setError("");
   }
 
-  function handleFileChange(
+  async function handleFileChange(
     e: React.ChangeEvent<HTMLInputElement>,
     type: "desktop" | "mobile"
   ) {
@@ -146,15 +250,29 @@ export default function BannersPage() {
     if (!file) return;
 
     e.target.value = "";
+    setError("");
 
-    if (type === "desktop") {
-      setDesktopFile(file);
-      setDesktopPreview(URL.createObjectURL(file));
-      return;
+    const setPreparing =
+      type === "desktop" ? setDesktopPreparing : setMobilePreparing;
+
+    setPreparing(true);
+
+    try {
+      const prepared = await prepareBannerForUpload(file, type);
+      const preview = URL.createObjectURL(prepared);
+
+      if (type === "desktop") {
+        setDesktopFile(prepared);
+        setDesktopPreview(preview);
+      } else {
+        setMobileFile(prepared);
+        setMobilePreview(preview);
+      }
+    } catch (error) {
+      setError((error as Error).message || "Falha ao preparar imagem.");
+    } finally {
+      setPreparing(false);
     }
-
-    setMobileFile(file);
-    setMobilePreview(URL.createObjectURL(file));
   }
 
   async function handleSave() {
@@ -290,10 +408,11 @@ export default function BannersPage() {
 
         <div className="max-w-4xl space-y-6 rounded-lg border border-kc-line bg-white p-6 shadow-sm">
           <div className="rounded-lg border border-kc-line bg-kc-cream/40 px-4 py-3 text-xs leading-relaxed text-kc-dark/75">
-            O ajuste final da imagem acontece no servidor no momento do upload.
-            O banner desktop e recortado para {DIMENSIONS.desktop.w}x
-            {DIMENSIONS.desktop.h}px e o mobile para {DIMENSIONS.mobile.w}x
-            {DIMENSIONS.mobile.h}px, priorizando o topo da foto.
+            Antes do envio, a imagem e reduzida no navegador para evitar erro
+            de limite na Vercel. O recorte final continua acontecendo no
+            servidor, em {DIMENSIONS.desktop.w}x{DIMENSIONS.desktop.h}px no
+            desktop e {DIMENSIONS.mobile.w}x{DIMENSIONS.mobile.h}px no mobile,
+            sempre priorizando o topo da foto.
           </div>
 
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
@@ -348,6 +467,9 @@ export default function BannersPage() {
                   Remover
                 </button>
               )}
+              {desktopPreparing && (
+                <p className="mt-1 text-xs text-kc">Preparando envio...</p>
+              )}
             </div>
 
             <div>
@@ -400,6 +522,9 @@ export default function BannersPage() {
                 >
                   Remover
                 </button>
+              )}
+              {mobilePreparing && (
+                <p className="mt-1 text-xs text-kc">Preparando envio...</p>
               )}
             </div>
           </div>
@@ -535,7 +660,7 @@ export default function BannersPage() {
           <div className="flex gap-3">
             <button
               onClick={handleSave}
-              disabled={saving}
+              disabled={saving || desktopPreparing || mobilePreparing}
               className="flex items-center gap-2 bg-kc px-5 py-2.5 text-[11px] uppercase tracking-[0.14em] text-white transition-colors hover:bg-kc-dark disabled:opacity-60"
             >
               {saving ? (
