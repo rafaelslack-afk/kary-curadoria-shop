@@ -14,6 +14,21 @@ const FROM = process.env.EMAIL_FROM
 const ADMIN = process.env.EMAIL_ADMIN ?? "contato@karycuradoria.com.br";
 const REPLY_TO = process.env.EMAIL_REPLY_TO ?? undefined;
 
+// Resend v2 SDK não lança exceção em erro de API — retorna { data, error }.
+// Esta helper lança se houver erro para que o caller possa capturar.
+async function sendAndCheck(
+  payload: Parameters<ReturnType<typeof getResend>["emails"]["send"]>[0]
+) {
+  const resend = getResend();
+  const { data, error } = await resend.emails.send(payload);
+  if (error) {
+    console.error("[email] Resend API error:", JSON.stringify(error));
+    throw new Error(`Resend error: ${error.message ?? JSON.stringify(error)}`);
+  }
+  console.log("[email] Enviado com sucesso. ID:", data?.id);
+  return data;
+}
+
 export interface EmailOrderItem {
   name: string;
   variant?: string;
@@ -68,21 +83,19 @@ export interface LowStockItem {
 }
 
 export async function sendOrderCreatedEmail(params: SendOrderCreatedParams) {
-  const resend = getResend();
   console.log("[email] sendOrderCreatedEmail → from:", FROM, "to:", params.to);
-  const result = await resend.emails.send({
+  await sendAndCheck({
     from: FROM,
     to: params.to,
     replyTo: REPLY_TO,
     subject: `Pedido #${params.orderNumber} confirmado — Kary Curadoria`,
     react: createElement(OrderCreatedEmail, params),
   });
-  console.log("[email] resultado Resend:", JSON.stringify(result));
 }
 
 export async function sendPaymentConfirmedEmail(params: SendPaymentConfirmedParams) {
-  const resend = getResend();
-  await resend.emails.send({
+  console.log("[email] sendPaymentConfirmedEmail → to:", params.to);
+  await sendAndCheck({
     from: FROM,
     to: params.to,
     replyTo: REPLY_TO,
@@ -92,8 +105,8 @@ export async function sendPaymentConfirmedEmail(params: SendPaymentConfirmedPara
 }
 
 export async function sendOrderShippedEmail(params: SendOrderShippedParams) {
-  const resend = getResend();
-  await resend.emails.send({
+  console.log("[email] sendOrderShippedEmail → to:", params.to);
+  await sendAndCheck({
     from: FROM,
     to: params.to,
     replyTo: REPLY_TO,
@@ -103,8 +116,8 @@ export async function sendOrderShippedEmail(params: SendOrderShippedParams) {
 }
 
 export async function sendOrderCancelledEmail(params: SendOrderCancelledParams) {
-  const resend = getResend();
-  await resend.emails.send({
+  console.log("[email] sendOrderCancelledEmail → to:", params.to);
+  await sendAndCheck({
     from: FROM,
     to: params.to,
     replyTo: REPLY_TO,
@@ -115,13 +128,12 @@ export async function sendOrderCancelledEmail(params: SendOrderCancelledParams) 
 
 export async function sendLowStockAlertEmail(items: LowStockItem[]) {
   if (items.length === 0) return;
-
-  const resend = getResend();
-  await resend.emails.send({
+  console.log("[email] sendLowStockAlertEmail → to:", ADMIN);
+  await sendAndCheck({
     from: FROM,
     to: ADMIN,
     replyTo: REPLY_TO,
-    subject: `Alerta: ${items.length} variacao(oes) com estoque baixo`,
+    subject: `Alerta: ${items.length} variação(ões) com estoque baixo`,
     react: createElement(LowStockAlertEmail, { items }),
   });
 }
