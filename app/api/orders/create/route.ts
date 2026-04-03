@@ -429,6 +429,9 @@ export async function POST(request: NextRequest) {
 
     // ── 8. Disparar e-mail de confirmação ───────────────────────────────────
     try {
+      console.log("[email] Enviando confirmação para:", customer.email);
+      console.log("[email] EMAIL_FROM:", process.env.EMAIL_FROM ?? "(não definido)");
+      console.log("[email] RESEND_API_KEY definida:", Boolean(process.env.RESEND_API_KEY));
       await sendOrderCreatedEmail({
         to: customer.email,
         orderNumber: String(order.order_number),
@@ -454,11 +457,12 @@ export async function POST(request: NextRequest) {
           ? (mpResponse.barcode?.content ?? undefined)
           : undefined,
       });
+      console.log("[email] Confirmação enviada com sucesso para:", customer.email);
     } catch (emailErr) {
       const msg = emailErr instanceof Error ? emailErr.message : String(emailErr);
-      console.error("[orders/create] Falha ao enviar e-mail de confirmação:", msg);
-      console.error("[orders/create] EMAIL_FROM:", process.env.EMAIL_FROM ?? "(não definido)");
-      console.error("[orders/create] RESEND_API_KEY definida:", Boolean(process.env.RESEND_API_KEY));
+      const stack = emailErr instanceof Error ? emailErr.stack : "";
+      console.error("[email] ERRO ao enviar confirmação:", msg);
+      console.error("[email] Stack:", stack);
     }
 
     // ── 9. Montar resposta por método de pagamento ───────────────────────────
