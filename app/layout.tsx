@@ -3,26 +3,35 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "Kary Curadoria | Moda Feminina com Elegancia",
+    default: "Kary Curadoria | Moda Feminina com Elegância",
     template: "%s | Kary Curadoria",
   },
   description:
-    "Conjuntos de linho e alfaiataria casual com acabamento impecavel. Do dia a dia ao evento especial. Loja no Bras, Sao Paulo.",
+    "Moda feminina com elegância e curadoria exclusiva no coração do Brás. Conjuntos de linho, alfaiataria casual e peças atemporais.",
   keywords: [
     "moda feminina",
     "conjuntos de linho",
     "alfaiataria casual",
-    "Bras",
-    "Sao Paulo",
+    "Brás",
+    "São Paulo",
     "Kary Curadoria",
     "loja online",
   ],
+  icons: {
+    icon: [
+      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-16.png", sizes: "16x16", type: "image/png" },
+    ],
+    apple: { url: "/apple-touch-icon.png", sizes: "180x180" },
+    other: [{ rel: "icon", url: "/icon-512.png", sizes: "512x512" }],
+  },
   openGraph: {
-    title: "Kary Curadoria | Moda Feminina com Elegancia",
+    title: "Kary Curadoria | Moda Feminina com Elegância",
     description:
-      "Conjuntos de linho e alfaiataria casual com acabamento impecavel. Do dia a dia ao evento especial.",
+      "Moda feminina com elegância e curadoria exclusiva no coração do Brás. Conjuntos de linho, alfaiataria casual e peças atemporais.",
     url: "https://karycuradoria.com.br",
     siteName: "Kary Curadoria",
+    images: [{ url: "/icon-512.png", width: 512, height: 512 }],
     locale: "pt_BR",
     type: "website",
   },
