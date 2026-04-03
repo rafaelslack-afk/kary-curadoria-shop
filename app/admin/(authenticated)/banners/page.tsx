@@ -9,11 +9,13 @@ import {
   Eye,
   EyeOff,
   ImageIcon,
+  Link as LinkIcon,
+  Loader2,
   Pencil,
   Plus,
   Trash2,
+  Upload,
   X,
-  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Banner } from "@/types/database";
@@ -40,133 +42,203 @@ const EMPTY: FormState = {
   active: true,
 };
 
-const DIMENSIONS = {
-  desktop: { w: 1920, h: 520 },
-  mobile: { w: 1080, h: 1350 },
-};
+// ── Upload direto ao Supabase via URL assinada ──────────────────────────────
 
-const TRANSPORT_LIMIT_BYTES = 3.8 * 1024 * 1024;
+async function getSignedUrl(
+  folder: "desktop" | "mobile",
+  filename: string
+): Promise<{ signedUrl: string; publicUrl: string }> {
+  const res = await fetch("/api/admin/banners/signed-url", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ folder, filename }),
+  });
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw new Error(json.error ?? "Falha ao obter URL de upload.");
+  }
+  return res.json();
+}
 
-async function loadImageElement(file: File) {
-  const image = document.createElement("img");
-  const url = URL.createObjectURL(file);
+async function uploadDirect(
+  file: File,
+  folder: "desktop" | "mobile",
+  onProgress: (pct: number) => void
+): Promise<string> {
+  const { signedUrl, publicUrl } = await getSignedUrl(folder, file.name);
 
   await new Promise<void>((resolve, reject) => {
-    image.onload = () => resolve();
-    image.onerror = () => reject(new Error("Falha ao carregar imagem."));
-    image.src = url;
-  });
-
-  return { image, url };
-}
-
-async function fileToImageSource(file: File) {
-  if ("createImageBitmap" in window) {
-    const bitmap = await createImageBitmap(file);
-    return {
-      source: bitmap,
-      width: bitmap.width,
-      height: bitmap.height,
-      dispose: () => bitmap.close(),
+    const xhr = new XMLHttpRequest();
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
     };
-  }
-
-  const { image, url } = await loadImageElement(file);
-  return {
-    source: image,
-    width: image.naturalWidth,
-    height: image.naturalHeight,
-    dispose: () => URL.revokeObjectURL(url),
-  };
-}
-
-async function canvasToFile(
-  canvas: HTMLCanvasElement,
-  name: string,
-  quality: number
-) {
-  const blob = await new Promise<Blob | null>((resolve) =>
-    canvas.toBlob(resolve, "image/jpeg", quality)
-  );
-
-  if (!blob) {
-    throw new Error("Falha ao preparar imagem para envio.");
-  }
-
-  return new File([blob], name.replace(/\.[^.]+$/, "") + ".jpg", {
-    type: "image/jpeg",
+    xhr.onload = () =>
+      xhr.status >= 200 && xhr.status < 300
+        ? resolve()
+        : reject(new Error(`Upload falhou: HTTP ${xhr.status}`));
+    xhr.onerror = () => reject(new Error("Erro de rede ao fazer upload."));
+    xhr.open("PUT", signedUrl);
+    xhr.setRequestHeader("Content-Type", file.type || "image/jpeg");
+    xhr.send(file);
   });
+
+  return publicUrl;
 }
 
-async function prepareBannerForUpload(
-  file: File,
-  type: "desktop" | "mobile"
-): Promise<File> {
-  if (file.size <= TRANSPORT_LIMIT_BYTES) {
-    return file;
+// ── Componente de upload de imagem ──────────────────────────────────────────
+
+interface ImageFieldProps {
+  label: string;
+  hint: string;
+  imageUrl: string;
+  progress: number | null; // null = idle, 0-100 = uploading
+  onFile: (file: File) => void;
+  onUrlChange: (url: string) => void;
+  onClear: () => void;
+}
+
+function ImageField({
+  label,
+  hint,
+  imageUrl,
+  progress,
+  onFile,
+  onUrlChange,
+  onClear,
+}: ImageFieldProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [urlDraft, setUrlDraft] = useState("");
+
+  const uploading = progress !== null;
+
+  function handleUrlConfirm() {
+    const u = urlDraft.trim();
+    if (!u) return;
+    onUrlChange(u);
+    setUrlDraft("");
+    setShowUrlInput(false);
   }
 
-  const preparedSource = await fileToImageSource(file);
-  const maxWidth = type === "desktop" ? 3200 : 1800;
-  const maxHeight = type === "desktop" ? 2200 : 2400;
+  return (
+    <div>
+      <label className="mb-1.5 block text-[11px] uppercase tracking-wider text-gray-500">
+        {label}
+        <span className="ml-1 normal-case text-gray-400">{hint}</span>
+      </label>
 
-  const scale = Math.min(
-    1,
-    maxWidth / preparedSource.width,
-    maxHeight / preparedSource.height
+      {/* Preview / drop zone */}
+      <div
+        onClick={() => !uploading && inputRef.current?.click()}
+        className={cn(
+          "relative overflow-hidden rounded-lg border-2 transition-colors",
+          imageUrl ? "border-kc/30" : "cursor-pointer border-dashed border-gray-200 hover:border-kc/50",
+          uploading && "cursor-default"
+        )}
+        style={{ aspectRatio: "16/5" }}
+      >
+        {imageUrl ? (
+          <Image
+            src={imageUrl}
+            alt="Preview"
+            fill
+            className="object-cover object-center"
+            unoptimized
+          />
+        ) : (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-gray-300">
+            <ImageIcon size={28} />
+            <span className="text-xs">Clique para selecionar arquivo</span>
+          </div>
+        )}
+
+        {/* Progress overlay */}
+        {uploading && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/50">
+            <Loader2 size={22} className="animate-spin text-white" />
+            <span className="text-xs text-white font-medium">{progress}%</span>
+            <div className="w-32 h-1.5 rounded-full bg-white/30 overflow-hidden">
+              <div
+                className="h-full bg-white transition-all"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.target.value = "";
+          if (f) onFile(f);
+        }}
+      />
+
+      {/* Actions below preview */}
+      <div className="mt-1.5 flex items-center gap-3">
+        {imageUrl && !uploading && (
+          <>
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              className="flex items-center gap-1 text-[11px] text-kc hover:underline"
+            >
+              <Upload size={11} /> Trocar arquivo
+            </button>
+            <button
+              type="button"
+              onClick={onClear}
+              className="text-[11px] text-red-500 hover:underline"
+            >
+              Remover
+            </button>
+          </>
+        )}
+
+        {/* Paste URL toggle */}
+        {!uploading && (
+          <button
+            type="button"
+            onClick={() => setShowUrlInput((v) => !v)}
+            className="ml-auto flex items-center gap-1 text-[11px] text-gray-400 hover:text-kc"
+          >
+            <LinkIcon size={11} />
+            {showUrlInput ? "Fechar" : "Colar URL"}
+          </button>
+        )}
+      </div>
+
+      {/* URL paste input */}
+      {showUrlInput && (
+        <div className="mt-2 flex gap-2">
+          <input
+            type="url"
+            placeholder="https://..."
+            value={urlDraft}
+            onChange={(e) => setUrlDraft(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleUrlConfirm()}
+            className="flex-1 rounded border border-gray-200 px-3 py-1.5 text-xs focus:border-kc focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={handleUrlConfirm}
+            disabled={!urlDraft.trim()}
+            className="rounded bg-kc px-3 py-1.5 text-[11px] text-white hover:bg-kc-dark disabled:opacity-40"
+          >
+            Usar
+          </button>
+        </div>
+      )}
+    </div>
   );
-
-  const width = Math.max(1, Math.round(preparedSource.width * scale));
-  const height = Math.max(1, Math.round(preparedSource.height * scale));
-
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-
-  const ctx = canvas.getContext("2d");
-  if (!ctx) {
-    preparedSource.dispose();
-    throw new Error("Canvas 2D indisponivel.");
-  }
-
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, width, height);
-  ctx.drawImage(preparedSource.source, 0, 0, width, height);
-  preparedSource.dispose();
-
-  let quality = 0.96;
-  let prepared = await canvasToFile(canvas, file.name, quality);
-
-  while (prepared.size > TRANSPORT_LIMIT_BYTES && quality > 0.82) {
-    quality -= 0.04;
-    prepared = await canvasToFile(canvas, file.name, quality);
-  }
-
-  if (prepared.size > TRANSPORT_LIMIT_BYTES) {
-    throw new Error("A imagem ainda ficou grande demais. Tente um arquivo mais leve.");
-  }
-
-  return prepared;
 }
 
-async function uploadImage(
-  file: File,
-  folder: "desktop" | "mobile"
-): Promise<string | null> {
-  const body = new FormData();
-  body.append("file", file);
-  body.append("folder", folder);
-
-  const res = await fetch("/api/admin/banners/upload", { method: "POST", body });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    console.error("Upload error:", data.error ?? res.statusText);
-    return null;
-  }
-
-  const { url } = await res.json();
-  return url ?? null;
-}
+// ── Página principal ────────────────────────────────────────────────────────
 
 export default function BannersPage() {
   const [banners, setBanners] = useState<Banner[]>([]);
@@ -177,15 +249,10 @@ export default function BannersPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const [desktopFile, setDesktopFile] = useState<File | null>(null);
-  const [mobileFile, setMobileFile] = useState<File | null>(null);
-  const [desktopPreview, setDesktopPreview] = useState("");
-  const [mobilePreview, setMobilePreview] = useState("");
-  const [desktopPreparing, setDesktopPreparing] = useState(false);
-  const [mobilePreparing, setMobilePreparing] = useState(false);
-
-  const desktopInputRef = useRef<HTMLInputElement>(null);
-  const mobileInputRef = useRef<HTMLInputElement>(null);
+  const [desktopUrl, setDesktopUrl] = useState("");
+  const [mobileUrl, setMobileUrl] = useState("");
+  const [desktopProgress, setDesktopProgress] = useState<number | null>(null);
+  const [mobileProgress, setMobileProgress] = useState<number | null>(null);
 
   useEffect(() => {
     fetchBanners();
@@ -203,12 +270,10 @@ export default function BannersPage() {
   }
 
   function resetImages() {
-    setDesktopFile(null);
-    setMobileFile(null);
-    setDesktopPreview("");
-    setMobilePreview("");
-    setDesktopPreparing(false);
-    setMobilePreparing(false);
+    setDesktopUrl("");
+    setMobileUrl("");
+    setDesktopProgress(null);
+    setMobileProgress(null);
   }
 
   function openCreate() {
@@ -232,8 +297,8 @@ export default function BannersPage() {
       active: banner.active,
     });
     resetImages();
-    setDesktopPreview(banner.image_desktop ?? "");
-    setMobilePreview(banner.image_mobile ?? "");
+    setDesktopUrl(banner.image_desktop ?? "");
+    setMobileUrl(banner.image_mobile ?? "");
     setError("");
     setShowForm(true);
   }
@@ -246,42 +311,25 @@ export default function BannersPage() {
     setError("");
   }
 
-  async function handleFileChange(
-    e: React.ChangeEvent<HTMLInputElement>,
-    type: "desktop" | "mobile"
-  ) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    e.target.value = "";
+  async function handleFile(file: File, type: "desktop" | "mobile") {
     setError("");
+    const setProgress = type === "desktop" ? setDesktopProgress : setMobileProgress;
+    const setUrl = type === "desktop" ? setDesktopUrl : setMobileUrl;
 
-    const setPreparing =
-      type === "desktop" ? setDesktopPreparing : setMobilePreparing;
-
-    setPreparing(true);
-
+    setProgress(0);
     try {
-      const prepared = await prepareBannerForUpload(file, type);
-      const preview = URL.createObjectURL(prepared);
-
-      if (type === "desktop") {
-        setDesktopFile(prepared);
-        setDesktopPreview(preview);
-      } else {
-        setMobileFile(prepared);
-        setMobilePreview(preview);
-      }
-    } catch (error) {
-      setError((error as Error).message || "Falha ao preparar imagem.");
+      const url = await uploadDirect(file, type, setProgress);
+      setUrl(url);
+    } catch (e) {
+      setError((e as Error).message);
     } finally {
-      setPreparing(false);
+      setProgress(null);
     }
   }
 
   async function handleSave() {
-    if (!editing && !desktopFile && !desktopPreview) {
-      setError("A imagem desktop e obrigatoria.");
+    if (!editing && !desktopUrl) {
+      setError("A imagem desktop é obrigatória.");
       return;
     }
 
@@ -289,27 +337,6 @@ export default function BannersPage() {
     setError("");
 
     try {
-      let imageDesktop = editing?.image_desktop ?? null;
-      let imageMobile = editing?.image_mobile ?? null;
-
-      if (desktopFile) {
-        const url = await uploadImage(desktopFile, "desktop");
-        if (!url) {
-          setError("Falha no upload da imagem desktop.");
-          return;
-        }
-        imageDesktop = url;
-      }
-
-      if (mobileFile) {
-        const url = await uploadImage(mobileFile, "mobile");
-        if (!url) {
-          setError("Falha no upload da imagem mobile.");
-          return;
-        }
-        imageMobile = url;
-      }
-
       const payload = {
         title: form.title || null,
         subtitle: form.subtitle || null,
@@ -317,8 +344,8 @@ export default function BannersPage() {
         button_link: form.button_link || null,
         text_position: form.text_position,
         text_color: form.text_color,
-        image_desktop: imageDesktop,
-        image_mobile: imageMobile,
+        image_desktop: desktopUrl || editing?.image_desktop || null,
+        image_mobile: mobileUrl || editing?.image_mobile || null,
         order_index: form.order_index,
         active: form.active,
       };
@@ -349,7 +376,7 @@ export default function BannersPage() {
   }
 
   async function handleDelete(banner: Banner) {
-    if (!confirm(`Excluir o banner "${banner.title ?? "sem titulo"}"?`)) return;
+    if (!confirm(`Excluir o banner "${banner.title ?? "sem título"}"?`)) return;
     await fetch(`/api/admin/banners/${banner.id}`, { method: "DELETE" });
     setBanners((prev) => prev.filter((item) => item.id !== banner.id));
   }
@@ -360,7 +387,6 @@ export default function BannersPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ active: !banner.active }),
     });
-
     setBanners((prev) =>
       prev.map((item) =>
         item.id === banner.id ? { ...item, active: !item.active } : item
@@ -390,16 +416,16 @@ export default function BannersPage() {
     fetchBanners();
   }
 
-  const labelCls =
-    "mb-1.5 block text-[11px] uppercase tracking-wider text-gray-500";
   const inputCls =
     "w-full rounded border border-gray-200 px-3 py-2.5 text-sm focus:border-kc focus:outline-none";
+  const labelCls = "mb-1.5 block text-[11px] uppercase tracking-wider text-gray-500";
+  const uploading = desktopProgress !== null || mobileProgress !== null;
 
   if (showForm) {
     return (
       <div>
         <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-2xl font-serif font-medium text-kc-dark">
+          <h1 className="font-serif text-2xl font-medium text-kc-dark">
             {editing ? "Editar Banner" : "Novo Banner"}
           </h1>
           <button
@@ -411,187 +437,84 @@ export default function BannersPage() {
         </div>
 
         <div className="max-w-4xl space-y-6 rounded-lg border border-kc-line bg-white p-6 shadow-sm">
+
+          {/* Info */}
           <div className="rounded-lg border border-kc-line bg-kc-cream/40 px-4 py-3 text-xs leading-relaxed text-kc-dark/75">
-            Antes do envio, a imagem e reduzida no navegador para evitar erro
-            de limite na Vercel. O recorte final continua acontecendo no
-            servidor, em {DIMENSIONS.desktop.w}x{DIMENSIONS.desktop.h}px no
-            desktop e {DIMENSIONS.mobile.w}x{DIMENSIONS.mobile.h}px no mobile.
-            No celular, o banner agora usa formato vertical para preencher bem
-            a tela em modo retrato, sempre priorizando o topo da foto.
+            <strong>Upload direto</strong> — imagens enviadas sem compressão intermediária, qualidade original preservada.
+            Formatos aceitos: JPG, PNG, WebP. Tamanho recomendado: 2000×600px (desktop) e 800×1000px (mobile).
+            Você também pode <strong>colar uma URL</strong> de imagem do Supabase ou de qualquer CDN.
           </div>
 
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-            <div>
-              <label className={labelCls}>
-                Imagem Desktop *
-                <span className="ml-1 normal-case text-gray-400">
-                  (ajuste automatico no upload para {DIMENSIONS.desktop.w}x
-                  {DIMENSIONS.desktop.h}px)
-                </span>
-              </label>
-              <div
-                onClick={() => desktopInputRef.current?.click()}
-                className={cn(
-                  "relative cursor-pointer overflow-hidden rounded-lg border-2 border-dashed transition-colors",
-                  desktopPreview
-                    ? "border-kc/30"
-                    : "border-gray-200 hover:border-kc/50"
-                )}
-                style={{ aspectRatio: `${DIMENSIONS.desktop.w}/${DIMENSIONS.desktop.h}` }}
-              >
-                {desktopPreview ? (
-                  <Image
-                    src={desktopPreview}
-                    alt="Preview desktop"
-                    fill
-                    className="object-cover object-top"
-                    unoptimized
-                  />
-                ) : (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-gray-300">
-                    <ImageIcon size={28} />
-                    <span className="text-xs">Clique para selecionar</span>
-                  </div>
-                )}
-              </div>
-              <input
-                ref={desktopInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => handleFileChange(e, "desktop")}
-              />
-              {desktopPreview && (
-                <button
-                  onClick={() => {
-                    setDesktopPreview("");
-                    setDesktopFile(null);
-                  }}
-                  className="mt-1 text-xs text-red-500 hover:underline"
-                >
-                  Remover
-                </button>
-              )}
-              {desktopPreparing && (
-                <p className="mt-1 text-xs text-kc">Preparando envio...</p>
-              )}
-            </div>
+          {/* Imagem Desktop */}
+          <ImageField
+            label="Imagem Desktop *"
+            hint="(proporção ~16:5, ex: 2000×600px)"
+            imageUrl={desktopUrl}
+            progress={desktopProgress}
+            onFile={(f) => handleFile(f, "desktop")}
+            onUrlChange={setDesktopUrl}
+            onClear={() => setDesktopUrl("")}
+          />
 
-            <div>
-              <label className={labelCls}>
-                Imagem Mobile
-                <span className="ml-1 normal-case text-gray-400">
-                  (opcional, ajuste automatico para {DIMENSIONS.mobile.w}x
-                  {DIMENSIONS.mobile.h}px)
-                </span>
-              </label>
-              <div
-                onClick={() => mobileInputRef.current?.click()}
-                className={cn(
-                  "relative cursor-pointer overflow-hidden rounded-lg border-2 border-dashed transition-colors",
-                  mobilePreview
-                    ? "border-kc/30"
-                    : "border-gray-200 hover:border-kc/50"
-                )}
-                style={{ aspectRatio: `${DIMENSIONS.mobile.w}/${DIMENSIONS.mobile.h}` }}
-              >
-                {mobilePreview ? (
-                  <Image
-                    src={mobilePreview}
-                    alt="Preview mobile"
-                    fill
-                    className="object-cover object-top"
-                    unoptimized
-                  />
-                ) : (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-gray-300">
-                    <ImageIcon size={24} />
-                    <span className="text-xs">Clique para selecionar</span>
-                  </div>
-                )}
-              </div>
-              <input
-                ref={mobileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => handleFileChange(e, "mobile")}
-              />
-              {mobilePreview && (
-                <button
-                  onClick={() => {
-                    setMobilePreview("");
-                    setMobileFile(null);
-                  }}
-                  className="mt-1 text-xs text-red-500 hover:underline"
-                >
-                  Remover
-                </button>
-              )}
-              {mobilePreparing && (
-                <p className="mt-1 text-xs text-kc">Preparando envio...</p>
-              )}
-            </div>
-          </div>
+          {/* Imagem Mobile */}
+          <ImageField
+            label="Imagem Mobile"
+            hint="(opcional, proporção retrato, ex: 800×1000px)"
+            imageUrl={mobileUrl}
+            progress={mobileProgress}
+            onFile={(f) => handleFile(f, "mobile")}
+            onUrlChange={setMobileUrl}
+            onClear={() => setMobileUrl("")}
+          />
 
+          {/* Campos de texto */}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
-              <label className={labelCls}>Titulo Principal</label>
+              <label className={labelCls}>Título Principal</label>
               <input
                 type="text"
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
-                placeholder="Nova Colecao"
+                placeholder="Nova Coleção"
                 className={inputCls}
               />
             </div>
-
             <div>
-              <label className={labelCls}>Subtitulo</label>
+              <label className={labelCls}>Subtítulo</label>
               <input
                 type="text"
                 value={form.subtitle}
                 onChange={(e) => setForm({ ...form, subtitle: e.target.value })}
-                placeholder="Linho, alfaiataria e classicos atemporais"
+                placeholder="Linho, alfaiataria e clássicos atemporais"
                 className={inputCls}
               />
             </div>
-
             <div>
-              <label className={labelCls}>Texto do Botao</label>
+              <label className={labelCls}>Texto do Botão</label>
               <input
                 type="text"
                 value={form.button_text}
-                onChange={(e) =>
-                  setForm({ ...form, button_text: e.target.value })
-                }
-                placeholder="Ver Colecao"
+                onChange={(e) => setForm({ ...form, button_text: e.target.value })}
+                placeholder="Ver Coleção"
                 className={inputCls}
               />
             </div>
-
             <div>
               <label className={labelCls}>Link do Banner</label>
               <input
                 type="text"
                 value={form.button_link}
-                onChange={(e) =>
-                  setForm({ ...form, button_link: e.target.value })
-                }
+                onChange={(e) => setForm({ ...form, button_link: e.target.value })}
                 placeholder="/produtos"
                 className={inputCls}
               />
             </div>
-
             <div>
-              <label className={labelCls}>Posicao do Texto</label>
+              <label className={labelCls}>Posição do Texto</label>
               <select
                 value={form.text_position}
                 onChange={(e) =>
-                  setForm({
-                    ...form,
-                    text_position: e.target.value as Banner["text_position"],
-                  })
+                  setForm({ ...form, text_position: e.target.value as Banner["text_position"] })
                 }
                 className={inputCls}
               >
@@ -600,16 +523,12 @@ export default function BannersPage() {
                 <option value="right">Direita</option>
               </select>
             </div>
-
             <div>
               <label className={labelCls}>Cor do Texto</label>
               <select
                 value={form.text_color}
                 onChange={(e) =>
-                  setForm({
-                    ...form,
-                    text_color: e.target.value as Banner["text_color"],
-                  })
+                  setForm({ ...form, text_color: e.target.value as Banner["text_color"] })
                 }
                 className={inputCls}
               >
@@ -617,7 +536,6 @@ export default function BannersPage() {
                 <option value="dark">Escuro</option>
               </select>
             </div>
-
             <div>
               <label className={labelCls}>Ordem</label>
               <input
@@ -625,15 +543,11 @@ export default function BannersPage() {
                 min={0}
                 value={form.order_index}
                 onChange={(e) =>
-                  setForm({
-                    ...form,
-                    order_index: parseInt(e.target.value, 10) || 0,
-                  })
+                  setForm({ ...form, order_index: parseInt(e.target.value, 10) || 0 })
                 }
                 className={inputCls}
               />
             </div>
-
             <div className="flex items-center gap-3 pt-5">
               <button
                 type="button"
@@ -657,27 +571,17 @@ export default function BannersPage() {
           </div>
 
           {error && (
-            <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-600">
-              {error}
-            </p>
+            <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
           )}
 
           <div className="flex gap-3">
             <button
               onClick={handleSave}
-              disabled={saving || desktopPreparing || mobilePreparing}
+              disabled={saving || uploading}
               className="flex items-center gap-2 bg-kc px-5 py-2.5 text-[11px] uppercase tracking-[0.14em] text-white transition-colors hover:bg-kc-dark disabled:opacity-60"
             >
-              {saving ? (
-                <Loader2 size={13} className="animate-spin" />
-              ) : (
-                <Check size={14} />
-              )}
-              {saving
-                ? "Salvando..."
-                : editing
-                  ? "Salvar Alteracoes"
-                  : "Criar Banner"}
+              {saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={14} />}
+              {saving ? "Salvando..." : uploading ? "Aguarde o upload..." : editing ? "Salvar Alterações" : "Criar Banner"}
             </button>
             <button
               onClick={closeForm}
@@ -691,12 +595,12 @@ export default function BannersPage() {
     );
   }
 
+  // ── Lista de banners ──────────────────────────────────────────────────────
+
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-serif font-medium text-kc-dark">
-          Banners
-        </h1>
+        <h1 className="font-serif text-2xl font-medium text-kc-dark">Banners</h1>
         <button
           onClick={openCreate}
           className="flex items-center gap-2 bg-kc px-4 py-2.5 text-[11px] uppercase tracking-[0.14em] text-white transition-colors hover:bg-kc-dark"
@@ -735,7 +639,7 @@ export default function BannersPage() {
                       src={banner.image_desktop}
                       alt={banner.title ?? "banner"}
                       fill
-                      className="object-cover object-top"
+                      className="object-cover object-center"
                     />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center text-gray-300">
@@ -747,18 +651,19 @@ export default function BannersPage() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-kc-dark">
                     {banner.title ?? (
-                      <span className="italic text-gray-400">Sem titulo</span>
+                      <span className="italic text-gray-400">Sem título</span>
                     )}
                   </p>
                   {banner.subtitle && (
-                    <p className="mt-0.5 truncate text-xs text-gray-500">
-                      {banner.subtitle}
-                    </p>
+                    <p className="mt-0.5 truncate text-xs text-gray-500">{banner.subtitle}</p>
                   )}
                   <div className="mt-1.5 flex items-center gap-3">
-                    <span className="text-[10px] text-gray-400">
-                      Ordem: {banner.order_index}
-                    </span>
+                    <span className="text-[10px] text-gray-400">Ordem: {banner.order_index}</span>
+                    {banner.image_mobile && (
+                      <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-600">
+                        Mobile ✓
+                      </span>
+                    )}
                     {banner.button_text && (
                       <span className="rounded bg-kc/10 px-1.5 py-0.5 text-[10px] text-kc">
                         CTA: {banner.button_text}

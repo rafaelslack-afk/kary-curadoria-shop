@@ -157,9 +157,9 @@ export function BannerCarousel({ banners }: BannerCarouselProps) {
                   src={mobileSrc}
                   alt={banner.title ?? "Banner"}
                   fill
-                  className="object-cover object-top md:hidden"
+                  className="object-cover object-center md:hidden"
                   priority={idx === 0}
-                  quality={95}
+                  quality={90}
                   sizes="(max-width: 767px) 100vw, 0px"
                 />
               ) : null}
@@ -169,9 +169,9 @@ export function BannerCarousel({ banners }: BannerCarouselProps) {
                   src={desktopSrc}
                   alt={banner.title ?? "Banner"}
                   fill
-                  className={`object-cover object-top ${mobileSrc ? "hidden md:block" : ""}`}
+                  className={`object-cover object-center ${mobileSrc ? "hidden md:block" : ""}`}
                   priority={idx === 0}
-                  quality={95}
+                  quality={90}
                   sizes={mobileSrc ? "(max-width: 767px) 0px, 100vw" : "100vw"}
                 />
               ) : (
