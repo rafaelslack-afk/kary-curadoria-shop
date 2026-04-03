@@ -11,47 +11,58 @@ export async function GET() {
   const fromEnv = process.env.EMAIL_FROM ?? "contato@karycuradoria.com.br";
   const from = fromEnv.includes("<") ? fromEnv : `Kary Curadoria <${fromEnv}>`;
 
-  console.log("[test-email] key prefix:", key ? key.substring(0, 8) : "NÃO DEFINIDA");
-  console.log("[test-email] from:", from);
-
   if (!key) {
     return NextResponse.json({ ok: false, error: "RESEND_API_KEY não definida" });
   }
 
   const resend = new Resend(key);
+  const results: Record<string, unknown> = { from, keyPrefix: key.substring(0, 8) };
 
   // Teste 1: HTML simples
-  const r1 = await resend.emails.send({
-    from,
-    to: "rafael.slack@gmail.com",
-    subject: "[Teste HTML] Kary Curadoria",
-    html: "<p>Teste com HTML simples — funcionou!</p>",
-  });
-  console.log("[test-email] HTML result:", JSON.stringify(r1));
+  try {
+    const r = await resend.emails.send({
+      from,
+      to: "rafael.slack@gmail.com",
+      subject: "[Teste HTML] Kary Curadoria",
+      html: "<p>Teste HTML simples</p>",
+    });
+    results.html = { data: r.data, error: r.error };
+  } catch (e) {
+    results.html = { thrown: String(e) };
+  }
 
-  // Teste 2: React template
-  const r2 = await resend.emails.send({
-    from,
-    to: "rafael.slack@gmail.com",
-    subject: "[Teste React] Pedido #999 — Kary Curadoria",
-    react: createElement(OrderCreatedEmail, {
+  // Teste 2: createElement do template
+  let element: unknown;
+  try {
+    element = createElement(OrderCreatedEmail, {
       orderNumber: "999",
-      customerName: "Cliente Teste",
-      items: [{ name: "Produto Teste", variant: "M", quantity: 1, unit_price: 199 }],
+      customerName: "Teste",
+      items: [{ name: "Produto", variant: "M", quantity: 1, unit_price: 199 }],
       subtotal: 199,
       shippingCost: 25,
       discount: 0,
       total: 224,
       paymentMethod: "pix",
-      pixCode: "00020126580014br.gov.bcb.pix0136teste",
-    }),
-  });
-  console.log("[test-email] React result:", JSON.stringify(r2));
+      pixCode: "00020126580014br.gov.bcb.pix",
+    });
+    results.createElement = "ok";
+  } catch (e) {
+    results.createElement = { thrown: String(e) };
+    return NextResponse.json(results);
+  }
 
-  return NextResponse.json({
-    html: { data: r1.data, error: r1.error },
-    react: { data: r2.data, error: r2.error },
-    from,
-    keyPrefix: key.substring(0, 8),
-  });
+  // Teste 3: enviar com React template
+  try {
+    const r = await resend.emails.send({
+      from,
+      to: "rafael.slack@gmail.com",
+      subject: "[Teste React] Kary Curadoria",
+      react: element as React.ReactElement,
+    });
+    results.react = { data: r.data, error: r.error };
+  } catch (e) {
+    results.react = { thrown: String(e) };
+  }
+
+  return NextResponse.json(results);
 }
