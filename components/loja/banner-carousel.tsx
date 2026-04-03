@@ -218,7 +218,7 @@ export function BannerCarousel({ banners }: BannerCarouselProps) {
         <>
           <button
             onClick={prev}
-            className="absolute left-4 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white transition-colors hover:bg-black/50 md:flex"
+            className="absolute left-3 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white transition-colors hover:bg-black/60 md:left-4 md:h-10 md:w-10"
             aria-label="Banner anterior"
           >
             <svg
@@ -235,7 +235,7 @@ export function BannerCarousel({ banners }: BannerCarouselProps) {
 
           <button
             onClick={next}
-            className="absolute right-4 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white transition-colors hover:bg-black/50 md:flex"
+            className="absolute right-3 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white transition-colors hover:bg-black/60 md:right-4 md:h-10 md:w-10"
             aria-label="Proximo banner"
           >
             <svg
