@@ -73,7 +73,7 @@ export async function sendOrderCreatedEmail(params: SendOrderCreatedParams) {
     from: FROM,
     to: params.to,
     replyTo: REPLY_TO,
-    subject: `Pedido #${params.orderNumber} recebido - Kary Curadoria`,
+    subject: `Pedido #${params.orderNumber} confirmado — Kary Curadoria`,
     react: createElement(OrderCreatedEmail, params),
   });
 }
@@ -84,7 +84,7 @@ export async function sendPaymentConfirmedEmail(params: SendPaymentConfirmedPara
     from: FROM,
     to: params.to,
     replyTo: REPLY_TO,
-    subject: `Pagamento aprovado - Pedido #${params.orderNumber}`,
+    subject: `Pagamento aprovado — Pedido #${params.orderNumber} | Kary Curadoria`,
     react: createElement(PaymentConfirmedEmail, params),
   });
 }
@@ -95,7 +95,7 @@ export async function sendOrderShippedEmail(params: SendOrderShippedParams) {
     from: FROM,
     to: params.to,
     replyTo: REPLY_TO,
-    subject: `Seu pedido #${params.orderNumber} foi enviado!`,
+    subject: `Pedido #${params.orderNumber} saiu para entrega — Kary Curadoria`,
     react: createElement(OrderShippedEmail, params),
   });
 }

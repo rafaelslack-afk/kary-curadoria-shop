@@ -14,10 +14,10 @@ function FallbackHero() {
     <section className="border-b border-kc-line bg-kc-light">
       <div className="mx-auto max-w-7xl px-6 py-16 text-center md:py-20">
         <p className="mb-5 text-[10px] uppercase tracking-[0.3em] text-kc-muted">
-          Nova Colecao - Outono 2026
+          Nova Coleção · Outono 2026
         </p>
         <h1 className="mb-5 font-serif text-4xl font-medium leading-tight text-kc-dark md:text-[52px]">
-          Elegancia que
+          Elegância que
           <br />
           nunca{" "}
           <em className="italic text-kc" style={{ fontStyle: "italic" }}>
@@ -25,15 +25,28 @@ function FallbackHero() {
           </em>
         </h1>
         <p className="mx-auto mb-8 max-w-md text-sm leading-relaxed tracking-wide text-kc-muted">
-          Conjuntos de linho e alfaiataria casual com acabamento impecavel.
+          Conjuntos de linho e alfaiataria casual com acabamento impecável.
           Do dia a dia ao evento especial.
         </p>
         <Link
           href="/produtos"
           className="inline-block bg-kc px-8 py-4 text-[11px] uppercase tracking-[0.2em] text-white transition-colors hover:bg-kc-dark"
         >
-          Ver Colecao
+          Ver Coleção
         </Link>
+        <div className="mt-6 flex items-center justify-center gap-5">
+          <span className="text-[10px] tracking-wider text-kc-muted">
+            Frete grátis acima de R$&nbsp;299
+          </span>
+          <span className="h-3 w-px bg-kc-line" />
+          <span className="text-[10px] tracking-wider text-kc-muted">
+            Troca grátis
+          </span>
+          <span className="h-3 w-px bg-kc-line" />
+          <span className="text-[10px] tracking-wider text-kc-muted">
+            Parcelamento sem juros
+          </span>
+        </div>
       </div>
     </section>
   );
