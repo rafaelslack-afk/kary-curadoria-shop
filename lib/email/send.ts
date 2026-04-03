@@ -69,13 +69,15 @@ export interface LowStockItem {
 
 export async function sendOrderCreatedEmail(params: SendOrderCreatedParams) {
   const resend = getResend();
-  await resend.emails.send({
+  console.log("[email] sendOrderCreatedEmail → from:", FROM, "to:", params.to);
+  const result = await resend.emails.send({
     from: FROM,
     to: params.to,
     replyTo: REPLY_TO,
     subject: `Pedido #${params.orderNumber} confirmado — Kary Curadoria`,
     react: createElement(OrderCreatedEmail, params),
   });
+  console.log("[email] resultado Resend:", JSON.stringify(result));
 }
 
 export async function sendPaymentConfirmedEmail(params: SendPaymentConfirmedParams) {
