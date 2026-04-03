@@ -163,7 +163,7 @@ export async function POST(request: NextRequest) {
     // Decrementa imediatamente para evitar overselling durante o processamento.
     for (const item of items) {
       const v = variants.find((x) => x.id === item.variantId)!;
-      const newStock = v.stock_qty - item.quantity;
+      const newStock = Math.max(0, v.stock_qty - item.quantity);
 
       const { error: stockErr } = await admin
         .from("product_variants")
@@ -455,7 +455,10 @@ export async function POST(request: NextRequest) {
           : undefined,
       });
     } catch (emailErr) {
-      console.error("[orders/create] Falha ao enviar e-mail de confirmação:", emailErr);
+      const msg = emailErr instanceof Error ? emailErr.message : String(emailErr);
+      console.error("[orders/create] Falha ao enviar e-mail de confirmação:", msg);
+      console.error("[orders/create] EMAIL_FROM:", process.env.EMAIL_FROM ?? "(não definido)");
+      console.error("[orders/create] RESEND_API_KEY definida:", Boolean(process.env.RESEND_API_KEY));
     }
 
     // ── 9. Montar resposta por método de pagamento ───────────────────────────
