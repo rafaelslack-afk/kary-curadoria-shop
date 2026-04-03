@@ -92,9 +92,6 @@ export function ProductCard({ product, isNew }: ProductCardProps) {
             {formatCurrency(product.price)}
           </span>
         </div>
-        <p className="text-[10px] text-kc-muted mt-1">
-          em até 3x sem juros
-        </p>
       </div>
     </Link>
   );

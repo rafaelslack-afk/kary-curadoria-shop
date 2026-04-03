@@ -194,7 +194,6 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
             )}
             <span className="text-2xl font-medium text-kc">{formatCurrency(product.price)}</span>
           </div>
-          <p className="text-xs text-kc-muted -mt-3">em até 3x sem juros</p>
 
           <div className="h-px bg-kc-line" />
 
