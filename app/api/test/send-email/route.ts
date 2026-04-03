@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import { createElement } from "react";
+import { render } from "@react-email/render";
 import { OrderCreatedEmail } from "@/lib/email/templates/order-created";
 
 export const runtime = "nodejs";
@@ -31,13 +32,13 @@ export async function GET() {
     results.html = { thrown: String(e) };
   }
 
-  // Teste 2: createElement do template
-  let element: unknown;
+  // Teste 2: render do template para HTML via @react-email/render
+  let renderedHtml: string | undefined;
   try {
-    element = createElement(OrderCreatedEmail, {
+    const component = createElement(OrderCreatedEmail, {
       orderNumber: "999",
       customerName: "Teste",
-      items: [{ name: "Produto", variant: "M", quantity: 1, unit_price: 199 }],
+      items: [{ name: "Produto Teste", variant: "M", quantity: 1, unit_price: 199 }],
       subtotal: 199,
       shippingCost: 25,
       discount: 0,
@@ -45,23 +46,24 @@ export async function GET() {
       paymentMethod: "pix",
       pixCode: "00020126580014br.gov.bcb.pix",
     });
-    results.createElement = "ok";
+    renderedHtml = await render(component);
+    results.renderHtml = `ok (${renderedHtml.length} chars)`;
   } catch (e) {
-    results.createElement = { thrown: String(e) };
+    results.renderHtml = { thrown: String(e) };
     return NextResponse.json(results);
   }
 
-  // Teste 3: enviar com React template
+  // Teste 3: enviar com HTML pré-renderizado
   try {
     const r = await resend.emails.send({
       from,
       to: "rafael.slack@gmail.com",
-      subject: "[Teste React] Kary Curadoria",
-      react: element as React.ReactElement,
+      subject: "[Teste Template] Kary Curadoria",
+      html: renderedHtml,
     });
-    results.react = { data: r.data, error: r.error };
+    results.templateEmail = { data: r.data, error: r.error };
   } catch (e) {
-    results.react = { thrown: String(e) };
+    results.templateEmail = { thrown: String(e) };
   }
 
   return NextResponse.json(results);

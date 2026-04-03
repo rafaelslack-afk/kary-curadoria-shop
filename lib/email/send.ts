@@ -1,4 +1,5 @@
 import { createElement } from "react";
+import { render } from "@react-email/render";
 import { getResend } from "./resend";
 import { OrderCreatedEmail } from "./templates/order-created";
 import { PaymentConfirmedEmail } from "./templates/payment-confirmed";
@@ -14,13 +15,24 @@ const FROM = process.env.EMAIL_FROM
 const ADMIN = process.env.EMAIL_ADMIN ?? "contato@karycuradoria.com.br";
 const REPLY_TO = process.env.EMAIL_REPLY_TO ?? undefined;
 
-// Resend v2 SDK não lança exceção em erro de API — retorna { data, error }.
-// Esta helper lança se houver erro para que o caller possa capturar.
-async function sendAndCheck(
-  payload: Parameters<ReturnType<typeof getResend>["emails"]["send"]>[0]
-) {
+// Pré-renderiza o componente React para HTML e envia via Resend.
+// Evita depender do renderer interno do Resend SDK (que falha com o bundle do Next.js).
+async function sendHtml(payload: {
+  to: string;
+  subject: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  component: React.ReactElement<any>;
+}) {
+  const html = await render(payload.component);
   const resend = getResend();
-  const { data, error } = await resend.emails.send(payload);
+  console.log("[email] Enviando para:", payload.to, "| assunto:", payload.subject);
+  const { data, error } = await resend.emails.send({
+    from: FROM,
+    to: payload.to,
+    replyTo: REPLY_TO,
+    subject: payload.subject,
+    html,
+  });
   if (error) {
     console.error("[email] Resend API error:", JSON.stringify(error));
     throw new Error(`Resend error: ${error.message ?? JSON.stringify(error)}`);
@@ -83,57 +95,42 @@ export interface LowStockItem {
 }
 
 export async function sendOrderCreatedEmail(params: SendOrderCreatedParams) {
-  console.log("[email] sendOrderCreatedEmail → from:", FROM, "to:", params.to);
-  await sendAndCheck({
-    from: FROM,
+  await sendHtml({
     to: params.to,
-    replyTo: REPLY_TO,
     subject: `Pedido #${params.orderNumber} confirmado — Kary Curadoria`,
-    react: createElement(OrderCreatedEmail, params),
+    component: createElement(OrderCreatedEmail, params),
   });
 }
 
 export async function sendPaymentConfirmedEmail(params: SendPaymentConfirmedParams) {
-  console.log("[email] sendPaymentConfirmedEmail → to:", params.to);
-  await sendAndCheck({
-    from: FROM,
+  await sendHtml({
     to: params.to,
-    replyTo: REPLY_TO,
     subject: `Pagamento aprovado — Pedido #${params.orderNumber} | Kary Curadoria`,
-    react: createElement(PaymentConfirmedEmail, params),
+    component: createElement(PaymentConfirmedEmail, params),
   });
 }
 
 export async function sendOrderShippedEmail(params: SendOrderShippedParams) {
-  console.log("[email] sendOrderShippedEmail → to:", params.to);
-  await sendAndCheck({
-    from: FROM,
+  await sendHtml({
     to: params.to,
-    replyTo: REPLY_TO,
     subject: `Pedido #${params.orderNumber} saiu para entrega — Kary Curadoria`,
-    react: createElement(OrderShippedEmail, params),
+    component: createElement(OrderShippedEmail, params),
   });
 }
 
 export async function sendOrderCancelledEmail(params: SendOrderCancelledParams) {
-  console.log("[email] sendOrderCancelledEmail → to:", params.to);
-  await sendAndCheck({
-    from: FROM,
+  await sendHtml({
     to: params.to,
-    replyTo: REPLY_TO,
     subject: `Pedido #${params.orderNumber} cancelado`,
-    react: createElement(OrderCancelledEmail, params),
+    component: createElement(OrderCancelledEmail, params),
   });
 }
 
 export async function sendLowStockAlertEmail(items: LowStockItem[]) {
   if (items.length === 0) return;
-  console.log("[email] sendLowStockAlertEmail → to:", ADMIN);
-  await sendAndCheck({
-    from: FROM,
+  await sendHtml({
     to: ADMIN,
-    replyTo: REPLY_TO,
     subject: `Alerta: ${items.length} variação(ões) com estoque baixo`,
-    react: createElement(LowStockAlertEmail, { items }),
+    component: createElement(LowStockAlertEmail, { items }),
   });
 }
