@@ -214,33 +214,16 @@ DECLARE
     item RECORD;
 BEGIN
     -- -----------------------------------------------------------------
-    -- 1. Order marked as PAID  -->  deduct stock, log "saida"
+    -- 1. Order marked as PAID  -->  convert linked reservations to "saida"
+    -- The stock has already been reserved by the application at checkout.
     -- -----------------------------------------------------------------
     IF OLD.status IS DISTINCT FROM 'paid' AND NEW.status = 'paid' THEN
-        FOR item IN
-            SELECT oi.variant_id,
-                   oi.product_id,
-                   oi.quantity
-              FROM order_items oi
-             WHERE oi.order_id = NEW.id
-        LOOP
-            -- Deduct stock
-            UPDATE product_variants
-               SET stock_qty = stock_qty - item.quantity
-             WHERE id = item.variant_id;
-
-            -- Audit trail
-            INSERT INTO inventory_log (variant_id, product_id, type, sales_channel, quantity, reason, order_id)
-            VALUES (
-                item.variant_id,
-                item.product_id,
-                'saida',
-                'online',
-                -item.quantity,
-                'Venda online - pedido #' || NEW.order_number,
-                NEW.id
-            );
-        END LOOP;
+        UPDATE inventory_log
+           SET type = 'saida',
+               sales_channel = 'online',
+               reason = 'Venda online - pedido #' || NEW.order_number
+         WHERE order_id = NEW.id
+           AND type = 'reserva';
     END IF;
 
     -- -----------------------------------------------------------------

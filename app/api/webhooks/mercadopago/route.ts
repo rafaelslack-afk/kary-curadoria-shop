@@ -66,6 +66,8 @@ export async function POST(request: Request) {
 
     // Atualizar status do pedido conforme status do MP
     if (payment.status === "approved") {
+      const wasAlreadyPaid = order.status === "paid";
+
       await admin
         .from("orders")
         .update({
@@ -76,8 +78,20 @@ export async function POST(request: Request) {
 
       console.log(`[Webhook MP] Pedido #${order.order_number} marcado como PAGO`);
 
+      if (!wasAlreadyPaid) {
+        await admin
+          .from("inventory_log")
+          .update({
+            type: "saida",
+            sales_channel: "online",
+            reason: `Venda online pedido #${order.order_number}`,
+          })
+          .eq("order_id", order.id)
+          .eq("type", "reserva");
+      }
+
       // E-mail de pagamento confirmado
-      if (order.guest_email) {
+      if (!wasAlreadyPaid && order.guest_email) {
         try {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const items = (order as any).order_items ?? [];

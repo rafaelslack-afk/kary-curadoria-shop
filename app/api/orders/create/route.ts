@@ -416,8 +416,11 @@ export async function POST(request: NextRequest) {
         .from("inventory_log")
         .update({
           order_id: order.id,
-          type: "saida",
-          reason: `Venda online pedido #${order.order_number}`,
+          type: orderStatus === "paid" ? "saida" : "reserva",
+          reason:
+            orderStatus === "paid"
+              ? `Venda online pedido #${order.order_number}`
+              : `Reserva aguardando pagamento - pedido #${order.order_number}`,
         })
         .eq("variant_id", item.variantId)
         .eq("type", "reserva")

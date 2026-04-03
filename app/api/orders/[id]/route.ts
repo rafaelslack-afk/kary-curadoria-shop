@@ -2,19 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendOrderShippedEmail } from "@/lib/email/send";
 
-// Desabilita qualquer cache estático do Next.js nesta rota
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const NO_CACHE = { "Cache-Control": "no-store, no-cache, must-revalidate", Pragma: "no-cache" };
+const NO_CACHE = {
+  "Cache-Control": "no-store, no-cache, must-revalidate",
+  Pragma: "no-cache",
+};
 
-// ---------------------------------------------------------------------------
-// GET /api/orders/[id]
-// Usado em dois contextos:
-//   1. Polling do checkout PIX (campos mínimos, retrocompatível)
-//   2. Painel admin — retorna pedido completo com itens quando ?full=1
-// ---------------------------------------------------------------------------
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -23,13 +19,12 @@ export async function GET(
   const full = request.nextUrl.searchParams.get("full") === "1";
 
   if (!id) {
-    return NextResponse.json({ error: "ID do pedido não informado." }, { status: 400 });
+    return NextResponse.json({ error: "ID do pedido nao informado." }, { status: 400 });
   }
 
   const admin = createAdminClient();
 
   if (full) {
-    // Retorna pedido completo para o painel admin
     const { data: order, error } = await admin
       .from("orders")
       .select(`
@@ -50,14 +45,16 @@ export async function GET(
       .single();
 
     if (error || !order) {
-      console.error(`[Orders GET full] Pedido não encontrado: ${id}`, error?.message);
-      return NextResponse.json({ error: "Pedido não encontrado." }, { status: 404, headers: NO_CACHE });
+      console.error(`[Orders GET full] Pedido nao encontrado: ${id}`, error?.message);
+      return NextResponse.json(
+        { error: "Pedido nao encontrado." },
+        { status: 404, headers: NO_CACHE }
+      );
     }
 
     return NextResponse.json(order, { headers: NO_CACHE });
   }
 
-  // Modo polling mínimo (retrocompatível com /checkout/pix)
   const { data: order, error } = await admin
     .from("orders")
     .select("id, order_number, status, pagbank_status, total, shipping_deadline, payment_method")
@@ -65,11 +62,12 @@ export async function GET(
     .single();
 
   if (error || !order) {
-    console.error(`[Orders GET] Pedido não encontrado: ${id}`, error?.message);
-    return NextResponse.json({ error: "Pedido não encontrado." }, { status: 404, headers: NO_CACHE });
+    console.error(`[Orders GET] Pedido nao encontrado: ${id}`, error?.message);
+    return NextResponse.json(
+      { error: "Pedido nao encontrado." },
+      { status: 404, headers: NO_CACHE }
+    );
   }
-
-  console.log(`[Orders GET] id=${id} status=${order.status} mpStatus=${order.pagbank_status}`);
 
   return NextResponse.json(
     {
@@ -87,11 +85,6 @@ export async function GET(
   );
 }
 
-// ---------------------------------------------------------------------------
-// PUT /api/orders/[id]
-// Atualiza campos editáveis: status, tracking_code, nf_number, nf_key,
-// nf_status, notes
-// ---------------------------------------------------------------------------
 export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -99,17 +92,16 @@ export async function PUT(
   const { id } = params;
 
   if (!id) {
-    return NextResponse.json({ error: "ID do pedido não informado." }, { status: 400 });
+    return NextResponse.json({ error: "ID do pedido nao informado." }, { status: 400 });
   }
 
   let body: Record<string, unknown>;
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "JSON inválido." }, { status: 400 });
+    return NextResponse.json({ error: "JSON invalido." }, { status: 400 });
   }
 
-  // Whitelist de campos editáveis via admin
   const allowed = ["status", "tracking_code", "nf_number", "nf_key", "nf_status", "notes"];
   const patch: Record<string, unknown> = {};
   for (const key of allowed) {
@@ -117,7 +109,10 @@ export async function PUT(
   }
 
   if (Object.keys(patch).length === 0) {
-    return NextResponse.json({ error: "Nenhum campo válido para atualizar." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Nenhum campo valido para atualizar." },
+      { status: 400 }
+    );
   }
 
   const admin = createAdminClient();
@@ -126,13 +121,16 @@ export async function PUT(
 
   const { data: previousOrder, error: previousOrderError } = await admin
     .from("orders")
-    .select("tracking_code, guest_name, guest_email, order_number, shipping_service")
+    .select("status, tracking_code, guest_name, guest_email, order_number, shipping_service")
     .eq("id", id)
     .single();
 
   if (previousOrderError || !previousOrder) {
-    console.error(`[Orders PUT] Pedido nÃ£o encontrado para atualizar ${id}:`, previousOrderError?.message);
-    return NextResponse.json({ error: "Pedido nÃ£o encontrado." }, { status: 404 });
+    console.error(
+      `[Orders PUT] Pedido nao encontrado para atualizar ${id}:`,
+      previousOrderError?.message
+    );
+    return NextResponse.json({ error: "Pedido nao encontrado." }, { status: 404 });
   }
 
   const previousTrackingCode = previousOrder.tracking_code?.trim() ?? "";
@@ -148,7 +146,18 @@ export async function PUT(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Enviar e-mail de envio quando tracking_code é definido pela primeira vez
+  if (previousOrder.status !== "paid" && data.status === "paid") {
+    await admin
+      .from("inventory_log")
+      .update({
+        type: "saida",
+        sales_channel: "online",
+        reason: `Venda online pedido #${data.order_number}`,
+      })
+      .eq("order_id", id)
+      .eq("type", "reserva");
+  }
+
   const shouldSendTrackingEmail =
     requestedTrackingCode.length > 0 &&
     requestedTrackingCode !== previousTrackingCode &&
@@ -164,10 +173,9 @@ export async function PUT(
         carrier: previousOrder.shipping_service ?? undefined,
       });
     } catch (emailErr) {
-      console.error(`[Orders PUT] Falha ao enviar e-mail de envio:`, emailErr);
+      console.error("[Orders PUT] Falha ao enviar e-mail de envio:", emailErr);
     }
   }
 
-  console.log(`[Orders PUT] id=${id} patch=${JSON.stringify(patch)}`);
   return NextResponse.json(data, { headers: NO_CACHE });
 }
