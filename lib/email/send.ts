@@ -20,15 +20,17 @@ const REPLY_TO = process.env.EMAIL_REPLY_TO ?? undefined;
 async function sendHtml(payload: {
   to: string;
   subject: string;
+  bcc?: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   component: React.ReactElement<any>;
 }) {
   const html = await render(payload.component);
   const resend = getResend();
-  console.log("[email] Enviando para:", payload.to, "| assunto:", payload.subject);
+  console.log("[email] Enviando para:", payload.to, "| assunto:", payload.subject, payload.bcc ? `| bcc: ${payload.bcc}` : "");
   const { data, error } = await resend.emails.send({
     from: FROM,
     to: payload.to,
+    bcc: payload.bcc,
     replyTo: REPLY_TO,
     subject: payload.subject,
     html,
@@ -97,6 +99,7 @@ export interface LowStockItem {
 export async function sendOrderCreatedEmail(params: SendOrderCreatedParams) {
   await sendHtml({
     to: params.to,
+    bcc: ADMIN,
     subject: `Pedido #${params.orderNumber} confirmado — Kary Curadoria`,
     component: createElement(OrderCreatedEmail, params),
   });
@@ -105,6 +108,7 @@ export async function sendOrderCreatedEmail(params: SendOrderCreatedParams) {
 export async function sendPaymentConfirmedEmail(params: SendPaymentConfirmedParams) {
   await sendHtml({
     to: params.to,
+    bcc: ADMIN,
     subject: `Pagamento aprovado — Pedido #${params.orderNumber} | Kary Curadoria`,
     component: createElement(PaymentConfirmedEmail, params),
   });
@@ -113,6 +117,7 @@ export async function sendPaymentConfirmedEmail(params: SendPaymentConfirmedPara
 export async function sendOrderShippedEmail(params: SendOrderShippedParams) {
   await sendHtml({
     to: params.to,
+    bcc: ADMIN,
     subject: `Pedido #${params.orderNumber} saiu para entrega — Kary Curadoria`,
     component: createElement(OrderShippedEmail, params),
   });
@@ -121,6 +126,7 @@ export async function sendOrderShippedEmail(params: SendOrderShippedParams) {
 export async function sendOrderCancelledEmail(params: SendOrderCancelledParams) {
   await sendHtml({
     to: params.to,
+    bcc: ADMIN,
     subject: `Pedido #${params.orderNumber} cancelado`,
     component: createElement(OrderCancelledEmail, params),
   });
