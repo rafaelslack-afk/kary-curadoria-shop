@@ -1,14 +1,72 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ShoppingBag, Check, Zap } from "lucide-react";
+import { ChevronLeft, ShoppingBag, Check, Zap, ZoomIn } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { useCartStore } from "@/lib/store/cart";
 import { buildWhatsAppUrl } from "@/lib/site";
 import type { Product, ProductVariant, Category } from "@/types/database";
+
+// ── Componente de imagem com zoom/pan ────────────────────────────────────────
+
+function ZoomableImage({ src, alt }: { src: string; alt: string }) {
+  const [transform, setTransform] = useState("scale(1)");
+  const [isZoomed, setIsZoomed] = useState(false);
+  const [transition, setTransition] = useState("transform 0.3s ease-out");
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleMouseEnter = useCallback(() => {
+    setTransition("transform 0.15s ease-out");
+    setIsZoomed(true);
+  }, []);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
+    // translate: mover imagem para revelar a área sob o cursor
+    const tx = (50 - x) * 0.7; // ×0.7 suaviza o deslocamento
+    const ty = (50 - y) * 0.7;
+    setTransform(`scale(2.2) translate(${tx}%, ${ty}%)`);
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    setTransition("transform 0.35s ease-out");
+    setTransform("scale(1)");
+    setIsZoomed(false);
+  }, []);
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative w-full h-full overflow-hidden"
+      style={{ cursor: isZoomed ? "crosshair" : "zoom-in" }}
+      onMouseEnter={handleMouseEnter}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+    >
+      <Image
+        src={src}
+        alt={alt}
+        fill
+        sizes="(max-width: 768px) 100vw, 50vw"
+        className="object-cover will-change-transform"
+        style={{ transform, transition }}
+        priority
+      />
+      {/* Indicador — só desktop (pointer: fine) */}
+      {!isZoomed && (
+        <div className="absolute bottom-3 right-3 hidden md:flex items-center gap-1.5 bg-black/40 text-white text-[10px] tracking-wide px-2.5 py-1.5 rounded-full pointer-events-none select-none backdrop-blur-sm">
+          <ZoomIn size={11} />
+          Passe o mouse para ampliar
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface Props {
   product: Product & { categories: Category | null };
@@ -150,7 +208,7 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
         <div className="space-y-3">
           <div className="relative w-full aspect-[3/4] bg-kc-cream overflow-hidden">
             {images.length > 0 ? (
-              <Image src={images[selectedImage]} alt={product.name} fill sizes="(max-width: 768px) 100vw, 50vw" className="object-cover" priority />
+              <ZoomableImage src={images[selectedImage]} alt={product.name} />
             ) : (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 opacity-25">
                 <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
@@ -160,7 +218,8 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
                 <span className="text-[9px] tracking-[0.2em] text-kc-muted">FOTO</span>
               </div>
             )}
-            <div className="absolute top-3 left-3 flex flex-col gap-1.5">
+            {/* Badges — ficam acima do zoom */}
+            <div className="absolute top-3 left-3 flex flex-col gap-1.5 z-10 pointer-events-none">
               {hasDiscount && (
                 <span className="bg-kc-dark text-kc-cream text-[9px] tracking-[0.1em] px-2.5 py-1">{discountPct}% OFF</span>
               )}
