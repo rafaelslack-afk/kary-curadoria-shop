@@ -177,6 +177,46 @@ function HomeCategories({ homeSections }: { homeSections: HomeSection[] }) {
   );
 }
 
+const localBusinessJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "ClothingStore",
+  name: "Kary Curadoria",
+  image: "https://karycuradoria.com.br/og-image.jpg",
+  url: "https://karycuradoria.com.br",
+  telephone: "+55-11-94022-4088",
+  email: "contato@karycuradoria.com.br",
+  address: {
+    "@type": "PostalAddress",
+    streetAddress: "Rua Min. Firmino Whitaker, 49/55, Box 142",
+    addressLocality: "São Paulo",
+    addressRegion: "SP",
+    postalCode: "03014-000",
+    addressCountry: "BR",
+  },
+  geo: {
+    "@type": "GeoCoordinates",
+    latitude: -23.5435,
+    longitude: -46.6291,
+  },
+  openingHoursSpecification: [
+    {
+      "@type": "OpeningHoursSpecification",
+      dayOfWeek: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+      opens: "09:00",
+      closes: "18:00",
+    },
+    {
+      "@type": "OpeningHoursSpecification",
+      dayOfWeek: "Saturday",
+      opens: "09:00",
+      closes: "17:00",
+    },
+  ],
+  priceRange: "$$",
+  currenciesAccepted: "BRL",
+  paymentAccepted: "Cash, Credit Card, PIX",
+};
+
 export default async function Home() {
   if (isStorePrelaunchActive()) {
     return <PrelaunchHome launchLabel={formatLaunchDatePtBr()} />;
@@ -190,6 +230,10 @@ export default async function Home() {
 
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(localBusinessJsonLd) }}
+      />
       <BannerCarousel banners={banners} />
 
       <section id="nossa-loja" className="max-w-7xl mx-auto px-6 py-10 scroll-mt-24">

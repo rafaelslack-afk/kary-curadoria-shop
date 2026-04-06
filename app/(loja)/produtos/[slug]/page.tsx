@@ -36,9 +36,25 @@ async function getColors(): Promise<Record<string, string>> {
 export async function generateMetadata({ params }: Props) {
   const product = await getProduct(params.slug);
   if (!product) return { title: "Produto não encontrado" };
+  const description =
+    product.description?.substring(0, 155) ??
+    `${product.name} — Kary Curadoria. Moda feminina com elegância e curadoria exclusiva.`;
   return {
     title: product.name,
-    description: product.description ?? `Compre ${product.name} na Kary Curadoria.`,
+    description,
+    openGraph: {
+      title: product.name,
+      description,
+      images: product.images?.[0]
+        ? [{ url: product.images[0], alt: product.name }]
+        : [{ url: "/og-image.jpg", width: 1200, height: 630, alt: "Kary Curadoria" }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: product.name,
+      description,
+      images: product.images?.[0] ? [product.images[0]] : ["/og-image.jpg"],
+    },
   };
 }
 
@@ -63,11 +79,45 @@ export default async function ProductPage({ params }: Props) {
       return ai - bi;
     });
 
+  const totalStock = variants.reduce((sum, v) => sum + v.stock_qty, 0);
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: product.name,
+    description: product.description ?? undefined,
+    image: product.images ?? [],
+    brand: {
+      "@type": "Brand",
+      name: "Kary Curadoria",
+    },
+    offers: {
+      "@type": "Offer",
+      url: `https://karycuradoria.com.br/produtos/${product.slug}`,
+      priceCurrency: "BRL",
+      price: product.price,
+      availability:
+        totalStock > 0
+          ? "https://schema.org/InStock"
+          : "https://schema.org/OutOfStock",
+      seller: {
+        "@type": "Organization",
+        name: "Kary Curadoria",
+      },
+    },
+  };
+
   return (
-    <ProductClient
-      product={product as Product & { categories: Category | null }}
-      variants={variants}
-      colorHexMap={colorHexMap}
-    />
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <ProductClient
+        product={product as Product & { categories: Category | null }}
+        variants={variants}
+        colorHexMap={colorHexMap}
+      />
+    </>
   );
 }

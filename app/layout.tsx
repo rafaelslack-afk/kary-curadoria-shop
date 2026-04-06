@@ -3,21 +3,24 @@ import "./globals.css";
 import GoogleAnalytics from "@/components/analytics/google-analytics";
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://karycuradoria.com.br"),
   title: {
-    default: "Kary Curadoria | Moda Feminina com Elegância",
+    default: "Kary Curadoria — Moda Feminina no Brás",
     template: "%s | Kary Curadoria",
   },
   description:
-    "Moda feminina com elegância e curadoria exclusiva no coração do Brás. Conjuntos de linho, alfaiataria casual e peças atemporais.",
+    "Moda feminina com elegância e curadoria exclusiva. Conjuntos de linho, alfaiataria e muito mais. Loja física no Brás, SP e loja online.",
   keywords: [
     "moda feminina",
     "conjuntos de linho",
-    "alfaiataria casual",
-    "Brás",
-    "São Paulo",
+    "alfaiataria feminina",
+    "loja moda Brás",
     "Kary Curadoria",
-    "loja online",
+    "moda São Paulo",
+    "loja online moda feminina",
   ],
+  authors: [{ name: "Kary Curadoria" }],
+  creator: "Kary Curadoria",
   icons: {
     icon: [
       { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
@@ -27,14 +30,36 @@ export const metadata: Metadata = {
     other: [{ rel: "icon", url: "/icon-512.png", sizes: "512x512" }],
   },
   openGraph: {
-    title: "Kary Curadoria | Moda Feminina com Elegância",
-    description:
-      "Moda feminina com elegância e curadoria exclusiva no coração do Brás. Conjuntos de linho, alfaiataria casual e peças atemporais.",
+    type: "website",
+    locale: "pt_BR",
     url: "https://karycuradoria.com.br",
     siteName: "Kary Curadoria",
-    images: [{ url: "/icon-512.png", width: 512, height: 512 }],
-    locale: "pt_BR",
-    type: "website",
+    title: "Kary Curadoria — Moda Feminina no Brás",
+    description:
+      "Moda feminina com elegância e curadoria exclusiva no coração do Brás.",
+    images: [
+      {
+        url: "/og-image.jpg",
+        width: 1200,
+        height: 630,
+        alt: "Kary Curadoria — Moda Feminina",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Kary Curadoria — Moda Feminina no Brás",
+    description: "Moda feminina com elegância e curadoria exclusiva.",
+    images: ["/og-image.jpg"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+    },
   },
 };
 
