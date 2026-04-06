@@ -133,8 +133,21 @@ export async function purchaseMEShipment(cartItemId: string) {
   })
 
   if (!res.ok) {
-    const err = await res.json()
-    throw new Error(`ME Purchase error: ${JSON.stringify(err)}`)
+    const errorData = await res.json()
+    const errorStr = JSON.stringify(errorData).toLowerCase()
+    if (
+      errorStr.includes('saldo') ||
+      errorStr.includes('balance') ||
+      errorStr.includes('insufficient') ||
+      res.status === 422
+    ) {
+      throw new Error(
+        'Saldo insuficiente na carteira do Melhor Envio. ' +
+        'Acesse melhorenvio.com.br → Melhor Carteira → ' +
+        'Adicionar saldo e tente novamente.'
+      )
+    }
+    throw new Error(`ME Purchase error: ${JSON.stringify(errorData)}`)
   }
 
   return res.json()
