@@ -12,6 +12,7 @@ import {
   StickyNote,
   Loader2,
   Check,
+  Printer,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, cn } from "@/lib/utils";
@@ -140,6 +141,11 @@ export default function PedidoDetailPage() {
   const [nfStatus, setNfStatus] = useState<NfStatus | "">("");
   const [notes, setNotes] = useState("");
 
+  // Geração de etiqueta
+  const [generatingLabel, setGeneratingLabel] = useState(false);
+  const [labelUrl, setLabelUrl] = useState<string | null>(null);
+  const [labelError, setLabelError] = useState<string | null>(null);
+
   useEffect(() => {
     if (id) fetchOrder();
   }, [id]);
@@ -182,6 +188,27 @@ export default function PedidoDetailPage() {
       alert("Erro de rede. Tente novamente.");
     } finally {
       setSaving(null);
+    }
+  }
+
+  async function handleGenerateLabel() {
+    setGeneratingLabel(true);
+    setLabelError(null);
+    try {
+      const res = await fetch(`/api/admin/orders/${id}/label`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Erro ao gerar etiqueta");
+      setLabelUrl(data.labelUrl ?? null);
+      if (data.trackingCode) {
+        setTrackingCode(data.trackingCode);
+        // Recarrega o pedido para refletir status "shipped"
+        fetchOrder();
+      }
+      alert(data.message);
+    } catch (err: unknown) {
+      setLabelError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setGeneratingLabel(false);
     }
   }
 
@@ -445,6 +472,51 @@ export default function PedidoDetailPage() {
               >
                 Rastrear nos Correios →
               </a>
+            )}
+
+            {/* Gerar Etiqueta Melhor Envio */}
+            {(order.status === "paid" || order.status === "preparing") && (
+              <div className="mt-4 pt-4 border-t border-gray-100 space-y-2">
+                <p className="text-[11px] text-gray-400 uppercase tracking-wider">
+                  Melhor Envio
+                </p>
+                <Button
+                  size="sm"
+                  disabled={generatingLabel}
+                  onClick={handleGenerateLabel}
+                  className="w-full bg-[#A0622A] hover:bg-[#8a5224] text-white disabled:opacity-60"
+                >
+                  {generatingLabel ? (
+                    <>
+                      <Loader2 size={13} className="animate-spin mr-1.5" />
+                      Gerando etiqueta...
+                    </>
+                  ) : (
+                    <>
+                      <Printer size={13} className="mr-1.5" />
+                      Gerar Etiqueta de Envio
+                    </>
+                  )}
+                </Button>
+
+                {labelUrl && (
+                  <a
+                    href={labelUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-xs text-[#A0622A] hover:underline"
+                  >
+                    <Printer size={12} />
+                    Imprimir Etiqueta
+                  </a>
+                )}
+
+                {labelError && (
+                  <p className="text-xs text-red-500 leading-snug">
+                    Erro: {labelError}
+                  </p>
+                )}
+              </div>
             )}
           </SectionCard>
         </div>
