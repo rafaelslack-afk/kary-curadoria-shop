@@ -7,6 +7,7 @@ import { Check, ChevronRight, Loader2 } from "lucide-react";
 import { useCartStore } from "@/lib/store/cart";
 import { calculateCouponDiscount } from "@/lib/coupons";
 import { formatCurrency } from "@/lib/utils";
+import { trackEvent } from "@/lib/analytics";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -203,6 +204,22 @@ export default function CheckoutPage() {
   useEffect(() => {
     if (items.length === 0 && !redirecting) router.replace("/carrinho");
   }, [items, router, redirecting]);
+
+  // ── GA4: begin_checkout ───────────────────────────────────────────────────
+  useEffect(() => {
+    if (items.length === 0) return;
+    trackEvent('begin_checkout', {
+      currency: 'BRL',
+      value: subtotal(),
+      items: items.map((item) => ({
+        item_id: item.sku,
+        item_name: item.productName,
+        price: item.price,
+        quantity: item.quantity,
+      })),
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // MP.js é carregado via <Script> no JSX com onLoad → setMpReady(true)
   // (ver elemento <Script> no return abaixo)

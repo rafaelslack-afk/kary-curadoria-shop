@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Check, Package, ExternalLink } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { trackEvent } from "@/lib/analytics";
 
 interface OrderData {
   orderId: string;
@@ -34,13 +35,28 @@ export default function SucessoPage() {
       setBoletoLine(data.boletoLine ?? "");
       setBoletoPdf(data.boletoPdf ?? "");
       sessionStorage.removeItem("kvo-boleto");
+      if (data.total) {
+        trackEvent('purchase', {
+          transaction_id: String(data.orderNumber),
+          value: data.total,
+          currency: 'BRL',
+        });
+      }
       return;
     }
 
     const orderRaw = sessionStorage.getItem("kvo-order");
     if (orderRaw) {
-      setOrder(JSON.parse(orderRaw) as OrderData);
+      const data = JSON.parse(orderRaw) as OrderData;
+      setOrder(data);
       sessionStorage.removeItem("kvo-order");
+      if (data.total) {
+        trackEvent('purchase', {
+          transaction_id: String(data.orderNumber),
+          value: data.total,
+          currency: 'BRL',
+        });
+      }
     }
   }, []);
 

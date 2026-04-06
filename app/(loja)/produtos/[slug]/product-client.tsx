@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef, useCallback } from "react";
+import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -8,6 +8,7 @@ import { ChevronLeft, ShoppingBag, Check, Zap, ZoomIn } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { useCartStore } from "@/lib/store/cart";
 import { buildWhatsAppUrl } from "@/lib/site";
+import { trackEvent } from "@/lib/analytics";
 import type { Product, ProductVariant, Category } from "@/types/database";
 
 // ── Componente de imagem com zoom/pan ────────────────────────────────────────
@@ -83,6 +84,21 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
   const addItem = useCartStore((s) => s.addItem);
   const router = useRouter();
 
+  // ── GA4: view_item ────────────────────────────────────────────────────────
+  useEffect(() => {
+    trackEvent('view_item', {
+      currency: 'BRL',
+      value: product.price,
+      items: [{
+        item_id: product.sku_base ?? product.id,
+        item_name: product.name,
+        item_category: product.categories?.name,
+        price: product.price,
+      }],
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product.id]);
+
   // ── Detecção de modo: único tamanho ou grade cor×tamanho ──────────────────
 
   // Cores únicas disponíveis (variantes com pelo menos 1 em estoque em algum tamanho)
@@ -139,6 +155,18 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
       length_cm: product.length_cm,
       width_cm: product.width_cm,
       height_cm: product.height_cm,
+    });
+    trackEvent('add_to_cart', {
+      currency: 'BRL',
+      value: product.price,
+      items: [{
+        item_id: selectedVariant.sku,
+        item_name: product.name,
+        item_category: product.categories?.name,
+        item_variant: [selectedVariant.color, selectedVariant.size].filter(Boolean).join(' / '),
+        price: product.price,
+        quantity: 1,
+      }],
     });
     setAdded(true);
     setTimeout(() => setAdded(false), 2000);

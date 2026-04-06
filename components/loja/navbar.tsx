@@ -6,6 +6,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useCartStore } from "@/lib/store/cart";
 import { formatCurrency } from "@/lib/utils";
 import { buildWhatsAppUrl, INSTAGRAM_URL } from "@/lib/site";
+import { trackEvent } from "@/lib/analytics";
 import Image from "next/image";
 
 interface SearchResult {
@@ -65,6 +66,7 @@ export function Navbar({ navLinks }: NavbarProps) {
         const res = await fetch(`/api/products/search?q=${encodeURIComponent(value.trim())}`);
         const data = await res.json();
         setResults(Array.isArray(data) ? data : []);
+        trackEvent('search', { search_term: value.trim() });
       } catch {
         setResults([]);
       } finally {
