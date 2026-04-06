@@ -18,24 +18,36 @@ export async function POST(
   const admin = createAdminClient()
 
   try {
-    // Buscar pedido completo com itens e variantes
+    console.log('[label] Buscando pedido id:', params.id)
+
+    // Buscar pedido + itens (sem joins profundos para evitar erro de FK)
     const { data: order, error } = await admin
       .from('orders')
-      .select(`
-        *,
-        order_items (
-          *,
-          product_variants (
-            sku, size, color, weight_g,
-            products (name, weight_g, length_cm, width_cm, height_cm, price)
-          )
-        )
-      `)
+      .select('*, order_items(*)')
       .eq('id', params.id)
       .single()
 
+    console.log('[label] Order number:', order?.order_number, '| Error:', error?.message ?? null)
+
     if (error || !order) {
-      return NextResponse.json({ error: 'Pedido não encontrado' }, { status: 404 })
+      return NextResponse.json(
+        { error: `Pedido não encontrado (${error?.message ?? 'null'})` },
+        { status: 404 }
+      )
+    }
+
+    // Buscar dados de dimensões dos produtos via variant_id
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const variantIds = (order.order_items as any[]).map((i: any) => i.variant_id).filter(Boolean)
+    const { data: variants } = await admin
+      .from('product_variants')
+      .select('id, sku, size, color, weight_g, product_id, products(name, weight_g, length_cm, width_cm, height_cm, price)')
+      .in('id', variantIds)
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const variantMap: Record<string, any> = {}
+    for (const v of variants ?? []) {
+      variantMap[v.id] = v
     }
 
     if (order.status !== 'paid' && order.status !== 'preparing') {
@@ -51,15 +63,16 @@ export async function POST(
     const customerEmail = order.guest_email ?? ''
     const customerDoc = (order.guest_cpf ?? '').replace(/\D/g, '')
 
-    // Montar produtos para o ME
+    // Montar produtos para o ME usando variantMap
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const products = (order.order_items as any[]).map((item) => {
-      const variant = item.product_variants
-      const product = variant?.products
+      const variant = variantMap[item.variant_id]
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const product = (variant?.products as any)
       return {
         name: item.product_name as string,
         quantity: item.quantity as number,
-        weight: ((product?.weight_g ?? 500) as number) / 1000, // gramas → kg
+        weight: ((product?.weight_g ?? variant?.weight_g ?? 500) as number) / 1000,
         width: (product?.width_cm ?? 20) as number,
         height: (product?.height_cm ?? 5) as number,
         length: (product?.length_cm ?? 30) as number,
