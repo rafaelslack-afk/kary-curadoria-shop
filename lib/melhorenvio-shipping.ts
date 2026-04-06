@@ -49,6 +49,8 @@ export async function addToMECart(orderData: MEOrderData) {
   // PAC = 1, SEDEX = 2
   const serviceId = orderData.service.toUpperCase().includes('SEDEX') ? 2 : 1
 
+  const cnpj = (process.env.MELHORENVIO_CNPJ ?? '').replace(/\D/g, '')
+
   const payload = {
     service: serviceId,
     agency: null,
@@ -56,8 +58,9 @@ export async function addToMECart(orderData: MEOrderData) {
       name: 'Kary Curadoria',
       phone: '11940224088',
       email: 'contato@karycuradoria.com.br',
-      document: process.env.MELHORENVIO_CNPJ ?? '',
-      company_document: process.env.MELHORENVIO_CNPJ ?? '',
+      // Para PJ: document fica vazio, company_document recebe o CNPJ
+      document: '',
+      company_document: cnpj,
       state_register: '',
       address: 'Rua Min. Firmino Whitaker',
       complement: 'Box 142',
