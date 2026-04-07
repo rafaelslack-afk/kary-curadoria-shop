@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { CatalogClient } from "./catalog-client";
 import type { Category, Product } from "@/types/database";
 
+export const dynamic = "force-dynamic";
+
 async function getProductsAndCategories() {
   try {
     const supabase = createClient();

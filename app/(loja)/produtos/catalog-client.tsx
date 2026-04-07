@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { Search, SlidersHorizontal, X } from "lucide-react";
 import { ProductCard } from "@/components/loja/product-card";
@@ -17,12 +17,18 @@ interface Props {
 
 export function CatalogClient({ products, categories }: Props) {
   const searchParams = useSearchParams();
-  const initialCategory = searchParams.get("categoria") ?? "";
+  const categoryParam = searchParams.get("categoria") ?? "";
 
   const [search, setSearch] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState(initialCategory);
+  const [selectedCategory, setSelectedCategory] = useState(categoryParam);
   const [sort, setSort] = useState<SortOption>("novidades");
   const [filtersOpen, setFiltersOpen] = useState(false);
+
+  // Sincroniza o estado com a URL quando o parâmetro ?categoria= muda
+  // (ex: clique no menu de navegação enquanto já está em /produtos)
+  useEffect(() => {
+    setSelectedCategory(categoryParam);
+  }, [categoryParam]);
 
   const filtered = useMemo(() => {
     let result = [...products];
