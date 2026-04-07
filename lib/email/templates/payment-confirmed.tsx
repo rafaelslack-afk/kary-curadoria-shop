@@ -97,10 +97,13 @@ export function PaymentConfirmedEmail({ orderNumber, customerName, items, total 
                       <td style={{ backgroundColor: WHITE, padding: "40px 40px 36px", borderRadius: "0 0 10px 10px" }}>
 
                         <p style={{ margin: "0 0 8px", fontFamily: "Georgia, serif", fontSize: 18, color: BRAND }}>
-                          Boa notícia, {firstName}!
+                          Boa notícia, {firstName}! 🎉
+                        </p>
+                        <p style={{ margin: "0 0 8px", fontFamily: "Arial, sans-serif", fontSize: 14, lineHeight: 1.7, color: MUTED }}>
+                          Seu pagamento do pedido <strong style={{ color: BRAND }}>#{orderNumber}</strong> foi confirmado com sucesso!
                         </p>
                         <p style={{ margin: "0 0 28px", fontFamily: "Arial, sans-serif", fontSize: 14, lineHeight: 1.7, color: MUTED }}>
-                          Seu pagamento do pedido <strong style={{ color: BRAND }}>#{orderNumber}</strong> foi aprovado. Estamos preparando sua encomenda com todo o cuidado que ela merece e você receberá o código de rastreamento assim que for despachada.
+                          Estamos separando seu pedido com carinho 💛 e você receberá o código de rastreamento assim que for despachado.
                         </p>
 
                         {/* Timeline visual */}
@@ -208,8 +211,8 @@ export function PaymentConfirmedEmail({ orderNumber, customerName, items, total 
                           <tbody>
                             <tr>
                               <td align="center">
-                                <a href={trackUrl} style={{ display: "inline-block", backgroundColor: BRAND, color: CREAM, textDecoration: "none", fontFamily: "Arial, sans-serif", fontSize: 12, letterSpacing: 2, textTransform: "uppercase", padding: "15px 40px", borderRadius: 4 }}>
-                                  Acompanhar Pedido
+                                <a href={trackUrl} style={{ display: "inline-block", backgroundColor: ACCENT, color: WHITE, textDecoration: "none", fontFamily: "Arial, sans-serif", fontSize: 12, letterSpacing: 2, textTransform: "uppercase", padding: "15px 40px", borderRadius: 4 }}>
+                                  Acompanhar Meu Pedido
                                 </a>
                               </td>
                             </tr>

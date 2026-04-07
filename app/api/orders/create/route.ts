@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getMPPayment, MERCADOPAGO_ENV, type MPPaymentResponse } from "@/lib/mercadopago";
-import { sendOrderCreatedEmail } from "@/lib/email/send";
+import { sendOrderCreatedEmail, sendPaymentConfirmedEmail } from "@/lib/email/send";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -465,7 +465,32 @@ export async function POST(request: NextRequest) {
       console.error("[email] Stack:", stack);
     }
 
-    // ── 9. Montar resposta por método de pagamento ───────────────────────────
+    // ── 9. E-mail de pagamento confirmado para cartão aprovado ──────────────
+    // PIX e boleto disparam via webhook quando o pagamento é confirmado.
+    // Cartão aprovado é síncrono — o webhook chega depois mas vê wasAlreadyPaid
+    // e pula. Por isso enviamos o e-mail de confirmação aqui.
+    if (payment.method === "credit_card" && mpStatus === "approved") {
+      try {
+        const emailItems = items.map((i) => ({
+          name: i.productName,
+          variant: i.size,
+          quantity: i.quantity,
+          unit_price: i.price,
+        }));
+        await sendPaymentConfirmedEmail({
+          to: customer.email,
+          orderNumber: String(order.order_number),
+          customerName: customer.nome,
+          items: emailItems,
+          total,
+        });
+        console.log("[email] Pagamento confirmado enviado para:", customer.email);
+      } catch (emailErr) {
+        console.error("[email] ERRO ao enviar pagamento confirmado:", emailErr);
+      }
+    }
+
+    // ── 10. Montar resposta por método de pagamento ──────────────────────────
     const base = { orderId: order.id, orderNumber: order.order_number };
 
     if (payment.method === "pix") {
