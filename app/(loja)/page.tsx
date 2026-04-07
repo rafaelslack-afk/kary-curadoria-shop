@@ -127,7 +127,7 @@ async function getFeaturedProducts() {
       .eq("active", true)
       .eq("featured", true)
       .order("created_at", { ascending: false })
-      .limit(4);
+      .limit(8);
 
     return (data ?? []).map((p) => ({
       ...p,
@@ -294,7 +294,7 @@ export default async function Home() {
         </h2>
 
         {featured.length > 0 ? (
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 md:gap-6">
             {featured.map((product) => {
               const isNew =
                 Date.now() - new Date(product.created_at).getTime() < THIRTY_DAYS;
