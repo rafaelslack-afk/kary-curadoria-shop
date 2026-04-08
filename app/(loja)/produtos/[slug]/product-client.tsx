@@ -537,6 +537,82 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
             )}
           </div>
 
+          {/* ── Selos de Segurança e Confiança ── */}
+          <div style={{
+            marginTop: 16,
+            padding: '14px 16px',
+            background: '#F5F1EA',
+            borderRadius: 8,
+            border: '1px solid #EDE8DC'
+          }}>
+            <p style={{
+              fontSize: 11,
+              fontWeight: 600,
+              letterSpacing: '0.12em',
+              color: '#5C3317',
+              margin: '0 0 12px 0',
+              textTransform: 'uppercase'
+            }}>
+              🔒 Compra 100% Segura
+            </p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {/* Mercado Pago */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: 'white', borderRadius: 6, border: '1px solid #EDE8DC' }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="#009EE3">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                </svg>
+                <div>
+                  <p style={{ fontSize: 10, fontWeight: 700, color: '#009EE3', margin: 0 }}>Mercado Pago</p>
+                  <p style={{ fontSize: 9, color: '#B89070', margin: 0 }}>Pagamento protegido</p>
+                </div>
+              </div>
+
+              {/* SSL */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: 'white', borderRadius: 6, border: '1px solid #EDE8DC' }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="#22c55e">
+                  <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
+                </svg>
+                <div>
+                  <p style={{ fontSize: 10, fontWeight: 700, color: '#22c55e', margin: 0 }}>SSL Seguro</p>
+                  <p style={{ fontSize: 9, color: '#B89070', margin: 0 }}>Dados criptografados</p>
+                </div>
+              </div>
+
+              {/* Correios */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: 'white', borderRadius: 6, border: '1px solid #EDE8DC' }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="#A0622A">
+                  <path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9l1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
+                </svg>
+                <div>
+                  <p style={{ fontSize: 10, fontWeight: 700, color: '#A0622A', margin: 0 }}>Correios</p>
+                  <p style={{ fontSize: 9, color: '#B89070', margin: 0 }}>Entrega rastreada</p>
+                </div>
+              </div>
+
+              {/* Troca garantida */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: 'white', borderRadius: 6, border: '1px solid #EDE8DC' }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="#A0622A">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                </svg>
+                <div>
+                  <p style={{ fontSize: 10, fontWeight: 700, color: '#A0622A', margin: 0 }}>Troca Garantida</p>
+                  <p style={{ fontSize: 9, color: '#B89070', margin: 0 }}>7 dias para trocar</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Métodos de pagamento */}
+            <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #EDE8DC', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 10, color: '#B89070' }}>Aceito:</span>
+              {['PIX', 'Visa', 'Master', 'Elo', 'Amex', 'Boleto'].map((m) => (
+                <span key={m} style={{ fontSize: 9, fontWeight: 700, color: '#5C3317', background: 'white', border: '1px solid #EDE8DC', borderRadius: 3, padding: '2px 6px', letterSpacing: '0.05em' }}>
+                  {m}
+                </span>
+              ))}
+            </div>
+          </div>
+
           {/* WhatsApp CTA */}
           <a
             href={buildWhatsAppUrl(`Olá! Tenho interesse no produto: ${product.name}`)}
