@@ -4,7 +4,7 @@ import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ShoppingBag, Check, Zap, ZoomIn } from "lucide-react";
+import { ChevronLeft, ShoppingBag, Check, Zap, ZoomIn, Truck } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { useCartStore } from "@/lib/store/cart";
 import { buildWhatsAppUrl } from "@/lib/site";
@@ -208,6 +208,66 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
 
   const canAddToCart =
     !allOutOfStock && selectedVariant !== null && !outOfStock;
+
+  // ── Simulador de frete ───────────────────────────────────────────────────
+  const [cep, setCep] = useState("");
+  const [freteOpcoes, setFreteOpcoes] = useState<{ id: number; name: string; preco: number; prazo: number }[]>([]);
+  const [freteLoading, setFreteLoading] = useState(false);
+  const [freteErro, setFreteErro] = useState("");
+  const [cepInfo, setCepInfo] = useState<{ city: string; state: string } | null>(null);
+
+  async function calcularFrete(cepValor?: string) {
+    const cepLimpo = (cepValor ?? cep).replace(/\D/g, "");
+    if (cepLimpo.length !== 8) {
+      setFreteErro("CEP inválido");
+      return;
+    }
+    setFreteLoading(true);
+    setFreteErro("");
+    setFreteOpcoes([]);
+    setCepInfo(null);
+    try {
+      const viaCep = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`);
+      const cepData = await viaCep.json();
+      if (cepData.erro) {
+        setFreteErro("CEP não encontrado");
+        return;
+      }
+      setCepInfo({ city: cepData.localidade, state: cepData.uf });
+
+      const res = await fetch("/api/shipping/melhorenvio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cepDestino: cepLimpo,
+          produtos: [{
+            peso_g: product.weight_g ?? 500,
+            comprimento_cm: product.length_cm ?? 30,
+            largura_cm: product.width_cm ?? 20,
+            altura_cm: product.height_cm ?? 5,
+            quantity: 1,
+          }],
+        }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        setFreteErro("Frete indisponível para este CEP");
+        return;
+      }
+      setFreteOpcoes(data.opcoes ?? []);
+    } catch {
+      setFreteErro("Erro ao calcular frete");
+    } finally {
+      setFreteLoading(false);
+    }
+  }
+
+  function handleCepChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const v = e.target.value.replace(/\D/g, "");
+    const masked = v.length > 5 ? v.slice(0, 5) + "-" + v.slice(5, 8) : v;
+    setCep(masked);
+    if (v.length === 8) calcularFrete(v);
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-8">
@@ -424,6 +484,57 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
               <Zap size={14} />
               Comprar Agora
             </button>
+          </div>
+
+          {/* ── Simulador de Frete ── */}
+          <div className="border border-kc-line bg-kc-cream/40 p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Truck size={13} className="text-kc-muted shrink-0" />
+              <p className="text-[10px] tracking-[0.2em] text-kc-muted uppercase">Calcular Frete</p>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={cep}
+                onChange={handleCepChange}
+                placeholder="00000-000"
+                maxLength={9}
+                className="flex-1 border border-kc-line bg-white px-3 py-2 text-xs text-kc-dark placeholder:text-kc-muted focus:outline-none focus:border-kc"
+              />
+              <button
+                onClick={() => calcularFrete()}
+                disabled={freteLoading || cep.replace(/\D/g, "").length !== 8}
+                className="px-4 py-2 bg-kc-dark text-kc-cream text-[10px] tracking-[0.16em] uppercase disabled:opacity-40 hover:bg-kc-dark/80 transition-colors"
+              >
+                {freteLoading ? "…" : "OK"}
+              </button>
+            </div>
+
+            {cepInfo && (
+              <p className="text-[11px] text-kc-muted">{cepInfo.city} — {cepInfo.state}</p>
+            )}
+
+            {freteErro && (
+              <p className="text-[11px] text-red-600">{freteErro}</p>
+            )}
+
+            {freteOpcoes.length > 0 && (
+              <ul className="space-y-2 pt-1">
+                {freteOpcoes.map((op) => (
+                  <li key={op.id} className="flex items-center justify-between bg-white border border-kc-line px-3 py-2.5">
+                    <span className="text-xs text-kc-dark">{op.name}</span>
+                    <div className="text-right">
+                      <span className="text-xs font-medium text-kc">
+                        {op.preco === 0 ? "Grátis" : op.preco.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+                      </span>
+                      <span className="block text-[10px] text-kc-muted">
+                        {op.prazo === 0 ? "Retirada" : `${op.prazo} dia${op.prazo > 1 ? "s" : ""} úteis`}
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           {/* WhatsApp CTA */}
