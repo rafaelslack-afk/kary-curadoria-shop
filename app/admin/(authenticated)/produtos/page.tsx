@@ -15,10 +15,28 @@ export default function ProdutosPage() {
   const [products, setProducts]       = useState<ProductWithCategory[]>([]);
   const [loading, setLoading]         = useState(true);
   const [deleteError, setDeleteError] = useState("");
-  const [toggling, setToggling]       = useState<string | null>(null); // id do produto em loading
+  const [toggling, setToggling]       = useState<string | null>(null);
+
+  const [categorias, setCategorias]   = useState<Category[]>([]);
+
+  const [filtros, setFiltros] = useState({
+    busca: '',
+    categoria: '',
+    status: '',
+    codigo: ''
+  });
+  const [filtrosAplicados, setFiltrosAplicados] = useState({
+    busca: '',
+    categoria: '',
+    status: '',
+    codigo: ''
+  });
 
   useEffect(() => {
     fetchProducts();
+    fetch('/api/categories')
+      .then(r => r.json())
+      .then(data => setCategorias(data ?? []));
   }, []);
 
   async function fetchProducts() {
@@ -74,6 +92,49 @@ export default function ProdutosPage() {
     );
   }
 
+  const temFiltrosAtivos =
+    filtrosAplicados.busca !== '' ||
+    filtrosAplicados.categoria !== '' ||
+    filtrosAplicados.status !== '' ||
+    filtrosAplicados.codigo !== '';
+
+  function aplicarFiltros() {
+    setFiltrosAplicados({ ...filtros });
+  }
+
+  function limparFiltros() {
+    const vazio = { busca: '', categoria: '', status: '', codigo: '' };
+    setFiltros(vazio);
+    setFiltrosAplicados(vazio);
+  }
+
+  const produtosFiltrados = products.filter(produto => {
+    if (filtrosAplicados.busca) {
+      const busca = filtrosAplicados.busca.toLowerCase();
+      const nomeMatch = produto.name?.toLowerCase().includes(busca);
+      const descMatch = produto.description?.toLowerCase().includes(busca);
+      if (!nomeMatch && !descMatch) return false;
+    }
+
+    if (filtrosAplicados.categoria) {
+      if (produto.categories?.slug !== filtrosAplicados.categoria)
+        return false;
+    }
+
+    if (filtrosAplicados.status === 'ativo' && !produto.active)
+      return false;
+    if (filtrosAplicados.status === 'inativo' && produto.active)
+      return false;
+
+    if (filtrosAplicados.codigo) {
+      const cod = filtrosAplicados.codigo.toLowerCase();
+      if (!produto.sku_base?.toLowerCase().includes(cod))
+        return false;
+    }
+
+    return true;
+  });
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -106,6 +167,203 @@ export default function ProdutosPage() {
         </div>
       )}
 
+      {/* Filtros */}
+      <div style={{
+        background: '#F5F1EA',
+        borderRadius: 10,
+        padding: '16px',
+        marginBottom: 20,
+        border: '1px solid #EDE8DC'
+      }}>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+          gap: 10,
+          alignItems: 'end'
+        }}>
+
+          {/* Nome / Descrição */}
+          <div style={{ gridColumn: 'span 2' }}>
+            <label style={{
+              fontSize: 10,
+              fontWeight: 600,
+              letterSpacing: '0.1em',
+              color: '#5C3317',
+              display: 'block',
+              marginBottom: 4
+            }}>
+              NOME / DESCRIÇÃO
+            </label>
+            <input
+              type="text"
+              placeholder="Ex: conjunto linho..."
+              value={filtros.busca}
+              onChange={e => setFiltros(f => ({ ...f, busca: e.target.value }))}
+              onKeyDown={e => e.key === 'Enter' && aplicarFiltros()}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: '1px solid #B89070',
+                borderRadius: 6,
+                fontSize: 13,
+                color: '#5C3317',
+                background: 'white',
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
+
+          {/* Categoria */}
+          <div>
+            <label style={{
+              fontSize: 10,
+              fontWeight: 600,
+              letterSpacing: '0.1em',
+              color: '#5C3317',
+              display: 'block',
+              marginBottom: 4
+            }}>
+              CATEGORIA
+            </label>
+            <select
+              value={filtros.categoria}
+              onChange={e => setFiltros(f => ({ ...f, categoria: e.target.value }))}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: '1px solid #B89070',
+                borderRadius: 6,
+                fontSize: 13,
+                color: '#5C3317',
+                background: 'white',
+                boxSizing: 'border-box'
+              }}
+            >
+              <option value="">Todas</option>
+              {categorias.map(cat => (
+                <option key={cat.id} value={cat.slug}>
+                  {cat.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Status */}
+          <div>
+            <label style={{
+              fontSize: 10,
+              fontWeight: 600,
+              letterSpacing: '0.1em',
+              color: '#5C3317',
+              display: 'block',
+              marginBottom: 4
+            }}>
+              STATUS
+            </label>
+            <select
+              value={filtros.status}
+              onChange={e => setFiltros(f => ({ ...f, status: e.target.value }))}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: '1px solid #B89070',
+                borderRadius: 6,
+                fontSize: 13,
+                color: '#5C3317',
+                background: 'white',
+                boxSizing: 'border-box'
+              }}
+            >
+              <option value="">Todos</option>
+              <option value="ativo">✅ Ativo</option>
+              <option value="inativo">❌ Inativo</option>
+            </select>
+          </div>
+
+          {/* Código / Referência */}
+          <div>
+            <label style={{
+              fontSize: 10,
+              fontWeight: 600,
+              letterSpacing: '0.1em',
+              color: '#5C3317',
+              display: 'block',
+              marginBottom: 4
+            }}>
+              CÓDIGO / REF.
+            </label>
+            <input
+              type="text"
+              placeholder="Ex: FS12, CON-0001"
+              value={filtros.codigo}
+              onChange={e => setFiltros(f => ({ ...f, codigo: e.target.value }))}
+              onKeyDown={e => e.key === 'Enter' && aplicarFiltros()}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: '1px solid #B89070',
+                borderRadius: 6,
+                fontSize: 13,
+                color: '#5C3317',
+                background: 'white',
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
+
+          {/* Botões */}
+          <div style={{ display: 'flex', gap: 8, alignSelf: 'end' }}>
+            <button
+              onClick={aplicarFiltros}
+              style={{
+                padding: '8px 20px',
+                background: '#A0622A',
+                color: 'white',
+                border: 'none',
+                borderRadius: 6,
+                fontSize: 12,
+                fontWeight: 700,
+                letterSpacing: '0.1em',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              🔍 BUSCAR
+            </button>
+
+            {temFiltrosAtivos && (
+              <button
+                onClick={limparFiltros}
+                style={{
+                  padding: '8px 12px',
+                  background: 'transparent',
+                  color: '#B89070',
+                  border: '1px solid #B89070',
+                  borderRadius: 6,
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                ✕ Limpar
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Contador de resultados */}
+        {temFiltrosAtivos && (
+          <p style={{
+            fontSize: 11,
+            color: '#B89070',
+            marginTop: 10,
+            marginBottom: 0
+          }}>
+            {produtosFiltrados.length} produto(s) encontrado(s)
+          </p>
+        )}
+      </div>
+
       {loading ? (
         <div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-400">
           Carregando...
@@ -120,6 +378,10 @@ export default function ProdutosPage() {
               Criar Primeiro Produto
             </Button>
           </Link>
+        </div>
+      ) : produtosFiltrados.length === 0 ? (
+        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-400">
+          Nenhum produto encontrado com os filtros aplicados.
         </div>
       ) : (
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
@@ -147,7 +409,7 @@ export default function ProdutosPage() {
               </tr>
             </thead>
             <tbody>
-              {products.map((product) => (
+              {produtosFiltrados.map((product) => (
                 <tr
                   key={product.id}
                   className="border-b border-gray-100 hover:bg-gray-50"
