@@ -41,15 +41,29 @@ export async function generateMetadata({ params }: Props) {
     product.description?.substring(0, 160) ??
     `${product.name} — Kary Curadoria. Moda clássica e elegante direto do Brás, SP.`;
 
-  const ogImage = product.images?.[0]
-    ? { url: product.images[0], width: 1200, height: 1200, alt: product.name }
+  // Truncar título OG para ≤ 60 caracteres (limite recomendado por crawlers)
+  const ogTitle =
+    product.name.length > 60
+      ? product.name.slice(0, 57) + "..."
+      : product.name;
+
+  // Adicionar transformação Supabase para reduzir peso da imagem (< 600 KB)
+  // width/height=1200 mantém proporção 1:1 (ideal para produto de moda)
+  // quality=75 e format=webp reduzem drasticamente o tamanho
+  const rawImage = product.images?.[0];
+  const ogImageUrl = rawImage
+    ? `${rawImage}?width=1200&height=1200&quality=75&format=webp`
+    : "/opengraph-image";
+
+  const ogImage = rawImage
+    ? { url: ogImageUrl, width: 1200, height: 1200, alt: ogTitle, type: "image/webp" }
     : { url: "/opengraph-image", width: 1200, height: 630, alt: "Kary Curadoria" };
 
   return {
     title: product.name,
     description,
     openGraph: {
-      title: `${product.name} | Kary Curadoria`,
+      title: ogTitle,
       description,
       url: `https://karycuradoria.com.br/produtos/${params.slug}`,
       siteName: "Kary Curadoria",
@@ -59,9 +73,9 @@ export async function generateMetadata({ params }: Props) {
     },
     twitter: {
       card: "summary_large_image",
-      title: `${product.name} | Kary Curadoria`,
+      title: ogTitle,
       description,
-      images: [ogImage.url],
+      images: [ogImageUrl],
     },
   };
 }
