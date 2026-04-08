@@ -15,6 +15,9 @@ interface Coupon {
   active: boolean;
   expires_at: string | null;
   created_at: string;
+  is_floating: boolean;
+  floating_title: string | null;
+  floating_description: string | null;
 }
 
 const EMPTY_FORM = {
@@ -25,6 +28,9 @@ const EMPTY_FORM = {
   max_uses: "",
   expires_at: "",
   active: true,
+  is_floating: false,
+  floating_title: "",
+  floating_description: "",
 };
 
 export default function CuponsPage() {
@@ -63,6 +69,9 @@ export default function CuponsPage() {
       max_uses: c.max_uses ? String(c.max_uses) : "",
       expires_at: c.expires_at ? c.expires_at.slice(0, 10) : "",
       active: c.active,
+      is_floating: c.is_floating ?? false,
+      floating_title: c.floating_title ?? "",
+      floating_description: c.floating_description ?? "",
     });
     setError("");
     setShowForm(true);
@@ -84,6 +93,9 @@ export default function CuponsPage() {
         max_uses: form.max_uses ? Number(form.max_uses) : null,
         expires_at: form.expires_at || null,
         active: form.active,
+        is_floating: form.is_floating,
+        floating_title: form.is_floating ? form.floating_title : null,
+        floating_description: form.is_floating ? form.floating_description : null,
       };
 
       const res = editing
@@ -281,6 +293,75 @@ export default function CuponsPage() {
             </span>
           </div>
 
+          {/* ── Cupom Flutuante ── */}
+          <div className="mt-5 pt-5 border-t border-gray-100">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="text-sm font-medium text-gray-700">Cupom Flutuante</p>
+                <p className="text-xs text-gray-400">Exibe um card lateral animado na loja para promover este cupom</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, is_floating: !form.is_floating })}
+                className={cn(
+                  "relative w-10 h-5 rounded-full transition-colors shrink-0",
+                  form.is_floating ? "bg-[#A0622A]" : "bg-gray-300"
+                )}
+              >
+                <span
+                  className={cn(
+                    "absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform",
+                    form.is_floating ? "left-5" : "left-0.5"
+                  )}
+                />
+              </button>
+            </div>
+
+            {/* Aviso se outro cupom já é flutuante */}
+            {form.is_floating && coupons.some((c) => c.is_floating && c.id !== editing?.id) && (
+              <div className="mb-3 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded px-3 py-2 text-sm text-amber-800">
+                <span className="mt-0.5">⚠️</span>
+                <span>
+                  O cupom{" "}
+                  <strong>{coupons.find((c) => c.is_floating && c.id !== editing?.id)?.code}</strong>{" "}
+                  já está configurado como flutuante. Ativar este irá desativar o anterior.
+                </span>
+              </div>
+            )}
+
+            {form.is_floating && (
+              <div className="grid grid-cols-1 gap-3 mt-2">
+                <div>
+                  <label className="block text-[11px] tracking-wider text-gray-500 uppercase mb-1.5">
+                    Título do cupom
+                  </label>
+                  <input
+                    type="text"
+                    value={form.floating_title}
+                    onChange={(e) => setForm({ ...form, floating_title: e.target.value })}
+                    placeholder="🎉 Oferta Especial!"
+                    maxLength={100}
+                    className="w-full border border-gray-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-kc"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] tracking-wider text-gray-500 uppercase mb-1.5">
+                    Instrução breve
+                  </label>
+                  <input
+                    type="text"
+                    value={form.floating_description}
+                    onChange={(e) => setForm({ ...form, floating_description: e.target.value })}
+                    placeholder="Aplique no carrinho e ganhe 15% OFF"
+                    maxLength={200}
+                    className="w-full border border-gray-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-kc"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">{form.floating_description.length}/200</p>
+                </div>
+              </div>
+            )}
+          </div>
+
           {error && (
             <p className="mt-3 text-sm text-red-600 bg-red-50 px-3 py-2 rounded">{error}</p>
           )}
@@ -342,7 +423,12 @@ export default function CuponsPage() {
                 return (
                   <tr key={c.id} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="px-4 py-3">
-                      <span className="font-mono text-sm font-medium text-kc-dark">{c.code}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono text-sm font-medium text-kc-dark">{c.code}</span>
+                        {c.is_floating && (
+                          <span title="Cupom flutuante ativo" className="text-[11px]">🏷️</span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <span
