@@ -36,24 +36,32 @@ async function getColors(): Promise<Record<string, string>> {
 export async function generateMetadata({ params }: Props) {
   const product = await getProduct(params.slug);
   if (!product) return { title: "Produto não encontrado" };
+
   const description =
-    product.description?.substring(0, 155) ??
-    `${product.name} — Kary Curadoria. Moda feminina com elegância e curadoria exclusiva.`;
+    product.description?.substring(0, 160) ??
+    `${product.name} — Kary Curadoria. Moda clássica e elegante direto do Brás, SP.`;
+
+  const ogImage = product.images?.[0]
+    ? { url: product.images[0], width: 1200, height: 1200, alt: product.name }
+    : { url: "/opengraph-image", width: 1200, height: 630, alt: "Kary Curadoria" };
+
   return {
     title: product.name,
     description,
     openGraph: {
-      title: product.name,
+      title: `${product.name} | Kary Curadoria`,
       description,
-      images: product.images?.[0]
-        ? [{ url: product.images[0], alt: product.name }]
-        : [{ url: "/og-image.jpg", width: 1200, height: 630, alt: "Kary Curadoria" }],
+      url: `https://karycuradoria.com.br/produtos/${params.slug}`,
+      siteName: "Kary Curadoria",
+      locale: "pt_BR",
+      type: "website",
+      images: [ogImage],
     },
     twitter: {
       card: "summary_large_image",
-      title: product.name,
+      title: `${product.name} | Kary Curadoria`,
       description,
-      images: product.images?.[0] ? [product.images[0]] : ["/og-image.jpg"],
+      images: [ogImage.url],
     },
   };
 }

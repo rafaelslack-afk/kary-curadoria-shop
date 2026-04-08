@@ -39,7 +39,7 @@ export const metadata: Metadata = {
       "Moda feminina com elegância e curadoria exclusiva no coração do Brás.",
     images: [
       {
-        url: "/og-image.jpg",
+        url: "/opengraph-image",
         width: 1200,
         height: 630,
         alt: "Kary Curadoria — Moda Feminina",
@@ -50,7 +50,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Kary Curadoria — Moda Feminina no Brás",
     description: "Moda feminina com elegância e curadoria exclusiva.",
-    images: ["/og-image.jpg"],
+    images: ["/opengraph-image"],
   },
   robots: {
     index: true,
