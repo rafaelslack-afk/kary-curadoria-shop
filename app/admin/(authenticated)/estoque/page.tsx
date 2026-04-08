@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Warehouse } from "lucide-react";
+import { AlertTriangle, Warehouse, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface VariantStock {
@@ -20,24 +20,34 @@ interface VariantStock {
 type FilterMode = "all" | "alert" | "zero";
 
 export default function EstoquePage() {
-  const [items, setItems] = useState<VariantStock[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<FilterMode>("all");
-  const [search, setSearch] = useState("");
-
-  useEffect(() => {
-    fetchStock();
-  }, []);
+  const [items, setItems]             = useState<VariantStock[]>([]);
+  const [loading, setLoading]         = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [filter, setFilter]           = useState<FilterMode>("all");
+  const [search, setSearch]           = useState("");
 
   async function fetchStock() {
+    setLoading(true);
     try {
-      const res = await fetch("/api/admin/stock");
+      const res = await fetch("/api/admin/stock?searched=1");
       if (res.ok) setItems(await res.json());
     } catch {
       /* ignore */
     } finally {
       setLoading(false);
     }
+  }
+
+  async function buscar() {
+    setHasSearched(true);
+    await fetchStock();
+  }
+
+  function limpar() {
+    setSearch("");
+    setFilter("all");
+    setHasSearched(false);
+    setItems([]);
   }
 
   const filtered = items
@@ -59,7 +69,7 @@ export default function EstoquePage() {
     });
 
   const alertCount = items.filter((i) => i.active && i.stock_qty <= i.stock_min && i.stock_qty > 0).length;
-  const zeroCount = items.filter((i) => i.active && i.stock_qty === 0).length;
+  const zeroCount  = items.filter((i) => i.active && i.stock_qty === 0).length;
 
   return (
     <div>
@@ -67,40 +77,139 @@ export default function EstoquePage() {
         <h1 className="text-2xl font-serif font-medium text-kc-dark">Estoque</h1>
       </div>
 
-      {/* Filtros e busca */}
-      <div className="flex flex-wrap items-center gap-3 mb-5">
-        <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-          {([
-            { key: "all", label: "Todos" },
-            { key: "alert", label: `Alerta (${alertCount})` },
-            { key: "zero", label: `Zerado (${zeroCount})` },
-          ] as { key: FilterMode; label: string }[]).map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => setFilter(key)}
-              className={cn(
-                "text-xs px-3 py-1.5 rounded-md transition-colors",
-                filter === key
-                  ? "bg-white text-kc-dark shadow-sm font-medium"
-                  : "text-gray-500 hover:text-gray-700"
-              )}
+      {/* Barra de busca e filtros */}
+      <div style={{
+        background: '#F5F1EA',
+        borderRadius: 10,
+        padding: '16px',
+        marginBottom: 20,
+        border: '1px solid #EDE8DC'
+      }}>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+          gap: 10,
+          alignItems: 'end'
+        }}>
+
+          {/* Busca por produto / SKU */}
+          <div style={{ gridColumn: 'span 2' }}>
+            <label style={{
+              fontSize: 10,
+              fontWeight: 600,
+              letterSpacing: '0.1em',
+              color: '#5C3317',
+              display: 'block',
+              marginBottom: 4
+            }}>
+              PRODUTO / SKU
+            </label>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && buscar()}
+              placeholder="Buscar por produto, SKU, cor, tamanho..."
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: '1px solid #B89070',
+                borderRadius: 6,
+                fontSize: 13,
+                color: '#5C3317',
+                background: 'white',
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
+
+          {/* Situação do estoque */}
+          <div>
+            <label style={{
+              fontSize: 10,
+              fontWeight: 600,
+              letterSpacing: '0.1em',
+              color: '#5C3317',
+              display: 'block',
+              marginBottom: 4
+            }}>
+              SITUAÇÃO
+            </label>
+            <select
+              value={filter}
+              onChange={(e) => setFilter(e.target.value as FilterMode)}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: '1px solid #B89070',
+                borderRadius: 6,
+                fontSize: 13,
+                color: '#5C3317',
+                background: 'white',
+                boxSizing: 'border-box'
+              }}
             >
-              {label}
+              <option value="all">Todos</option>
+              <option value="alert">⚠️ Alerta de mínimo</option>
+              <option value="zero">❌ Zerado</option>
+            </select>
+          </div>
+
+          {/* Botões */}
+          <div style={{ display: 'flex', gap: 8, alignSelf: 'end' }}>
+            <button
+              onClick={buscar}
+              style={{
+                padding: '8px 20px',
+                background: '#A0622A',
+                color: 'white',
+                border: 'none',
+                borderRadius: 6,
+                fontSize: 12,
+                fontWeight: 700,
+                letterSpacing: '0.1em',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              🔍 BUSCAR
             </button>
-          ))}
+
+            {hasSearched && (
+              <button
+                onClick={limpar}
+                style={{
+                  padding: '8px 12px',
+                  background: 'transparent',
+                  color: '#B89070',
+                  border: '1px solid #B89070',
+                  borderRadius: 6,
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                ✕ Limpar
+              </button>
+            )}
+          </div>
         </div>
 
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar por produto, SKU, cor, tamanho..."
-          className="flex-1 min-w-48 border border-gray-200 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-kc"
-        />
+        {/* Contador */}
+        {hasSearched && !loading && (
+          <p style={{
+            fontSize: 11,
+            color: '#B89070',
+            marginTop: 10,
+            marginBottom: 0
+          }}>
+            {filtered.length} variação(ões) encontrada(s)
+          </p>
+        )}
       </div>
 
-      {/* Alertas */}
-      {(alertCount > 0 || zeroCount > 0) && (
+      {/* Alertas — só após busca */}
+      {hasSearched && (alertCount > 0 || zeroCount > 0) && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-4 flex items-center gap-2">
           <AlertTriangle size={16} className="text-amber-500 shrink-0" />
           <span className="text-sm text-amber-700">
@@ -110,16 +219,20 @@ export default function EstoquePage() {
         </div>
       )}
 
-      {loading ? (
+      {/* Conteúdo */}
+      {!hasSearched ? (
+        <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
+          <Warehouse size={40} className="mx-auto text-gray-300 mb-3" />
+          <p className="text-gray-400 text-sm">Selecione um produto ou situação e clique em Buscar para visualizar o estoque.</p>
+        </div>
+      ) : loading ? (
         <div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-400">
           Carregando...
         </div>
       ) : filtered.length === 0 ? (
         <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
-          <Warehouse size={40} className="mx-auto text-gray-300 mb-3" />
-          <p className="text-gray-500">
-            {search || filter !== "all" ? "Nenhum resultado para os filtros aplicados." : "Nenhuma variação cadastrada."}
-          </p>
+          <Search size={40} className="mx-auto text-gray-300 mb-3" />
+          <p className="text-gray-500">Nenhum resultado para os filtros aplicados.</p>
         </div>
       ) : (
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
@@ -151,7 +264,7 @@ export default function EstoquePage() {
             </thead>
             <tbody>
               {filtered.map((item) => {
-                const isZero = item.stock_qty === 0;
+                const isZero  = item.stock_qty === 0;
                 const isAlert = !isZero && item.stock_qty <= item.stock_min;
                 return (
                   <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">

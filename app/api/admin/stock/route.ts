@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -6,8 +6,14 @@ export const dynamic = "force-dynamic";
 
 // GET /api/admin/stock
 // Retorna todas as variantes com nome do produto, para a página de estoque.
+// Requer ao menos um parâmetro de busca (ex: ?searched=1), caso contrário retorna [].
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  if (searchParams.size === 0) {
+    return NextResponse.json([]);
+  }
+
   const admin = createAdminClient();
 
   const { data, error } = await admin

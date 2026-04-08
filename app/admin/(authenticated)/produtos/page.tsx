@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, Pencil, Trash2, AlertTriangle, Package } from "lucide-react";
+import { Plus, Pencil, Trash2, AlertTriangle, Package, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, cn } from "@/lib/utils";
 import type { Product, Category } from "@/types/database";
@@ -13,9 +13,10 @@ interface ProductWithCategory extends Product {
 
 export default function ProdutosPage() {
   const [products, setProducts]       = useState<ProductWithCategory[]>([]);
-  const [loading, setLoading]         = useState(true);
+  const [loading, setLoading]         = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [toggling, setToggling]       = useState<string | null>(null);
+  const [hasSearched, setHasSearched] = useState(false);
 
   const [categorias, setCategorias]   = useState<Category[]>([]);
 
@@ -33,13 +34,13 @@ export default function ProdutosPage() {
   });
 
   useEffect(() => {
-    fetchProducts();
     fetch('/api/categories')
       .then(r => r.json())
       .then(data => setCategorias(data ?? []));
   }, []);
 
   async function fetchProducts() {
+    setLoading(true);
     try {
       const res = await fetch("/api/products");
       if (res.ok) {
@@ -98,14 +99,18 @@ export default function ProdutosPage() {
     filtrosAplicados.status !== '' ||
     filtrosAplicados.codigo !== '';
 
-  function aplicarFiltros() {
+  async function aplicarFiltros() {
     setFiltrosAplicados({ ...filtros });
+    setHasSearched(true);
+    await fetchProducts();
   }
 
   function limparFiltros() {
     const vazio = { busca: '', categoria: '', status: '', codigo: '' };
     setFiltros(vazio);
     setFiltrosAplicados(vazio);
+    setHasSearched(false);
+    setProducts([]);
   }
 
   const produtosFiltrados = products.filter(produto => {
@@ -156,8 +161,8 @@ export default function ProdutosPage() {
         </div>
       )}
 
-      {/* Alerts */}
-      {products.filter((p) => !hasDimensions(p) && p.active).length > 0 && (
+      {/* Alerts — só exibe após busca */}
+      {hasSearched && products.filter((p) => !hasDimensions(p) && p.active).length > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-4 flex items-center gap-2">
           <AlertTriangle size={16} className="text-amber-500" />
           <span className="text-sm text-amber-700">
@@ -331,7 +336,7 @@ export default function ProdutosPage() {
               🔍 BUSCAR
             </button>
 
-            {temFiltrosAtivos && (
+            {(hasSearched || temFiltrosAtivos) && (
               <button
                 onClick={limparFiltros}
                 style={{
@@ -352,7 +357,7 @@ export default function ProdutosPage() {
         </div>
 
         {/* Contador de resultados */}
-        {temFiltrosAtivos && (
+        {hasSearched && !loading && (
           <p style={{
             fontSize: 11,
             color: '#B89070',
@@ -364,24 +369,20 @@ export default function ProdutosPage() {
         )}
       </div>
 
-      {loading ? (
+      {/* Conteúdo */}
+      {!hasSearched ? (
+        <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
+          <Search size={40} className="mx-auto text-gray-300 mb-3" />
+          <p className="text-gray-400 text-sm">Use os filtros acima para buscar produtos.</p>
+        </div>
+      ) : loading ? (
         <div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-400">
           Carregando...
         </div>
-      ) : products.length === 0 ? (
+      ) : produtosFiltrados.length === 0 ? (
         <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
           <Package size={40} className="mx-auto text-gray-300 mb-3" />
-          <p className="text-gray-500 mb-4">Nenhum produto cadastrado ainda.</p>
-          <Link href="/admin/produtos/novo">
-            <Button size="sm">
-              <Plus size={14} className="mr-1.5" />
-              Criar Primeiro Produto
-            </Button>
-          </Link>
-        </div>
-      ) : produtosFiltrados.length === 0 ? (
-        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-400">
-          Nenhum produto encontrado com os filtros aplicados.
+          <p className="text-gray-500">Nenhum produto encontrado para os filtros selecionados.</p>
         </div>
       ) : (
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
