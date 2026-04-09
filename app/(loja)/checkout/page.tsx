@@ -8,6 +8,7 @@ import { useCartStore } from "@/lib/store/cart";
 import { calculateCouponDiscount } from "@/lib/coupons";
 import { formatCurrency } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
+import { pixelEvent } from "@/lib/pixel";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -205,7 +206,7 @@ export default function CheckoutPage() {
     if (items.length === 0 && !redirecting) router.replace("/carrinho");
   }, [items, router, redirecting]);
 
-  // ── GA4: begin_checkout ───────────────────────────────────────────────────
+  // ── GA4: begin_checkout + Meta Pixel: InitiateCheckout ───────────────────
   useEffect(() => {
     if (items.length === 0) return;
     trackEvent('begin_checkout', {
@@ -217,6 +218,11 @@ export default function CheckoutPage() {
         price: item.price,
         quantity: item.quantity,
       })),
+    });
+    pixelEvent('InitiateCheckout', {
+      num_items: items.length,
+      value: subtotal(),
+      currency: 'BRL',
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Check, Package, ExternalLink } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
+import { pixelEvent } from "@/lib/pixel";
 
 interface OrderData {
   orderId: string;
@@ -41,6 +42,11 @@ export default function SucessoPage() {
           value: data.total,
           currency: 'BRL',
         });
+        pixelEvent('Purchase', {
+          value: data.total,
+          currency: 'BRL',
+          content_type: 'product',
+        });
       }
       return;
     }
@@ -55,6 +61,11 @@ export default function SucessoPage() {
           transaction_id: String(data.orderNumber),
           value: data.total,
           currency: 'BRL',
+        });
+        pixelEvent('Purchase', {
+          value: data.total,
+          currency: 'BRL',
+          content_type: 'product',
         });
       }
     }

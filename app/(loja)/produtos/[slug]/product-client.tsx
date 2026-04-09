@@ -9,6 +9,7 @@ import { formatCurrency } from "@/lib/utils";
 import { useCartStore } from "@/lib/store/cart";
 import { buildWhatsAppUrl } from "@/lib/site";
 import { trackEvent } from "@/lib/analytics";
+import { pixelEvent } from "@/lib/pixel";
 import type { Product, ProductVariant, Category } from "@/types/database";
 
 // ── Componente de imagem com zoom/pan ────────────────────────────────────────
@@ -104,6 +105,13 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
         },
       ],
     });
+    pixelEvent("ViewContent", {
+      content_name: product.name,
+      content_ids: [product.sku_base ?? product.id],
+      content_type: "product",
+      value: Number(product.price),
+      currency: "BRL",
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product.id]);
 
@@ -178,6 +186,13 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
           quantity: 1,
         },
       ],
+    });
+    pixelEvent("AddToCart", {
+      content_name: product.name,
+      content_ids: [selectedVariant.sku],
+      content_type: "product",
+      value: Number(product.price),
+      currency: "BRL",
     });
     setAdded(true);
     setTimeout(() => setAdded(false), 2000);
