@@ -205,6 +205,7 @@ export interface ProductVariant {
   stock_qty: number;
   stock_min: number;
   active: boolean;
+  images: string[] | null;
   created_at: string;
 }
 
@@ -216,6 +217,7 @@ export interface ProductVariantInsert {
   stock_qty?: number;
   stock_min?: number;
   active?: boolean;
+  images?: string[] | null;
 }
 
 export interface ProductVariantUpdate {
@@ -225,6 +227,7 @@ export interface ProductVariantUpdate {
   stock_qty?: number;
   stock_min?: number;
   active?: boolean;
+  images?: string[] | null;
 }
 
 // ---- Banners ----

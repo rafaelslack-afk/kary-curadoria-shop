@@ -115,6 +115,11 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product.id]);
 
+  // ── Volta para a primeira foto ao trocar de cor ───────────────────────────
+  useEffect(() => {
+    setSelectedImage(0);
+  }, [selectedColor]);
+
   // ── Detecção de modo: único tamanho ou grade cor×tamanho ──────────────────
 
   const availableColors = useMemo(() => {
@@ -218,7 +223,17 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
     router.push("/checkout");
   }
 
-  const images = product.images?.length > 0 ? product.images : [];
+  // Imagens da galeria: prefere imagens da cor selecionada, fallback para imagens do produto
+  const images = useMemo(() => {
+    if (selectedColor) {
+      const variantImages = variants
+        .filter((v) => v.color === selectedColor)
+        .flatMap((v) => v.images ?? [])
+        .filter(Boolean);
+      if (variantImages.length > 0) return variantImages;
+    }
+    return product.images?.length > 0 ? product.images : [];
+  }, [selectedColor, variants, product.images]);
 
   function cartButtonLabel() {
     if (allOutOfStock) return "Produto sem estoque";
