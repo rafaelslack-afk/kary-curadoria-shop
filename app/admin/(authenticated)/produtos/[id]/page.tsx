@@ -90,6 +90,10 @@ export default function EditarProdutoPage() {
   // Variantes existentes (individual)
   const [variants, setVariants] = useState<VariantRow[]>([]);
 
+  // Imagens por cor de variante: { "Preto": ["url1","url2"], ... }
+  const [variantImages, setVariantImages] = useState<Record<string, string[]>>({});
+  const [variantImagesUploading, setVariantImagesUploading] = useState<Record<string, boolean>>({});
+
   // Grade — novas variantes a adicionar (individual)
   const [selectedColorIds, setSelectedColorIds] = useState<string[]>([]);
   const [selectedSizeIds, setSelectedSizeIds]   = useState<string[]>([]);
@@ -131,9 +135,19 @@ export default function EditarProdutoPage() {
         setLengthCm(product.length_cm ? String(product.length_cm) : "");
         setWidthCm(product.width_cm ? String(product.width_cm) : "");
         setHeightCm(product.height_cm ? String(product.height_cm) : "");
-        setVariants(
-          (product.product_variants ?? []).map((v: ProductVariant) => ({ ...v, _dirty: false }))
+        const variantRows = (product.product_variants ?? []).map(
+          (v: ProductVariant) => ({ ...v, _dirty: false })
         );
+        setVariants(variantRows);
+
+        // Inicializa imagens por cor a partir das variantes salvas
+        const imgInit: Record<string, string[]> = {};
+        for (const v of variantRows) {
+          if (v.color && v.images?.length && !imgInit[v.color]) {
+            imgInit[v.color] = [...v.images];
+          }
+        }
+        setVariantImages(imgInit);
 
         // Pré-selecionar bundle items
         if (product.product_type === "conjunto") {
@@ -423,6 +437,57 @@ export default function EditarProdutoPage() {
     }
   }
 
+  // ── Upload / Remoção de imagens por cor de variante ──────────────────────
+
+  async function handleVariantImageUpload(
+    color: string,
+    variantIds: string[],
+    e: React.ChangeEvent<HTMLInputElement>
+  ) {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+    e.target.value = ""; // reseta o input para permitir re-upload do mesmo arquivo
+
+    setVariantImagesUploading((prev) => ({ ...prev, [color]: true }));
+    try {
+      const uploadedUrls = await uploadProductImages(files);
+      const allUrls = [...(variantImages[color] ?? []), ...uploadedUrls];
+
+      setVariantImages((prev) => ({ ...prev, [color]: allUrls }));
+
+      // Persiste em todas as variantes desta cor
+      await Promise.all(
+        variantIds.map((variantId) =>
+          fetch(`/api/products/${id}/variants`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ variant_id: variantId, images: allUrls }),
+          })
+        )
+      );
+    } catch {
+      setError("Erro ao enviar imagens da variante.");
+    } finally {
+      setVariantImagesUploading((prev) => ({ ...prev, [color]: false }));
+    }
+  }
+
+  async function handleRemoveVariantImage(color: string, index: number) {
+    const updated = (variantImages[color] ?? []).filter((_, i) => i !== index);
+    setVariantImages((prev) => ({ ...prev, [color]: updated }));
+
+    const variantIds = variants.filter((v) => v.color === color).map((v) => v.id);
+    await Promise.all(
+      variantIds.map((variantId) =>
+        fetch(`/api/products/${id}/variants`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ variant_id: variantId, images: updated }),
+        })
+      )
+    );
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   const inputCls = "w-full border border-gray-200 rounded px-3 py-2.5 text-sm focus:outline-none focus:border-kc";
@@ -436,6 +501,15 @@ export default function EditarProdutoPage() {
   const sizeHeaders      = Array.from(new Set(variants.map((v) => v.size)));
   const selectedNewColors = allColors.filter((c) => selectedColorIds.includes(c.id));
   const selectedNewSizes  = allSizes.filter((s) => selectedSizeIds.includes(s.id));
+
+  const colorGroupsWithHex = colorGroups
+    .filter((c) => c !== "Sem cor")
+    .map((colorName) => ({
+      colorName,
+      hex: allColors.find((c) => c.name === colorName)?.hex_code ?? "#ccc",
+      variantIds: variants.filter((v) => v.color === colorName).map((v) => v.id),
+      images: variantImages[colorName] ?? [],
+    }));
 
   // Agrupar variantOptions por produto
   const productGroups = variantOptions.reduce<Record<string, { name: string; variants: VariantOption[] }>>(
@@ -838,6 +912,68 @@ export default function EditarProdutoPage() {
               </div>
             )}
           </div>
+
+          {/* ── Fotos por Cor ── */}
+          {colorGroupsWithHex.length > 0 && (
+            <div className="bg-white rounded-lg border border-gray-200 p-6 mt-6 max-w-4xl">
+              <h2 className="font-serif text-lg font-medium text-kc-dark mb-1">Fotos por Cor</h2>
+              <p className="text-xs text-gray-400 mb-5">
+                Adicione imagens específicas por cor. Na página do produto, a galeria troca automaticamente ao selecionar uma cor.
+              </p>
+
+              <div className="space-y-6">
+                {colorGroupsWithHex.map(({ colorName, hex, variantIds, images: colorImgs }) => (
+                  <div key={colorName}>
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="w-4 h-4 rounded-full border border-gray-200 shrink-0" style={{ backgroundColor: hex }} />
+                      <span className="text-sm font-medium text-gray-700">{colorName}</span>
+                      <span className="text-[11px] text-gray-400">({colorImgs.length} foto{colorImgs.length !== 1 ? "s" : ""})</span>
+                    </div>
+
+                    <div className="flex flex-wrap gap-3">
+                      {colorImgs.map((src, idx) => (
+                        <div key={`${src}-${idx}`} className="group relative w-20 h-[106px] rounded-lg overflow-hidden border border-gray-200 bg-gray-50 shrink-0">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={src} alt={`${colorName} ${idx + 1}`} className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveVariantImage(colorName, idx)}
+                            className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity"
+                            aria-label="Remover imagem"
+                          >
+                            <X size={16} className="text-white" />
+                          </button>
+                        </div>
+                      ))}
+
+                      <label className={`flex flex-col items-center justify-center w-20 h-[106px] rounded-lg border-2 border-dashed cursor-pointer transition-colors shrink-0 ${
+                        variantImagesUploading[colorName]
+                          ? "border-kc/40 bg-kc/5 cursor-wait"
+                          : "border-gray-200 hover:border-kc hover:bg-kc/5"
+                      }`}>
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          multiple
+                          className="hidden"
+                          disabled={variantImagesUploading[colorName]}
+                          onChange={(e) => handleVariantImageUpload(colorName, variantIds, e)}
+                        />
+                        {variantImagesUploading[colorName] ? (
+                          <span className="text-[10px] text-kc text-center px-1">Enviando...</span>
+                        ) : (
+                          <>
+                            <Upload size={14} className="text-gray-400 mb-1" />
+                            <span className="text-[10px] text-gray-400 text-center">Adicionar</span>
+                          </>
+                        )}
+                      </label>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* ── Adicionar Novas Variações ── */}
           <div className="bg-white rounded-lg border border-gray-200 p-6 mt-6 max-w-4xl">
