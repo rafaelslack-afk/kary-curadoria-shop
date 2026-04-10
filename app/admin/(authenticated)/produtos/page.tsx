@@ -24,13 +24,15 @@ export default function ProdutosPage() {
     busca: '',
     categoria: '',
     status: '',
-    codigo: ''
+    codigo: '',
+    destaque: ''
   });
   const [filtrosAplicados, setFiltrosAplicados] = useState({
     busca: '',
     categoria: '',
     status: '',
-    codigo: ''
+    codigo: '',
+    destaque: ''
   });
 
   useEffect(() => {
@@ -97,7 +99,8 @@ export default function ProdutosPage() {
     filtrosAplicados.busca !== '' ||
     filtrosAplicados.categoria !== '' ||
     filtrosAplicados.status !== '' ||
-    filtrosAplicados.codigo !== '';
+    filtrosAplicados.codigo !== '' ||
+    filtrosAplicados.destaque !== '';
 
   async function aplicarFiltros() {
     setFiltrosAplicados({ ...filtros });
@@ -106,7 +109,7 @@ export default function ProdutosPage() {
   }
 
   function limparFiltros() {
-    const vazio = { busca: '', categoria: '', status: '', codigo: '' };
+    const vazio = { busca: '', categoria: '', status: '', codigo: '', destaque: '' };
     setFiltros(vazio);
     setFiltrosAplicados(vazio);
     setHasSearched(false);
@@ -136,6 +139,11 @@ export default function ProdutosPage() {
       if (!produto.sku_base?.toLowerCase().includes(cod))
         return false;
     }
+
+    if (filtrosAplicados.destaque === 'sim' && !produto.featured)
+      return false;
+    if (filtrosAplicados.destaque === 'nao' && produto.featured)
+      return false;
 
     return true;
   });
@@ -282,6 +290,38 @@ export default function ProdutosPage() {
               <option value="">Todos</option>
               <option value="ativo">✅ Ativo</option>
               <option value="inativo">❌ Inativo</option>
+            </select>
+          </div>
+
+          {/* Destaque */}
+          <div>
+            <label style={{
+              fontSize: 10,
+              fontWeight: 600,
+              letterSpacing: '0.1em',
+              color: '#5C3317',
+              display: 'block',
+              marginBottom: 4
+            }}>
+              DESTAQUE
+            </label>
+            <select
+              value={filtros.destaque}
+              onChange={e => setFiltros(f => ({ ...f, destaque: e.target.value }))}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: '1px solid #B89070',
+                borderRadius: 6,
+                fontSize: 13,
+                color: '#5C3317',
+                background: 'white',
+                boxSizing: 'border-box'
+              }}
+            >
+              <option value="">Todos</option>
+              <option value="sim">⭐ Sim</option>
+              <option value="nao">— Não</option>
             </select>
           </div>
 
