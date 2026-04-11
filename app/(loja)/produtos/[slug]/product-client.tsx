@@ -224,25 +224,16 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
   }
 
   // Imagens da galeria: prefere imagens da cor selecionada, fallback para imagens do produto
-  const { images, hasRealImages } = useMemo(() => {
+  const images = useMemo(() => {
     if (selectedColor) {
-      const variantImgs = variants
+      const variantImages = variants
         .filter((v) => v.color === selectedColor)
         .flatMap((v) => v.images ?? [])
         .filter(Boolean);
-      if (variantImgs.length > 0) {
-        return { images: variantImgs, hasRealImages: true };
-      }
+      if (variantImages.length > 0) return variantImages;
     }
-    const fallback = product.images?.length > 0 ? product.images : [];
-    return { images: fallback, hasRealImages: false };
+    return product.images?.length > 0 ? product.images : [];
   }, [selectedColor, variants, product.images]);
-
-  // Hex da cor selecionada — usado no overlay de simulação
-  const selectedColorHex = useMemo(() => {
-    if (!selectedColor) return null;
-    return colorHexMap[selectedColor] ?? null;
-  }, [selectedColor, colorHexMap]);
 
   function cartButtonLabel() {
     if (allOutOfStock) return "Produto sem estoque";
@@ -409,18 +400,6 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
                 imgPlaceholder
               )}
               {badges}
-              {/* Overlay de simulação de cor */}
-              {!hasRealImages && selectedColorHex && (
-                <>
-                  <div
-                    className="absolute inset-0 transition-colors duration-300 pointer-events-none"
-                    style={{ backgroundColor: selectedColorHex, mixBlendMode: "multiply", opacity: 0.45 }}
-                  />
-                  <div className="absolute bottom-2 left-2 bg-black/50 text-white text-xs px-2 py-1 rounded-full backdrop-blur-sm pointer-events-none">
-                    Simulação de cor
-                  </div>
-                </>
-              )}
             </div>
             {images.length > 1 && (
               <div className="flex gap-2 overflow-x-auto pb-1">
@@ -441,12 +420,6 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
                       sizes="64px"
                       className="object-cover"
                     />
-                    {!hasRealImages && selectedColorHex && (
-                      <div
-                        className="absolute inset-0 pointer-events-none"
-                        style={{ backgroundColor: selectedColorHex, mixBlendMode: "multiply", opacity: 0.45 }}
-                      />
-                    )}
                   </button>
                 ))}
               </div>
@@ -481,12 +454,6 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
                       sizes="64px"
                       className="object-cover"
                     />
-                    {!hasRealImages && selectedColorHex && (
-                      <div
-                        className="absolute inset-0 pointer-events-none"
-                        style={{ backgroundColor: selectedColorHex, mixBlendMode: "multiply", opacity: 0.45 }}
-                      />
-                    )}
                   </button>
                 ))}
               </div>
@@ -504,18 +471,6 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
                 imgPlaceholder
               )}
               {badges}
-              {/* Overlay de simulação de cor */}
-              {!hasRealImages && selectedColorHex && (
-                <>
-                  <div
-                    className="absolute inset-0 transition-colors duration-300 pointer-events-none"
-                    style={{ backgroundColor: selectedColorHex, mixBlendMode: "multiply", opacity: 0.45 }}
-                  />
-                  <div className="absolute bottom-2 left-2 bg-black/50 text-white text-xs px-2 py-1 rounded-full backdrop-blur-sm pointer-events-none">
-                    Simulação de cor
-                  </div>
-                </>
-              )}
             </div>
           </div>
         </div>
