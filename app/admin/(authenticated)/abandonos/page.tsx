@@ -8,6 +8,9 @@ import { formatCurrency } from "@/lib/utils";
 
 interface CartItem {
   product_name: string;
+  sku?: string | null;
+  size?: string | null;
+  color?: string | null;
   quantity: number;
   unit_price: number;
 }
@@ -223,7 +226,6 @@ export default function AbandonosPage() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filtered.map((r) => {
-                const totalItens = r.cart_items.reduce((s, i) => s + i.quantity, 0);
                 const whatsapp = buildWhatsApp(r.phone, r.name);
 
                 return (
@@ -235,19 +237,27 @@ export default function AbandonosPage() {
                         <p className="text-[11px] text-gray-400">{r.phone}</p>
                       )}
                     </td>
-                    <td className="px-4 py-3">
-                      <p className="text-sm text-kc-dark">{totalItens} produto{totalItens !== 1 ? "s" : ""}</p>
-                      <div className="mt-0.5 space-y-0.5">
-                        {r.cart_items.slice(0, 2).map((item, idx) => (
-                          <p key={idx} className="text-[10px] text-gray-400 truncate max-w-[200px]">
-                            {item.quantity}× {item.product_name}
-                          </p>
+                    <td className="px-4 py-3" style={{ minWidth: 280 }}>
+                      <div className="space-y-2">
+                        {r.cart_items.map((item, idx) => (
+                          <div key={idx}>
+                            <div className="flex items-baseline gap-2 flex-wrap">
+                              {item.sku && (
+                                <span className="font-mono text-xs bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded shrink-0">
+                                  {item.sku}
+                                </span>
+                              )}
+                              <span className="text-sm font-medium text-kc-dark">
+                                {item.product_name}
+                              </span>
+                            </div>
+                            <div className="text-xs text-gray-500 mt-0.5">
+                              {item.color && <span>{item.color} · </span>}
+                              {item.size && <span>{item.size} · </span>}
+                              <span>{item.quantity}× R$ {item.unit_price.toFixed(2)}</span>
+                            </div>
+                          </div>
                         ))}
-                        {r.cart_items.length > 2 && (
-                          <p className="text-[10px] text-gray-400">
-                            +{r.cart_items.length - 2} mais
-                          </p>
-                        )}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-right">
