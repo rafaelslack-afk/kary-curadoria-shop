@@ -306,10 +306,12 @@ export default function CheckoutPage() {
               amount: parseFloat(total.toFixed(2)),
               payer: {
                 email: form.email,
-                identification: {
-                  type: "CPF",
-                  number: form.cpf.replace(/\D/g, ""),
-                },
+                ...(form.cpf.replace(/\D/g, "").length === 11 && {
+                  identification: {
+                    type: "CPF",
+                    number: form.cpf.replace(/\D/g, ""),
+                  },
+                }),
               },
             },
             customization: {
@@ -505,13 +507,17 @@ export default function CheckoutPage() {
   // ── Validação por etapa ──
   function canProceed(): boolean {
     switch (step) {
-      case 0:
+      case 0: {
+        // CPF é opcional na etapa de identificação; valida só se preenchido
+        const cpfDigits = form.cpf.replace(/\D/g, "");
+        const cpfOk = cpfDigits.length === 0 || validarCPF(form.cpf);
         return !!(
           form.nome.trim() &&
           form.email.trim() &&
-          validarCPF(form.cpf) &&
+          cpfOk &&
           form.telefone.replace(/\D/g, "").length >= 10
         );
+      }
       case 1:
         return !!(
           form.cep.replace(/\D/g, "").length === 8 &&
@@ -524,6 +530,10 @@ export default function CheckoutPage() {
         return !!form.shippingOption;
       case 3:
         // Para credit_card o Brick tem seu próprio botão — apenas valida método selecionado
+        // Para boleto, CPF é obrigatório
+        if (form.paymentMethod === "boleto") {
+          return !!(form.paymentMethod && validarCPF(form.cpf));
+        }
         return !!form.paymentMethod;
       default:
         return false;
@@ -677,19 +687,19 @@ export default function CheckoutPage() {
                 <Field label="E-mail" required>
                   <input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="maria@exemplo.com" className={inputCls} />
                 </Field>
-                <Field label="CPF" required>
+                <Field label="CPF (opcional — necessário para NF)">
                   <input
                     type="text"
                     value={form.cpf}
                     onChange={(e) => {
                       const masked = maskCpf(e.target.value);
                       set("cpf", masked);
-                      // Limpa o erro enquanto o usuário está digitando
                       if (cpfError) setCpfError("");
                     }}
                     onBlur={() => {
-                      // Valida ao sair do campo (somente se já tem 11 dígitos)
-                      if (form.cpf.replace(/\D/g, "").length === 11 && !validarCPF(form.cpf)) {
+                      // Valida apenas se o campo foi preenchido
+                      const digits = form.cpf.replace(/\D/g, "");
+                      if (digits.length > 0 && digits.length === 11 && !validarCPF(form.cpf)) {
                         setCpfError("CPF inválido. Verifique os números digitados.");
                       } else {
                         setCpfError("");
@@ -870,11 +880,38 @@ export default function CheckoutPage() {
 
               {/* Boleto */}
               {form.paymentMethod === "boleto" && (
-                <div className="bg-amber-50 border border-amber-200 p-4 space-y-1">
-                  <p className="text-xs font-medium text-amber-800">Pagamento via Boleto</p>
-                  <p className="text-[11px] text-amber-700">
-                    O boleto será gerado após a confirmação. Prazo de vencimento: 3 dias corridos. A compensação pode levar até 2 dias úteis após o pagamento.
-                  </p>
+                <div className="space-y-4">
+                  <div className="bg-amber-50 border border-amber-200 p-4 space-y-1">
+                    <p className="text-xs font-medium text-amber-800">Pagamento via Boleto</p>
+                    <p className="text-[11px] text-amber-700">
+                      O boleto será gerado após a confirmação. Prazo de vencimento: 3 dias corridos. A compensação pode levar até 2 dias úteis após o pagamento.
+                    </p>
+                  </div>
+                  <Field label="CPF obrigatório para emissão do boleto" required>
+                    <input
+                      type="text"
+                      value={form.cpf}
+                      onChange={(e) => {
+                        const masked = maskCpf(e.target.value);
+                        set("cpf", masked);
+                        if (cpfError) setCpfError("");
+                      }}
+                      onBlur={() => {
+                        const digits = form.cpf.replace(/\D/g, "");
+                        if (digits.length === 11 && !validarCPF(form.cpf)) {
+                          setCpfError("CPF inválido. Verifique os números digitados.");
+                        } else {
+                          setCpfError("");
+                        }
+                      }}
+                      placeholder="000.000.000-00"
+                      inputMode="numeric"
+                      className={`${inputCls} ${cpfError ? "border-red-400" : ""}`}
+                    />
+                    {cpfError && (
+                      <p className="text-xs text-red-500 mt-1">{cpfError}</p>
+                    )}
+                  </Field>
                 </div>
               )}
 
