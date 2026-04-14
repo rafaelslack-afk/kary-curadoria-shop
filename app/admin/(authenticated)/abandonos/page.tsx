@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { ShoppingCart, Search, RotateCcw, MessageCircle } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 
@@ -45,7 +45,6 @@ function buildWhatsApp(phone: string | null, name: string | null): string {
   const digits = formatPhone(phone);
   if (!digits) return "";
   const numero = digits.startsWith("55") ? digits : `55${digits}`;
-  const nome = encodeURIComponent(name ?? "");
   const msg = encodeURIComponent(
     `Olá ${name ?? ""}, vi que você se interessou por peças da Kary Curadoria e não finalizou o pedido. Posso te ajudar?`
   );

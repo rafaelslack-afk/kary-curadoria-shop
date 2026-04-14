@@ -23,11 +23,6 @@ export function OrderShippedEmail({ orderNumber, customerName, trackingCode, car
 
   return (
     <html lang="pt-BR">
-      <head>
-        <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Pedido #{orderNumber} saiu para entrega — Kary Curadoria</title>
-      </head>
       <body style={{ margin: 0, padding: 0, backgroundColor: CREAM, fontFamily: "Georgia, 'Times New Roman', serif", WebkitTextSizeAdjust: "100%" }}>
 
         <table role="presentation" width="100%" cellPadding={0} cellSpacing={0} style={{ backgroundColor: CREAM }}>
