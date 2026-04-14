@@ -651,6 +651,44 @@ export default function CheckoutPage() {
     doSubmit();
   }
 
+  // ── Captura de abandono: fire-and-forget ao avançar da etapa 0 ──
+  function saveAbandonedCheckout() {
+    try {
+      const cartItems = items.map((i) => ({
+        product_id: i.productId,
+        product_name: i.productName,
+        variant_id: i.variantId,
+        sku: i.sku,
+        size: i.size,
+        color: i.color ?? null,
+        quantity: i.quantity,
+        unit_price: i.price,
+        image_url: i.image ?? null,
+      }));
+      fetch("/api/checkout/abandoned", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.nome,
+          email: form.email,
+          phone: form.telefone,
+          cart_items: cartItems,
+          cart_total: subtotal(),
+        }),
+      }).catch(() => {/* silencioso */});
+    } catch {
+      // Nunca bloquear o checkout
+    }
+  }
+
+  // ── Avançar etapa (com captura de abandono na etapa 0) ──
+  function handleContinue() {
+    if (step === 0) {
+      saveAbandonedCheckout();
+    }
+    setStep((s) => s + 1);
+  }
+
   if (items.length === 0) return null;
 
   return (
@@ -931,7 +969,7 @@ export default function CheckoutPage() {
 
             {step < 3 ? (
               <button
-                onClick={() => setStep((s) => s + 1)}
+                onClick={handleContinue}
                 disabled={!canProceed()}
                 className="flex items-center gap-2 bg-kc text-white text-[11px] tracking-[0.18em] uppercase px-6 py-3.5 hover:bg-kc-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >

@@ -389,6 +389,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ── 5b. Marcar abandono como recuperado (fire-and-forget) ───────────────
+    Promise.resolve(
+      admin
+        .from("abandoned_checkouts")
+        .update({ recovered: true, order_id: order.id, updated_at: new Date().toISOString() })
+        .eq("email", customer.email.trim().toLowerCase())
+        .eq("recovered", false)
+        .gte("created_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+    ).catch(() => {/* não bloquear o pedido */});
+
     // ── 6. Inserir itens do pedido ───────────────────────────────────────────
     const orderItems = items.map((i) => ({
       order_id: order.id,

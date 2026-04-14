@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   LayoutDashboard,
   Package,
@@ -17,6 +18,7 @@ import {
   LayoutTemplate,
   Menu,
   Home,
+  ShoppingBag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -82,6 +84,11 @@ const menuItems = [
     icon: Users,
   },
   {
+    href: "/admin/abandonos",
+    label: "Abandonos",
+    icon: ShoppingBag,
+  },
+  {
     href: "/admin/relatorios",
     label: "Relatórios",
     icon: BarChart3,
@@ -90,6 +97,17 @@ const menuItems = [
 
 export function AdminSidebar() {
   const pathname = usePathname();
+  const [abandonosCount, setAbandonosCount] = useState<number | null>(null);
+
+  // Busca contagem de abandonos não recuperados dos últimos 7 dias
+  useEffect(() => {
+    fetch("/api/admin/abandoned-checkouts?period=7d&status=abandoned")
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data)) setAbandonosCount(data.length);
+      })
+      .catch(() => {});
+  }, []);
 
   return (
     <aside className="w-64 bg-kc-dark min-h-screen flex flex-col">
@@ -112,6 +130,7 @@ export function AdminSidebar() {
             href === "/admin"
               ? pathname === "/admin"
               : pathname.startsWith(href);
+          const isAbandonos = href === "/admin/abandonos";
 
           return (
             <Link
@@ -125,7 +144,12 @@ export function AdminSidebar() {
               )}
             >
               <Icon size={18} strokeWidth={1.5} />
-              <span className="tracking-wide">{label}</span>
+              <span className="tracking-wide flex-1">{label}</span>
+              {isAbandonos && abandonosCount !== null && abandonosCount > 0 && (
+                <span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-none">
+                  {abandonosCount > 99 ? "99+" : abandonosCount}
+                </span>
+              )}
             </Link>
           );
         })}
