@@ -105,7 +105,7 @@ export function Footer() {
             <nav className="flex flex-wrap gap-4">
               {[
                 { href: "#", label: "Sobre nós" },
-                { href: "#", label: "Trocas e devoluções" },
+                { href: "/trocas-e-devolucoes", label: "Trocas e devoluções" },
                 { href: "#", label: "Política de privacidade" },
                 { href: "/rastrear", label: "Rastrear pedido" },
               ].map(({ href, label }) => (
