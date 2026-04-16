@@ -106,7 +106,7 @@ export function Footer() {
               {[
                 { href: "/sobre", label: "Sobre nós" },
                 { href: "/trocas-e-devolucoes", label: "Trocas e devoluções" },
-                { href: "#", label: "Política de privacidade" },
+                { href: "/politica-de-privacidade", label: "Política de privacidade" },
                 { href: "/rastrear", label: "Rastrear pedido" },
               ].map(({ href, label }) => (
                 <Link
