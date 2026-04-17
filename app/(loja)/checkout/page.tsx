@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Script from "next/script";
 import { useRouter } from "next/navigation";
-import { Check, ChevronRight, Loader2 } from "lucide-react";
+import { Check, ChevronRight, Loader2, Info, X } from "lucide-react";
 import { useCartStore } from "@/lib/store/cart";
 import { calculateCouponDiscount } from "@/lib/coupons";
 import { formatCurrency } from "@/lib/utils";
@@ -26,7 +26,7 @@ interface FormData {
   email: string;
   cpf: string;
   telefone: string;
-  // Step 1 — Endereço
+  // Step 1 — Endereço + Frete
   cep: string;
   logradouro: string;
   numero: string;
@@ -34,9 +34,8 @@ interface FormData {
   bairro: string;
   cidade: string;
   estado: string;
-  // Step 2 — Frete
   shippingOption: ShippingOption | null;
-  // Step 3 — Pagamento
+  // Step 2 — Pagamento
   paymentMethod: "pix" | "credit_card" | "boleto" | "";
 }
 
@@ -48,7 +47,7 @@ const INITIAL_FORM: FormData = {
   paymentMethod: "",
 };
 
-const STEPS = ["Identificação", "Endereço", "Frete", "Pagamento"];
+const STEPS = ["Identificação", "Endereço e Entrega", "Pagamento"];
 
 // ── Máscaras ──────────────────────────────────────────────────────────────────
 
@@ -66,20 +65,17 @@ function maskCep(v: string) {
   return v.replace(/\D/g, "").slice(0, 8).replace(/(\d{5})(\d)/, "$1-$2");
 }
 
-// ── Validação de CPF (algoritmo dos dígitos verificadores) ────────────────────
+// ── Validação de CPF ──────────────────────────────────────────────────────────
 
 function validarCPF(cpf: string): boolean {
   const c = cpf.replace(/\D/g, "");
   if (c.length !== 11) return false;
-  // Rejeita sequências como 111.111.111-11
   if (/^(\d)\1{10}$/.test(c)) return false;
-
   let sum = 0;
   for (let i = 0; i < 9; i++) sum += parseInt(c[i]) * (10 - i);
   let rev = 11 - (sum % 11);
   if (rev >= 10) rev = 0;
   if (rev !== parseInt(c[9])) return false;
-
   sum = 0;
   for (let i = 0; i < 10; i++) sum += parseInt(c[i]) * (11 - i);
   rev = 11 - (sum % 11);
@@ -161,9 +157,7 @@ function OrderSummary({ shipping, discount }: { shipping: ShippingOption | null;
   );
 }
 
-// ── Chave pública MP (client-side) ────────────────────────────────────────────
-// Usa variável única NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY (definida na Vercel com a
-// key correta para cada ambiente). Fallback legacy por ENV para compatibilidade.
+// ── Chave pública MP ──────────────────────────────────────────────────────────
 const MP_ENV = process.env.NEXT_PUBLIC_MERCADOPAGO_ENV ?? "sandbox";
 const MP_PUBLIC_KEY =
   process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY ||
@@ -188,29 +182,31 @@ export default function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [cpfError, setCpfError] = useState("");
-  // Impede o guard "carrinho vazio → /carrinho" de disparar após o pedido ser confirmado
   const [redirecting, setRedirecting] = useState(false);
+
+  // CEP pré-preenchido vindo da simulação na página do produto
+  const [cepFromSession, setCepFromSession] = useState(false);
+
+  // Ref para auto-focar o campo "número" quando o endereço vier do sessionStorage
+  const numeroRef = useRef<HTMLInputElement>(null);
 
   // Mercado Pago Bricks
   const [mpReady, setMpReady] = useState(false);
   const [brickReady, setBrickReady] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const brickControllerRef = useRef<any>(null);
-  // Snapshot dos dados do pedido para a closure do onSubmit do Brick
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const orderSnapshotRef = useRef<any>(null);
 
-  // Redireciona para o carrinho quando este fica vazio,
-  // EXCETO após um pedido ser confirmado com sucesso.
   useEffect(() => {
     if (items.length === 0 && !redirecting) router.replace("/carrinho");
   }, [items, router, redirecting]);
 
-  // ── GA4: begin_checkout + Meta Pixel: InitiateCheckout ───────────────────
+  // ── GA4 / Meta Pixel ──
   useEffect(() => {
     if (items.length === 0) return;
-    trackEvent('begin_checkout', {
-      currency: 'BRL',
+    trackEvent("begin_checkout", {
+      currency: "BRL",
       value: subtotal(),
       items: items.map((item) => ({
         item_id: item.sku,
@@ -219,16 +215,38 @@ export default function CheckoutPage() {
         quantity: item.quantity,
       })),
     });
-    pixelEvent('InitiateCheckout', {
+    pixelEvent("InitiateCheckout", {
       num_items: items.length,
       value: subtotal(),
-      currency: 'BRL',
+      currency: "BRL",
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // MP.js é carregado via <Script> no JSX com onLoad → setMpReady(true)
-  // (ver elemento <Script> no return abaixo)
+  // ── Pré-preenchimento com CEP simulado na página do produto ──
+  useEffect(() => {
+    if (step !== 1) return;
+    try {
+      const raw = sessionStorage.getItem("kary_cep_simulado");
+      if (!raw) return;
+      const saved = JSON.parse(raw) as {
+        cep: string; logradouro: string; bairro: string; cidade: string; estado: string;
+      };
+      // Pré-preencher sem sobrescrever caso o usuário já digitou algo
+      setForm((f) => ({
+        ...f,
+        cep: f.cep || maskCep(saved.cep),
+        logradouro: f.logradouro || saved.logradouro,
+        bairro: f.bairro || saved.bairro,
+        cidade: f.cidade || saved.cidade,
+        estado: f.estado || saved.estado,
+      }));
+      setCepFromSession(true);
+      // Foco no campo número após um tick (DOM já renderizado)
+      setTimeout(() => numeroRef.current?.focus(), 50);
+    } catch { /* sessionStorage indisponível */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
 
   function set(field: keyof FormData, value: string | ShippingOption | null) {
     setForm((f) => ({ ...f, [field]: value }));
@@ -237,25 +255,23 @@ export default function CheckoutPage() {
   const discount = calculateCouponDiscount(subtotal(), appliedCoupon);
   const total = subtotal() - discount + (form.shippingOption?.preco ?? 0);
 
-  // ── Inicializar MP Payment Brick ──
+  // ── MP Brick (etapa 2 — Pagamento) ──
   useEffect(() => {
-    // Destruir Brick anterior ao mudar etapa, método ou valor
     if (brickControllerRef.current) {
       try { brickControllerRef.current.unmount(); } catch { /* ignore */ }
       brickControllerRef.current = null;
       setBrickReady(false);
     }
 
-    if (!mpReady || step !== 3 || form.paymentMethod !== "credit_card") return;
+    if (!mpReady || step !== 2 || form.paymentMethod !== "credit_card") return;
 
     if (!MP_PUBLIC_KEY) {
-      console.warn("[MP Brick] NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY não configurada (deve começar com TEST-)");
+      console.warn("[MP Brick] NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY não configurada");
       return;
     }
 
     console.log("[MP Brick] Iniciando... total:", total, "publicKey prefix:", MP_PUBLIC_KEY.slice(0, 8));
 
-    // Atualiza snapshot dos dados do pedido para a closure do onSubmit
     orderSnapshotRef.current = {
       customer: {
         nome: form.nome, email: form.email,
@@ -278,7 +294,6 @@ export default function CheckoutPage() {
     let cancelled = false;
 
     (async () => {
-      // Aguarda container estar no DOM
       let retries = 0;
       while (!document.getElementById("paymentBrick_container") && retries < 20) {
         await new Promise((r) => setTimeout(r, 100));
@@ -288,10 +303,9 @@ export default function CheckoutPage() {
 
       const containerEl = document.getElementById("paymentBrick_container");
       if (!containerEl) {
-        console.error("[MP Brick] Container #paymentBrick_container não encontrado após 2s.");
+        console.error("[MP Brick] Container não encontrado após 2s.");
         return;
       }
-      console.log("[MP Brick] Container encontrado, criando Brick...");
 
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -307,18 +321,12 @@ export default function CheckoutPage() {
               payer: {
                 email: form.email,
                 ...(form.cpf.replace(/\D/g, "").length === 11 && {
-                  identification: {
-                    type: "CPF",
-                    number: form.cpf.replace(/\D/g, ""),
-                  },
+                  identification: { type: "CPF", number: form.cpf.replace(/\D/g, "") },
                 }),
               },
             },
             customization: {
-              paymentMethods: {
-                creditCard: "all",
-                debitCard: "all",
-              },
+              paymentMethods: { creditCard: "all", debitCard: "all" },
               visual: {
                 style: {
                   theme: "default",
@@ -338,7 +346,6 @@ export default function CheckoutPage() {
               },
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               onSubmit: async ({ formData }: { selectedPaymentMethod: string; formData: any }) => {
-                console.log("[MP Brick] onSubmit formData:", JSON.stringify(formData).slice(0, 120));
                 const snap = orderSnapshotRef.current;
                 if (!snap) return;
                 setSubmitting(true);
@@ -353,10 +360,7 @@ export default function CheckoutPage() {
                     preco: snap.shipping.preco,
                     prazo: snap.shipping.prazo,
                   },
-                  payment: {
-                    method: "credit_card",
-                    brickFormData: formData,
-                  },
+                  payment: { method: "credit_card", brickFormData: formData },
                   items: snap.items.map((i: typeof snap.items[0]) => ({
                     variantId: i.variantId,
                     productId: i.productId,
@@ -380,15 +384,12 @@ export default function CheckoutPage() {
                   const data = await res.json();
 
                   if (!res.ok || data.error) {
-                    // Código 2067 do MP = CPF inválido matematicamente
                     if (
                       data.code === "INVALID_CPF" ||
                       data.error?.toLowerCase().includes("cpf") ||
                       data.error?.toLowerCase().includes("identification")
                     ) {
-                      setSubmitError(
-                        "CPF inválido para pagamento. Verifique se o CPF informado está correto."
-                      );
+                      setSubmitError("CPF inválido para pagamento. Verifique se o CPF informado está correto.");
                     } else {
                       setSubmitError(data.error ?? "Erro ao processar pagamento.");
                     }
@@ -396,7 +397,6 @@ export default function CheckoutPage() {
                     return;
                   }
 
-                  // Sucesso no cartão → redirecionar
                   setRedirecting(true);
                   sessionStorage.setItem("kvo-order", JSON.stringify({
                     orderId: data.orderId,
@@ -437,7 +437,7 @@ export default function CheckoutPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mpReady, step, form.paymentMethod, total]);
 
-  // ── CEP auto-fill ──
+  // ── CEP auto-fill (digitação manual) ──
   const fetchCep = useCallback(async (cep: string) => {
     const digits = cep.replace(/\D/g, "");
     if (digits.length !== 8) return;
@@ -458,7 +458,7 @@ export default function CheckoutPage() {
     }
   }, []);
 
-  // ── Cálculo de frete (Melhor Envio) ──
+  // ── Cálculo de frete ──
   const fetchShipping = useCallback(
     async (cep: string) => {
       const digits = cep.replace(/\D/g, "");
@@ -496,7 +496,7 @@ export default function CheckoutPage() {
     [items]
   );
 
-  // Disparar cálculo de frete após preencher CEP e cidade
+  // Dispara cálculo de frete ao ter CEP + cidade (digitação manual ou pré-preenchimento)
   useEffect(() => {
     const digits = form.cep.replace(/\D/g, "");
     if (digits.length === 8 && form.cidade) {
@@ -508,7 +508,6 @@ export default function CheckoutPage() {
   function canProceed(): boolean {
     switch (step) {
       case 0: {
-        // CPF é opcional na etapa de identificação; valida só se preenchido
         const cpfDigits = form.cpf.replace(/\D/g, "");
         const cpfOk = cpfDigits.length === 0 || validarCPF(form.cpf);
         return !!(
@@ -519,18 +518,16 @@ export default function CheckoutPage() {
         );
       }
       case 1:
+        // Endereço completo + número + frete selecionado
         return !!(
           form.cep.replace(/\D/g, "").length === 8 &&
           form.logradouro &&
           form.numero &&
           form.cidade &&
-          form.estado
+          form.estado &&
+          form.shippingOption
         );
       case 2:
-        return !!form.shippingOption;
-      case 3:
-        // Para credit_card o Brick tem seu próprio botão — apenas valida método selecionado
-        // Para boleto, CPF é obrigatório
         if (form.paymentMethod === "boleto") {
           return !!(form.paymentMethod && validarCPF(form.cpf));
         }
@@ -540,7 +537,7 @@ export default function CheckoutPage() {
     }
   }
 
-  // ── Submissão (PIX / Boleto) — credit_card é tratado pelo Brick ──
+  // ── Submissão (PIX / Boleto) ──
   async function doSubmit() {
     setSubmitting(true);
     setSubmitError("");
@@ -568,9 +565,7 @@ export default function CheckoutPage() {
           preco: form.shippingOption!.preco,
           prazo: form.shippingOption!.prazo,
         },
-        payment: {
-          method: form.paymentMethod,
-        },
+        payment: { method: form.paymentMethod },
         items: items.map((i) => ({
           variantId: i.variantId,
           productId: i.productId,
@@ -598,15 +593,10 @@ export default function CheckoutPage() {
         return;
       }
 
-      // Captura o total ANTES de limpar o carrinho (subtotal() retorna 0 depois)
       const orderTotal = subtotal() - discount + form.shippingOption!.preco;
-
-      // Marca como redirecionando ANTES de limpar o carrinho para
-      // evitar que o guard "carrinho vazio" dispare e sobrescreva a navegação
       setRedirecting(true);
 
       if (form.paymentMethod === "pix") {
-        // Salva no sessionStorage ANTES de limpar o carrinho
         sessionStorage.setItem("kvo-pix", JSON.stringify({
           orderId: data.orderId,
           qrCode: data.qrCode,
@@ -616,7 +606,6 @@ export default function CheckoutPage() {
           orderNumber: data.orderNumber,
         }));
         clearCart();
-        // order_id na URL = fallback caso sessionStorage seja perdido
         router.push(`/checkout/pix?order_id=${data.orderId}`);
       } else if (form.paymentMethod === "boleto") {
         sessionStorage.setItem("kvo-boleto", JSON.stringify({
@@ -645,13 +634,11 @@ export default function CheckoutPage() {
     }
   }
 
-  // ── Clique no botão Confirmar (PIX / Boleto apenas) ──
-  // Para credit_card o Brick tem seu próprio botão de submit.
   function handleConfirm() {
     doSubmit();
   }
 
-  // ── Captura de abandono: fire-and-forget ao avançar da etapa 0 ──
+  // ── Captura de abandono ──
   function saveAbandonedCheckout() {
     try {
       const cartItems = items.map((i) => ({
@@ -675,26 +662,33 @@ export default function CheckoutPage() {
           cart_items: cartItems,
           cart_total: subtotal(),
         }),
-      }).catch(() => {/* silencioso */});
-    } catch {
-      // Nunca bloquear o checkout
-    }
+      }).catch(() => {});
+    } catch { /* nunca bloquear o checkout */ }
   }
 
-  // ── Avançar etapa (com captura de abandono na etapa 0) ──
+  // ── Avançar etapa ──
   function handleContinue() {
-    if (step === 0) {
-      saveAbandonedCheckout();
+    if (step === 0) saveAbandonedCheckout();
+    // Ao avançar da etapa de endereço para pagamento, limpa o CEP salvo
+    if (step === 1) {
+      try { sessionStorage.removeItem("kary_cep_simulado"); } catch { /* ignore */ }
     }
     setStep((s) => s + 1);
+  }
+
+  // Limpar pré-preenchimento e permitir novo CEP
+  function handleAlterarCep() {
+    setCepFromSession(false);
+    setForm((f) => ({ ...f, cep: "", logradouro: "", bairro: "", cidade: "", estado: "", numero: "", shippingOption: null }));
+    setShippingOptions([]);
+    setShippingError("");
+    try { sessionStorage.removeItem("kary_cep_simulado"); } catch { /* ignore */ }
   }
 
   if (items.length === 0) return null;
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-8">
-      {/* SDK do Mercado Pago — carregado via next/script para garantir
-          que onLoad dispara apenas após o objeto window.MercadoPago estar pronto */}
       <Script
         src="https://sdk.mercadopago.com/js/v2"
         strategy="afterInteractive"
@@ -729,13 +723,8 @@ export default function CheckoutPage() {
                   <input
                     type="text"
                     value={form.cpf}
-                    onChange={(e) => {
-                      const masked = maskCpf(e.target.value);
-                      set("cpf", masked);
-                      if (cpfError) setCpfError("");
-                    }}
+                    onChange={(e) => { const masked = maskCpf(e.target.value); set("cpf", masked); if (cpfError) setCpfError(""); }}
                     onBlur={() => {
-                      // Valida apenas se o campo foi preenchido
                       const digits = form.cpf.replace(/\D/g, "");
                       if (digits.length > 0 && digits.length === 11 && !validarCPF(form.cpf)) {
                         setCpfError("CPF inválido. Verifique os números digitados.");
@@ -747,9 +736,7 @@ export default function CheckoutPage() {
                     inputMode="numeric"
                     className={`${inputCls} ${cpfError ? "border-red-400" : ""}`}
                   />
-                  {cpfError && (
-                    <p className="text-xs text-red-500 mt-1">{cpfError}</p>
-                  )}
+                  {cpfError && <p className="text-xs text-red-500 mt-1">{cpfError}</p>}
                 </Field>
                 <Field label="Telefone / WhatsApp" required>
                   <input type="tel" value={form.telefone} onChange={(e) => set("telefone", maskPhone(e.target.value))} placeholder="(11) 99999-9999" className={inputCls} />
@@ -758,31 +745,70 @@ export default function CheckoutPage() {
             </div>
           )}
 
-          {/* ── STEP 1 — Endereço ── */}
+          {/* ── STEP 1 — Endereço + Entrega ── */}
           {step === 1 && (
-            <div className="space-y-4">
-              <h2 className="font-serif text-lg font-medium text-kc-dark">Endereço de entrega</h2>
+            <div className="space-y-5">
+              <h2 className="font-serif text-lg font-medium text-kc-dark">Endereço e entrega</h2>
+
+              {/* Banner de pré-preenchimento */}
+              {cepFromSession && (
+                <div className="flex items-start gap-3 px-4 py-3 rounded border border-[#A0622A]/20 bg-[#F5F1EA]">
+                  <Info size={14} className="text-[#A0622A] shrink-0 mt-0.5" />
+                  <p className="text-xs text-[#5C3317]/70 flex-1 leading-relaxed">
+                    Endereço preenchido com base na sua simulação de frete. Confirme os dados antes de continuar.
+                  </p>
+                  <button
+                    onClick={handleAlterarCep}
+                    className="flex items-center gap-1 text-[10px] tracking-wide text-[#A0622A] hover:text-[#5C3317] transition-colors shrink-0 uppercase"
+                  >
+                    <X size={11} />
+                    Alterar CEP
+                  </button>
+                </div>
+              )}
+
+              {/* CEP */}
               <Field label="CEP" required>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     value={form.cep}
-                    onChange={(e) => { const v = maskCep(e.target.value); set("cep", v); if (v.replace(/\D/g, "").length === 8) fetchCep(v); }}
+                    onChange={(e) => {
+                      const v = maskCep(e.target.value);
+                      set("cep", v);
+                      setCepFromSession(false);
+                      if (v.replace(/\D/g, "").length === 8) fetchCep(v);
+                    }}
                     placeholder="00000-000"
                     inputMode="numeric"
                     className={`${inputCls} flex-1`}
                   />
-                  {cepLoading && <div className="flex items-center px-3 border border-kc-line"><Loader2 size={14} className="animate-spin text-kc-muted" /></div>}
+                  {cepLoading && (
+                    <div className="flex items-center px-3 border border-kc-line">
+                      <Loader2 size={14} className="animate-spin text-kc-muted" />
+                    </div>
+                  )}
                 </div>
               </Field>
+
+              {/* Logradouro + Número */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <Field label="Logradouro" className="sm:col-span-2" required>
                   <input type="text" value={form.logradouro} onChange={(e) => set("logradouro", e.target.value)} placeholder="Rua das Flores" className={inputCls} />
                 </Field>
                 <Field label="Número" required>
-                  <input type="text" value={form.numero} onChange={(e) => set("numero", e.target.value)} placeholder="123" className={inputCls} />
+                  <input
+                    ref={numeroRef}
+                    type="text"
+                    value={form.numero}
+                    onChange={(e) => set("numero", e.target.value)}
+                    placeholder="123"
+                    className={inputCls}
+                  />
                 </Field>
               </div>
+
+              {/* Complemento + Bairro */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Field label="Complemento">
                   <input type="text" value={form.complemento} onChange={(e) => set("complemento", e.target.value)} placeholder="Apto 42 (opcional)" className={inputCls} />
@@ -791,6 +817,8 @@ export default function CheckoutPage() {
                   <input type="text" value={form.bairro} onChange={(e) => set("bairro", e.target.value)} className={inputCls} />
                 </Field>
               </div>
+
+              {/* Cidade + Estado */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <Field label="Cidade" className="sm:col-span-2">
                   <input type="text" value={form.cidade} onChange={(e) => set("cidade", e.target.value)} className={inputCls} />
@@ -799,76 +827,101 @@ export default function CheckoutPage() {
                   <input type="text" value={form.estado} onChange={(e) => set("estado", e.target.value.toUpperCase().slice(0, 2))} placeholder="SP" className={inputCls} />
                 </Field>
               </div>
-            </div>
-          )}
 
-          {/* ── STEP 2 — Frete ── */}
-          {step === 2 && (
-            <div className="space-y-4">
-              <h2 className="font-serif text-lg font-medium text-kc-dark">Escolha o frete</h2>
-              <p className="text-xs text-kc-muted">
-                Entrega para: {form.logradouro}, {form.numero} — {form.cidade}/{form.estado} · CEP {form.cep}
-              </p>
+              {/* ── Opções de frete (inline) ── */}
+              <div className="pt-2">
+                <p className="text-[10px] tracking-[0.18em] text-kc-muted uppercase mb-3">Escolha o envio</p>
 
-              {shippingLoading && (
-                <div className="flex items-center gap-2 text-xs text-kc-muted py-4">
-                  <Loader2 size={14} className="animate-spin" />
-                  Calculando opções de frete…
-                </div>
-              )}
-
-              {shippingError && !shippingLoading && (
-                <div className="border border-red-200 bg-red-50 p-4 text-xs text-red-600">
-                  <p className="font-medium mb-1">Erro ao calcular frete</p>
-                  <p>{shippingError}</p>
-                  <button onClick={() => fetchShipping(form.cep)} className="mt-2 underline underline-offset-2 hover:text-red-800">Tentar novamente</button>
-                </div>
-              )}
-
-              {!shippingLoading && shippingOptions.length > 0 && (
-                <div className="space-y-3">
-                  {shippingOptions.map((opt) => {
-                    const selected = form.shippingOption?.id === opt.id;
-                    return (
-                      <button
-                        key={opt.id}
-                        onClick={() => set("shippingOption", opt)}
-                        className={`w-full flex items-center justify-between p-4 border text-left transition-colors ${selected ? "border-kc bg-kc/5" : "border-kc-line hover:border-kc-muted"}`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${selected ? "border-kc" : "border-kc-line"}`}>
-                            {selected && <div className="w-2 h-2 rounded-full bg-kc" />}
+                {/* Skeleton enquanto calcula */}
+                {shippingLoading && (
+                  <div className="space-y-3">
+                    {[0, 1].map((i) => (
+                      <div key={i} className="border border-kc-line p-4 animate-pulse">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-4 h-4 rounded-full bg-kc-line" />
+                            <div className="space-y-1.5">
+                              <div className="h-3 w-32 bg-kc-line rounded" />
+                              <div className="h-2.5 w-24 bg-kc-line/60 rounded" />
+                            </div>
                           </div>
-                          <div>
-                            <p className="text-sm font-medium text-kc-dark">{opt.company} · {opt.name}</p>
-                            <p className="text-[10px] text-kc-muted">
-                              Entrega em até {opt.prazo} dia{opt.prazo !== 1 ? "s" : ""} útil{opt.prazo !== 1 ? "s" : ""}
-                            </p>
-                          </div>
+                          <div className="h-3 w-14 bg-kc-line rounded" />
                         </div>
-                        <span className="text-sm font-medium text-kc">{formatCurrency(opt.preco)}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+                      </div>
+                    ))}
+                  </div>
+                )}
 
-              {!shippingLoading && !shippingError && shippingOptions.length === 0 && (
-                <p className="text-xs text-kc-muted py-4">Calculando opções de frete para o seu CEP…</p>
-              )}
+                {/* Erro */}
+                {shippingError && !shippingLoading && (
+                  <div className="border border-red-200 bg-red-50 p-4 text-xs text-red-600">
+                    <p className="font-medium mb-1">Não foi possível calcular o frete</p>
+                    <p>{shippingError}</p>
+                    <button
+                      onClick={() => fetchShipping(form.cep)}
+                      className="mt-2 underline underline-offset-2 hover:text-red-800"
+                    >
+                      Tentar novamente
+                    </button>
+                  </div>
+                )}
+
+                {/* Opções */}
+                {!shippingLoading && shippingOptions.length > 0 && (
+                  <div className="space-y-3">
+                    {shippingOptions.map((opt) => {
+                      const selected = form.shippingOption?.id === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          onClick={() => set("shippingOption", opt)}
+                          className={`w-full flex items-center justify-between p-4 border text-left transition-colors ${selected ? "border-kc bg-kc/5" : "border-kc-line hover:border-kc-muted"}`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${selected ? "border-kc" : "border-kc-line"}`}>
+                              {selected && <div className="w-2 h-2 rounded-full bg-kc" />}
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-kc-dark">{opt.company} · {opt.name}</p>
+                              <p className="text-[10px] text-kc-muted">
+                                Entrega em até {opt.prazo} dia{opt.prazo !== 1 ? "s" : ""} útil{opt.prazo !== 1 ? "s" : ""}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {selected && (
+                              <span className="text-[9px] tracking-wider text-kc uppercase">Selecionado</span>
+                            )}
+                            <span className="text-sm font-medium text-kc">{formatCurrency(opt.preco)}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Estado inicial — CEP ainda não preenchido */}
+                {!shippingLoading && !shippingError && shippingOptions.length === 0 && form.cep.replace(/\D/g, "").length < 8 && (
+                  <p className="text-xs text-kc-muted py-2">Preencha o CEP para ver as opções de entrega.</p>
+                )}
+
+                {/* CEP preenchido mas aguardando cidade para disparar */}
+                {!shippingLoading && !shippingError && shippingOptions.length === 0 && form.cep.replace(/\D/g, "").length === 8 && !form.cidade && (
+                  <p className="text-xs text-kc-muted py-2">Aguardando dados do endereço…</p>
+                )}
+              </div>
             </div>
           )}
 
-          {/* ── STEP 3 — Pagamento ── */}
-          {step === 3 && (
+          {/* ── STEP 2 — Pagamento ── */}
+          {step === 2 && (
             <div className="space-y-5">
               <h2 className="font-serif text-lg font-medium text-kc-dark">Forma de pagamento</h2>
 
-              {/* Seletor de método */}
               <div className="grid grid-cols-3 gap-3">
                 {(["pix", "credit_card", "boleto"] as const).map((m) => {
                   const labels = { pix: "PIX", credit_card: "Cartão", boleto: "Boleto" };
-                  const descs = { pix: "Aprovação instantânea", credit_card: "Até 3x sem juros", boleto: "Vence em 3 dias" };
+                  const descs  = { pix: "Aprovação instantânea", credit_card: "Até 3x sem juros", boleto: "Vence em 3 dias" };
                   const selected = form.paymentMethod === m;
                   return (
                     <button
@@ -883,7 +936,6 @@ export default function CheckoutPage() {
                 })}
               </div>
 
-              {/* PIX */}
               {form.paymentMethod === "pix" && (
                 <div className="bg-emerald-50 border border-emerald-200 p-4 space-y-1">
                   <p className="text-xs font-medium text-emerald-800">Pagamento via PIX</p>
@@ -893,7 +945,6 @@ export default function CheckoutPage() {
                 </div>
               )}
 
-              {/* Cartão — MP Payment Brick */}
               {form.paymentMethod === "credit_card" && (
                 <div className="space-y-3">
                   {!brickReady && (
@@ -902,7 +953,6 @@ export default function CheckoutPage() {
                       Carregando formulário seguro…
                     </div>
                   )}
-                  {/* Container onde o Brick injeta o formulário completo com botão de submit */}
                   <div id="paymentBrick_container" />
                   {submitting && (
                     <div className="flex items-center gap-2 text-xs text-kc-muted">
@@ -916,7 +966,6 @@ export default function CheckoutPage() {
                 </div>
               )}
 
-              {/* Boleto */}
               {form.paymentMethod === "boleto" && (
                 <div className="space-y-4">
                   <div className="bg-amber-50 border border-amber-200 p-4 space-y-1">
@@ -929,11 +978,7 @@ export default function CheckoutPage() {
                     <input
                       type="text"
                       value={form.cpf}
-                      onChange={(e) => {
-                        const masked = maskCpf(e.target.value);
-                        set("cpf", masked);
-                        if (cpfError) setCpfError("");
-                      }}
+                      onChange={(e) => { const masked = maskCpf(e.target.value); set("cpf", masked); if (cpfError) setCpfError(""); }}
                       onBlur={() => {
                         const digits = form.cpf.replace(/\D/g, "");
                         if (digits.length === 11 && !validarCPF(form.cpf)) {
@@ -946,9 +991,7 @@ export default function CheckoutPage() {
                       inputMode="numeric"
                       className={`${inputCls} ${cpfError ? "border-red-400" : ""}`}
                     />
-                    {cpfError && (
-                      <p className="text-xs text-red-500 mt-1">{cpfError}</p>
-                    )}
+                    {cpfError && <p className="text-xs text-red-500 mt-1">{cpfError}</p>}
                   </Field>
                 </div>
               )}
@@ -967,7 +1010,7 @@ export default function CheckoutPage() {
               </button>
             ) : <div />}
 
-            {step < 3 ? (
+            {step < 2 ? (
               <button
                 onClick={handleContinue}
                 disabled={!canProceed()}
@@ -975,16 +1018,15 @@ export default function CheckoutPage() {
               >
                 Continuar <ChevronRight size={13} />
               </button>
-            ) : form.paymentMethod === "credit_card" ? (
-              // Credit card: o Brick tem seu próprio botão de submit — não exibimos o nosso
-              null
-            ) : (
+            ) : form.paymentMethod === "credit_card" ? null : (
               <button
                 onClick={handleConfirm}
                 disabled={!canProceed() || submitting}
                 className="flex items-center gap-2 bg-kc text-white text-[11px] tracking-[0.18em] uppercase px-6 py-3.5 hover:bg-kc-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                {submitting ? <><Loader2 size={13} className="animate-spin" /> Processando…</> : <><Check size={13} /> Confirmar pedido</>}
+                {submitting
+                  ? <><Loader2 size={13} className="animate-spin" /> Processando…</>
+                  : <><Check size={13} /> Confirmar pedido</>}
               </button>
             )}
           </div>
@@ -1003,7 +1045,6 @@ export default function CheckoutPage() {
 
 const inputCls =
   "w-full border border-kc-line bg-white px-3 py-2.5 text-sm text-kc-dark placeholder-kc-muted/50 focus:outline-none focus:border-kc";
-
 
 function Field({
   label,

@@ -280,6 +280,20 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
       }
       setCepInfo({ city: cepData.localidade, state: cepData.uf });
 
+      // Persiste o endereço para pré-preencher o checkout
+      try {
+        sessionStorage.setItem(
+          "kary_cep_simulado",
+          JSON.stringify({
+            cep: cepLimpo,
+            logradouro: cepData.logradouro ?? "",
+            bairro: cepData.bairro ?? "",
+            cidade: cepData.localidade ?? "",
+            estado: cepData.uf ?? "",
+          })
+        );
+      } catch { /* sessionStorage pode estar bloqueado em alguns navegadores */ }
+
       const res = await fetch("/api/shipping/melhorenvio", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
