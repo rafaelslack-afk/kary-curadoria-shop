@@ -45,8 +45,16 @@ function MercadoPagoBrickInner({
   submitting,
 }: MercadoPagoBrickProps) {
   const [brickReady, setBrickReady] = useState(false);
+  const [supportsPaymentRequest, setSupportsPaymentRequest] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const controllerRef = useRef<any>(null);
+
+  // Detecta suporte a Google Pay / Apple Pay (Payment Request API)
+  useEffect(() => {
+    if (typeof window !== "undefined" && "PaymentRequest" in window) {
+      setSupportsPaymentRequest(true);
+    }
+  }, []);
 
   // Ref com o handler mais recente — sem causar re-render nem re-montar o Brick
   const onFormSubmitRef = useRef(onFormSubmit);
@@ -103,7 +111,15 @@ function MercadoPagoBrickInner({
               },
             },
             customization: {
-              paymentMethods: { creditCard: "all", debitCard: "all" },
+              paymentMethods: {
+                creditCard: "all",
+                debitCard: "all",
+                // Google Pay e Apple Pay aparecem nativamente no Brick quando
+                // o dispositivo/navegador suporta — evita digitação manual
+                // no iframe (onde o autofill do Chrome é bloqueado).
+                googlePay: "all",
+                applePay: "all",
+              },
               visual: {
                 style: {
                   theme: "default",
@@ -169,6 +185,18 @@ function MercadoPagoBrickInner({
       )}
       {/* Container do iframe do Mercado Pago — sem autocomplete="off" */}
       <div id="paymentBrick_container" />
+
+      {/* Dica orientativa para evitar digitação manual no iframe */}
+      {brickReady && supportsPaymentRequest && (
+        <div className="flex items-start gap-2 mt-3 px-3 py-2 bg-[#F5F1EA] border border-[#A0622A]/20 rounded text-[11px] text-[#5C3317]/80 leading-relaxed">
+          <span className="text-base leading-none">💡</span>
+          <span>
+            <strong className="text-[#5C3317]">Dica:</strong> use o botão Google Pay ou Apple Pay
+            acima para pagar sem digitar os dados do cartão.
+          </span>
+        </div>
+      )}
+
       {submitting && (
         <div className="flex items-center gap-2 text-xs text-kc-muted mt-2">
           <Loader2 size={12} className="animate-spin" />

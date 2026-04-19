@@ -10,6 +10,7 @@ import { formatCurrency } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
 import { pixelEvent } from "@/lib/pixel";
 import MercadoPagoBrick from "@/components/loja/checkout/MercadoPagoBrick";
+import { validarCPF } from "@/lib/validations";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -64,32 +65,6 @@ function maskPhone(v: string) {
 }
 function maskCep(v: string) {
   return v.replace(/\D/g, "").slice(0, 8).replace(/(\d{5})(\d)/, "$1-$2");
-}
-
-// ── Validação de CPF ──────────────────────────────────────────────────────────
-
-function validarCPF(cpf: string): boolean {
-  const c = cpf.replace(/\D/g, "");
-  if (c.length !== 11) return false;
-  if (/^(\d)\1{10}$/.test(c)) return false;
-
-  let sum = 0;
-  for (let i = 0; i < 9; i++) {
-    sum += parseInt(c[i]) * (10 - i);
-  }
-  let rev = 11 - (sum % 11);
-  const d1 = rev >= 10 ? 0 : rev;
-  if (d1 !== parseInt(c[9])) return false;
-
-  sum = 0;
-  for (let i = 0; i < 10; i++) {
-    sum += parseInt(c[i]) * (11 - i);
-  }
-  rev = 11 - (sum % 11);
-  const d2 = rev >= 10 ? 0 : rev;
-  if (d2 !== parseInt(c[10])) return false;
-
-  return true;
 }
 
 // ── Step indicator ────────────────────────────────────────────────────────────
@@ -623,6 +598,7 @@ export default function CheckoutPage() {
                     onChange={(e) => { const masked = maskCpf(e.target.value); set("cpf", masked); if (cpfError) setCpfError(""); }}
                     onBlur={() => {
                       const digits = form.cpf.replace(/\D/g, "");
+                      console.log("[CPF field — step 0] form.cpf value:", form.cpf, "| digits:", digits);
                       if (digits.length > 0 && digits.length === 11 && !validarCPF(form.cpf)) {
                         setCpfError("CPF inválido. Verifique os números digitados.");
                       } else {
@@ -870,6 +846,7 @@ export default function CheckoutPage() {
                       onChange={(e) => { const masked = maskCpf(e.target.value); set("cpf", masked); if (cpfError) setCpfError(""); }}
                       onBlur={() => {
                         const digits = form.cpf.replace(/\D/g, "");
+                        console.log("[CPF field — boleto] form.cpf value:", form.cpf, "| digits:", digits);
                         if (digits.length === 11 && !validarCPF(form.cpf)) {
                           setCpfError("CPF inválido. Verifique os números digitados.");
                         } else {

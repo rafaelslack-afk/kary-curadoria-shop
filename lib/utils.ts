@@ -97,35 +97,8 @@ export function translatePaymentMethod(method: string): string {
   return map[method] || method;
 }
 
-/**
- * Valida CPF (formato e dígitos verificadores)
- */
-export function validateCPF(cpf: string): boolean {
-  const cleaned = cpf.replace(/\D/g, "");
-  if (cleaned.length !== 11) return false;
-
-  // Rejeitar CPFs com todos os dígitos iguais
-  if (/^(\d)\1+$/.test(cleaned)) return false;
-
-  // Calcular dígitos verificadores
-  let sum = 0;
-  for (let i = 0; i < 9; i++) {
-    sum += parseInt(cleaned.charAt(i)) * (10 - i);
-  }
-  let remainder = (sum * 10) % 11;
-  if (remainder === 10) remainder = 0;
-  if (remainder !== parseInt(cleaned.charAt(9))) return false;
-
-  sum = 0;
-  for (let i = 0; i < 10; i++) {
-    sum += parseInt(cleaned.charAt(i)) * (11 - i);
-  }
-  remainder = (sum * 10) % 11;
-  if (remainder === 10) remainder = 0;
-  if (remainder !== parseInt(cleaned.charAt(10))) return false;
-
-  return true;
-}
+// validarCPF foi movido para lib/validations.ts — fonte única da verdade.
+// Importe de lá: `import { validarCPF } from "@/lib/validations"`
 
 /**
  * Formata CPF: 12345678900 → 123.456.789-00
