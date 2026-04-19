@@ -9,6 +9,7 @@ import { calculateCouponDiscount } from "@/lib/coupons";
 import { formatCurrency } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
 import { pixelEvent } from "@/lib/pixel";
+import MercadoPagoBrick from "@/components/loja/checkout/MercadoPagoBrick";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -71,16 +72,24 @@ function validarCPF(cpf: string): boolean {
   const c = cpf.replace(/\D/g, "");
   if (c.length !== 11) return false;
   if (/^(\d)\1{10}$/.test(c)) return false;
+
   let sum = 0;
-  for (let i = 0; i < 9; i++) sum += parseInt(c[i]) * (10 - i);
+  for (let i = 0; i < 9; i++) {
+    sum += parseInt(c[i]) * (10 - i);
+  }
   let rev = 11 - (sum % 11);
-  if (rev >= 10) rev = 0;
-  if (rev !== parseInt(c[9])) return false;
+  const d1 = rev >= 10 ? 0 : rev;
+  if (d1 !== parseInt(c[9])) return false;
+
   sum = 0;
-  for (let i = 0; i < 10; i++) sum += parseInt(c[i]) * (11 - i);
+  for (let i = 0; i < 10; i++) {
+    sum += parseInt(c[i]) * (11 - i);
+  }
   rev = 11 - (sum % 11);
-  if (rev >= 10) rev = 0;
-  return rev === parseInt(c[10]);
+  const d2 = rev >= 10 ? 0 : rev;
+  if (d2 !== parseInt(c[10])) return false;
+
+  return true;
 }
 
 // ── Step indicator ────────────────────────────────────────────────────────────
@@ -157,17 +166,6 @@ function OrderSummary({ shipping, discount }: { shipping: ShippingOption | null;
   );
 }
 
-// ── Chave pública MP ──────────────────────────────────────────────────────────
-const MP_ENV = process.env.NEXT_PUBLIC_MERCADOPAGO_ENV ?? "sandbox";
-const MP_PUBLIC_KEY =
-  process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY ||
-  (MP_ENV === "production"
-    ? process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY_PRODUCTION ?? ""
-    : process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY_SANDBOX ?? "");
-
-console.log("[MP Brick] env:", MP_ENV);
-console.log("[MP Brick] key prefix:", MP_PUBLIC_KEY.substring(0, 15));
-
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export default function CheckoutPage() {
@@ -190,13 +188,9 @@ export default function CheckoutPage() {
   // Ref para auto-focar o campo "número" quando o endereço vier do sessionStorage
   const numeroRef = useRef<HTMLInputElement>(null);
 
-  // Mercado Pago Bricks
-  const [mpReady, setMpReady] = useState(false);
-  const [brickReady, setBrickReady] = useState(false);
+  // Ref para o handler de submit do cartão (sempre atualizado, referência estável)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const brickControllerRef = useRef<any>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const orderSnapshotRef = useRef<any>(null);
+  const cardSubmitHandlerRef = useRef<(formData: any) => Promise<void>>();
 
   useEffect(() => {
     if (items.length === 0 && !redirecting) router.replace("/carrinho");
@@ -255,187 +249,93 @@ export default function CheckoutPage() {
   const discount = calculateCouponDiscount(subtotal(), appliedCoupon);
   const total = subtotal() - discount + (form.shippingOption?.preco ?? 0);
 
-  // ── MP Brick (etapa 2 — Pagamento) ──
-  useEffect(() => {
-    if (brickControllerRef.current) {
-      try { brickControllerRef.current.unmount(); } catch { /* ignore */ }
-      brickControllerRef.current = null;
-      setBrickReady(false);
-    }
+  // ── Handler de submit do cartão (ref atualizada a cada render) ──
+  // Atribuição direta na ref — não dispara re-render, sempre tem o closure mais recente
+  cardSubmitHandlerRef.current = async (formData: unknown) => {
+    setSubmitting(true);
+    setSubmitError("");
+    try {
+      const payload = {
+        customer: {
+          nome: form.nome,
+          email: form.email,
+          cpf: form.cpf.replace(/\D/g, ""),
+          telefone: form.telefone.replace(/\D/g, ""),
+        },
+        address: {
+          cep: form.cep.replace(/\D/g, ""),
+          logradouro: form.logradouro,
+          numero: form.numero,
+          complemento: form.complemento,
+          bairro: form.bairro,
+          cidade: form.cidade,
+          estado: form.estado,
+        },
+        shipping: {
+          servico: `${form.shippingOption!.company} - ${form.shippingOption!.name}`,
+          codigo: String(form.shippingOption!.id),
+          preco: form.shippingOption!.preco,
+          prazo: form.shippingOption!.prazo,
+        },
+        payment: { method: "credit_card", brickFormData: formData },
+        items: items.map((i) => ({
+          variantId: i.variantId,
+          productId: i.productId,
+          productName: i.productName,
+          size: i.size,
+          sku: i.sku,
+          price: i.price,
+          quantity: i.quantity,
+        })),
+        subtotal: subtotal(),
+        discount,
+        couponCode: discount > 0 ? (appliedCoupon?.code ?? null) : null,
+      };
 
-    if (!mpReady || step !== 2 || form.paymentMethod !== "credit_card") return;
+      const res = await fetch("/api/orders/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
 
-    if (!MP_PUBLIC_KEY) {
-      console.warn("[MP Brick] NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY não configurada");
-      return;
-    }
-
-    console.log("[MP Brick] Iniciando... total:", total, "publicKey prefix:", MP_PUBLIC_KEY.slice(0, 8));
-
-    orderSnapshotRef.current = {
-      customer: {
-        nome: form.nome, email: form.email,
-        cpf: form.cpf.replace(/\D/g, ""),
-        telefone: form.telefone.replace(/\D/g, ""),
-      },
-      address: {
-        cep: form.cep.replace(/\D/g, ""),
-        logradouro: form.logradouro, numero: form.numero,
-        complemento: form.complemento, bairro: form.bairro,
-        cidade: form.cidade, estado: form.estado,
-      },
-      shipping: form.shippingOption,
-      items,
-      subtotal: subtotal(),
-      discount,
-      couponCode: discount > 0 ? (appliedCoupon?.code ?? null) : null,
-    };
-
-    let cancelled = false;
-
-    (async () => {
-      let retries = 0;
-      while (!document.getElementById("paymentBrick_container") && retries < 20) {
-        await new Promise((r) => setTimeout(r, 100));
-        retries++;
-      }
-      if (cancelled) return;
-
-      const containerEl = document.getElementById("paymentBrick_container");
-      if (!containerEl) {
-        console.error("[MP Brick] Container não encontrado após 2s.");
+      if (!res.ok || data.error) {
+        if (
+          data.code === "INVALID_CPF" ||
+          data.error?.toLowerCase().includes("cpf") ||
+          data.error?.toLowerCase().includes("identification")
+        ) {
+          setSubmitError("CPF inválido para pagamento. Verifique se o CPF informado está correto.");
+        } else {
+          setSubmitError(data.error ?? "Erro ao processar pagamento.");
+        }
+        setSubmitting(false);
         return;
       }
 
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const mp = new (window as any).MercadoPago(MP_PUBLIC_KEY, { locale: "pt-BR" });
-        const bricksBuilder = mp.bricks();
+      setRedirecting(true);
+      sessionStorage.setItem("kvo-order", JSON.stringify({
+        orderId: data.orderId,
+        orderNumber: data.orderNumber,
+        customerName: form.nome,
+        customerEmail: form.email,
+        prazo: form.shippingOption!.prazo,
+      }));
+      clearCart();
+      router.push("/checkout/sucesso");
+    } catch {
+      setSubmitError("Erro de conexão. Tente novamente.");
+      setSubmitting(false);
+    }
+  };
 
-        const controller = await bricksBuilder.create(
-          "payment",
-          "paymentBrick_container",
-          {
-            initialization: {
-              amount: parseFloat(total.toFixed(2)),
-              payer: {
-                email: form.email,
-                ...(form.cpf.replace(/\D/g, "").length === 11 && {
-                  identification: { type: "CPF", number: form.cpf.replace(/\D/g, "") },
-                }),
-              },
-            },
-            customization: {
-              paymentMethods: { creditCard: "all", debitCard: "all" },
-              visual: {
-                style: {
-                  theme: "default",
-                  customVariables: {
-                    formBackgroundColor: "#F5F1EA",
-                    baseColor: "#A0622A",
-                    baseColorFirstVariant: "#5C3317",
-                    fontSizeSmall: "12px",
-                  },
-                },
-              },
-            },
-            callbacks: {
-              onReady: () => {
-                console.log("[MP Brick] Pronto");
-                if (!cancelled) setBrickReady(true);
-              },
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              onSubmit: async ({ formData }: { selectedPaymentMethod: string; formData: any }) => {
-                const snap = orderSnapshotRef.current;
-                if (!snap) return;
-                setSubmitting(true);
-                setSubmitError("");
-
-                const payload = {
-                  customer: snap.customer,
-                  address: snap.address,
-                  shipping: {
-                    servico: `${snap.shipping.company} - ${snap.shipping.name}`,
-                    codigo: String(snap.shipping.id),
-                    preco: snap.shipping.preco,
-                    prazo: snap.shipping.prazo,
-                  },
-                  payment: { method: "credit_card", brickFormData: formData },
-                  items: snap.items.map((i: typeof snap.items[0]) => ({
-                    variantId: i.variantId,
-                    productId: i.productId,
-                    productName: i.productName,
-                    size: i.size,
-                    sku: i.sku,
-                    price: i.price,
-                    quantity: i.quantity,
-                  })),
-                  subtotal: snap.subtotal,
-                  discount: snap.discount,
-                  couponCode: snap.couponCode,
-                };
-
-                try {
-                  const res = await fetch("/api/orders/create", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(payload),
-                  });
-                  const data = await res.json();
-
-                  if (!res.ok || data.error) {
-                    if (
-                      data.code === "INVALID_CPF" ||
-                      data.error?.toLowerCase().includes("cpf") ||
-                      data.error?.toLowerCase().includes("identification")
-                    ) {
-                      setSubmitError("CPF inválido para pagamento. Verifique se o CPF informado está correto.");
-                    } else {
-                      setSubmitError(data.error ?? "Erro ao processar pagamento.");
-                    }
-                    setSubmitting(false);
-                    return;
-                  }
-
-                  setRedirecting(true);
-                  sessionStorage.setItem("kvo-order", JSON.stringify({
-                    orderId: data.orderId,
-                    orderNumber: data.orderNumber,
-                    customerName: snap.customer.nome,
-                    customerEmail: snap.customer.email,
-                    prazo: snap.shipping.prazo,
-                  }));
-                  clearCart();
-                  router.push("/checkout/sucesso");
-                } catch {
-                  setSubmitError("Erro de conexão. Tente novamente.");
-                  setSubmitting(false);
-                }
-              },
-              onError: (error: unknown) => {
-                console.error("[MP Brick] Erro:", error);
-              },
-            },
-          }
-        );
-
-        if (!cancelled) brickControllerRef.current = controller;
-        else controller.unmount();
-      } catch (err) {
-        console.error("[MP Brick] Erro ao criar Brick:", err);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      if (brickControllerRef.current) {
-        try { brickControllerRef.current.unmount(); } catch { /* ignore */ }
-        brickControllerRef.current = null;
-        setBrickReady(false);
-      }
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mpReady, step, form.paymentMethod, total]);
+  // Callback estável passado ao MercadoPagoBrick — referência nunca muda,
+  // garantindo que React.memo não re-renderize o Brick por causa deste prop.
+  const handleBrickFormData = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (formData: any) => cardSubmitHandlerRef.current!(formData),
+    [] // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   // ── CEP auto-fill (digitação manual) ──
   const fetchCep = useCallback(async (cep: string) => {
@@ -692,11 +592,8 @@ export default function CheckoutPage() {
       <Script
         src="https://sdk.mercadopago.com/js/v2"
         strategy="afterInteractive"
-        onLoad={() => {
-          console.log("[MP] SDK carregado. window.MercadoPago:", !!(window as unknown as Record<string, unknown>).MercadoPago);
-          setMpReady(true);
-        }}
-        onError={() => console.error("[MP] Falha ao carregar SDK do Mercado Pago")}
+        onLoad={() => console.log("[MP] SDK carregado.")}
+        onError={() => console.error("[MP] Falha ao carregar SDK.")}
       />
       <div className="mb-6">
         <p className="text-[10px] tracking-[0.26em] text-kc-muted mb-1 uppercase">Compra</p>
@@ -946,24 +843,16 @@ export default function CheckoutPage() {
               )}
 
               {form.paymentMethod === "credit_card" && (
-                <div className="space-y-3">
-                  {!brickReady && (
-                    <div className="flex items-center gap-2 text-xs text-kc-muted py-3">
-                      <Loader2 size={12} className="animate-spin" />
-                      Carregando formulário seguro…
-                    </div>
-                  )}
-                  <div id="paymentBrick_container" />
-                  {submitting && (
-                    <div className="flex items-center gap-2 text-xs text-kc-muted">
-                      <Loader2 size={12} className="animate-spin" />
-                      Processando pagamento…
-                    </div>
-                  )}
-                  <p className="text-[9px] text-kc-muted">
-                    Seus dados de cartão são tokenizados pelo Mercado Pago e nunca trafegam em nossos servidores.
-                  </p>
-                </div>
+                // key={total}: força remonte do Brick apenas quando o valor total muda.
+                // React.memo dentro do componente impede re-renders por outros states.
+                <MercadoPagoBrick
+                  key={total}
+                  amount={total}
+                  email={form.email}
+                  cpf={form.cpf}
+                  onFormSubmit={handleBrickFormData}
+                  submitting={submitting}
+                />
               )}
 
               {form.paymentMethod === "boleto" && (
