@@ -221,14 +221,15 @@ export async function POST(request: NextRequest) {
       };
 
       if (payment.method === "pix") {
-        mpResponse = (await mpPayment.create({
-          body: {
-            transaction_amount: parseFloat(total.toFixed(2)),
-            payment_method_id: "pix",
-            payer: commonPayer,
-            description: "Pedido Kary Curadoria",
-          },
-        })) as MPPaymentResponse;
+        const pixBody = {
+          transaction_amount: parseFloat(total.toFixed(2)),
+          payment_method_id: "pix",
+          payer: commonPayer,
+          description: "Pedido Kary Curadoria",
+        };
+        console.log("[MP Payment] PIX payload:", JSON.stringify(pixBody, null, 2));
+        mpResponse = (await mpPayment.create({ body: pixBody })) as MPPaymentResponse;
+        console.log("[MP Payment] PIX response:", JSON.stringify(mpResponse, null, 2));
 
       } else if (payment.method === "credit_card") {
         const brick = payment.brickFormData!;
@@ -241,20 +242,27 @@ export async function POST(request: NextRequest) {
         console.log("  issuer_id:", brick.issuer_id);
         console.log("  CPF (customer):", cpfLimpo, "| CPF (brick payer):", brickCpf);
 
-        mpResponse = (await mpPayment.create({
-          body: {
-            transaction_amount: parseFloat(total.toFixed(2)),
-            token: brick.token,
-            description: "Pedido Kary Curadoria",
-            installments: brick.installments ?? 1,
-            payment_method_id: brick.payment_method_id,
-            issuer_id: brick.issuer_id ? Number(brick.issuer_id) : undefined,
-            payer: {
-              email: emailLimpo,
-              identification: { type: "CPF", number: cpfLimpo },
-            },
+        const cardBody = {
+          transaction_amount: parseFloat(total.toFixed(2)),
+          token: brick.token,
+          description: "Pedido Kary Curadoria",
+          installments: brick.installments ?? 1,
+          payment_method_id: brick.payment_method_id,
+          issuer_id: brick.issuer_id ? Number(brick.issuer_id) : undefined,
+          payer: {
+            email: emailLimpo,
+            identification: { type: "CPF", number: cpfLimpo },
           },
-        })) as MPPaymentResponse;
+        };
+        // Mascara o token nos logs — mantém apenas prefixo para debug
+        console.log("[MP Payment] CARD payload:", JSON.stringify(
+          { ...cardBody, token: `${brick.token.slice(0, 12)}...` },
+          null,
+          2
+        ));
+
+        mpResponse = (await mpPayment.create({ body: cardBody })) as MPPaymentResponse;
+        console.log("[MP Payment] CARD response:", JSON.stringify(mpResponse, null, 2));
 
         // Cartão recusado → reverter reservas e retornar erro
         if (mpResponse.status === "rejected") {
@@ -296,29 +304,46 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        mpResponse = (await mpPayment.create({
-          body: {
-            transaction_amount: parseFloat(total.toFixed(2)),
-            payment_method_id: "bolbradesco",
-            description: "Pedido Kary Curadoria",
-            date_of_expiration: boletoExpiry(),
-            payer: {
-              ...commonPayer,
-              address: {
-                zip_code: zipCode,
-                street_name: streetName,
-                street_number: streetNumber,
-                neighborhood,
-                city,
-                federal_unit: state,
-              },
+        const boletoBody = {
+          transaction_amount: parseFloat(total.toFixed(2)),
+          payment_method_id: "bolbradesco",
+          description: "Pedido Kary Curadoria",
+          date_of_expiration: boletoExpiry(),
+          payer: {
+            ...commonPayer,
+            address: {
+              zip_code: zipCode,
+              street_name: streetName,
+              street_number: streetNumber,
+              neighborhood,
+              city,
+              federal_unit: state,
             },
           },
-        })) as MPPaymentResponse;
+        };
+        console.log("[MP Payment] BOLETO payload:", JSON.stringify(boletoBody, null, 2));
+        mpResponse = (await mpPayment.create({ body: boletoBody })) as MPPaymentResponse;
+        console.log("[MP Payment] BOLETO response:", JSON.stringify(mpResponse, null, 2));
       }
     } catch (err) {
       const errMsg = (err as Error).message ?? "";
       console.error("[orders/create] Mercado Pago error:", errMsg);
+
+      // MP SDK geralmente anexa a resposta completa em `err.cause` ou `err.response`
+      // — loga TUDO que puder identificar a causa real (códigos 2067, 3033, etc.)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const anyErr = err as any;
+      try {
+        console.error("[MP Payment] error.cause:", JSON.stringify(anyErr?.cause ?? null, null, 2));
+      } catch { console.error("[MP Payment] error.cause (raw):", anyErr?.cause); }
+      try {
+        console.error("[MP Payment] error.response:", JSON.stringify(anyErr?.response ?? null, null, 2));
+      } catch { console.error("[MP Payment] error.response (raw):", anyErr?.response); }
+      console.error("[MP Payment] error.status:", anyErr?.status);
+      console.error("[MP Payment] error.name:", anyErr?.name);
+      try {
+        console.error("[MP Payment] error (full):", JSON.stringify(anyErr, Object.getOwnPropertyNames(anyErr ?? {}), 2));
+      } catch { /* ignore circular */ }
 
       // Reverter reservas em qualquer exceção do MP
       await rollbackReservations();

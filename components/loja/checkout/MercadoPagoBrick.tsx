@@ -144,6 +144,17 @@ function MercadoPagoBrickInner({
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 formData: any;
               }) => {
+                // DEBUG: logar o formData completo ANTES de enviar para a API,
+                // para identificar a causa real de rejeições do MP (CPF, token etc).
+                console.log("[MP Brick] formData completo:", JSON.stringify(formData, null, 2));
+                console.log("[MP Brick] identification:", formData?.payer?.identification);
+
+                // Sanitiza CPF — remove qualquer máscara que o Brick tenha repassado
+                if (formData?.payer?.identification?.number) {
+                  formData.payer.identification.number =
+                    String(formData.payer.identification.number).replace(/\D/g, "");
+                }
+
                 // Chama sempre o handler mais recente via ref
                 await onFormSubmitRef.current(formData);
               },
