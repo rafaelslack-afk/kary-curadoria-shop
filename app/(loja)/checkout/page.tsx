@@ -794,7 +794,7 @@ export default function CheckoutPage() {
               <div className="grid grid-cols-3 gap-3">
                 {(["pix", "credit_card", "boleto"] as const).map((m) => {
                   const labels = { pix: "PIX", credit_card: "Cartão", boleto: "Boleto" };
-                  const descs  = { pix: "Aprovação instantânea", credit_card: "Até 3x sem juros", boleto: "Vence em 3 dias" };
+                  const descs  = { pix: "Aprovação instantânea", credit_card: "Débito ou crédito", boleto: "Vence em 3 dias" };
                   const selected = form.paymentMethod === m;
                   return (
                     <button
