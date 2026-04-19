@@ -195,16 +195,29 @@ export async function POST(request: NextRequest) {
     const total = subtotal - discount + shipping.preco;
     const { firstName, lastName } = splitName(customer.nome);
 
-    const cpfLimpo = customer.cpf.replace(/\D/g, "");
+    const customerCpf = customer.cpf.replace(/\D/g, "");
+    // Fallback: se o cliente não tiver enviado CPF no formulário, usar o que
+    // o próprio Brick coletou no iframe (identification.number do payer).
+    const brickCpfRaw =
+      payment.method === "credit_card"
+        ? payment.brickFormData?.payer?.identification?.number?.replace(/\D/g, "") ?? ""
+        : "";
+    const cpfLimpo = customerCpf.length === 11 ? customerCpf : brickCpfRaw;
     const emailLimpo = customer.email.trim().toLowerCase();
 
-    console.log("[orders/create] CPF enviado ao MP:", cpfLimpo, "| length:", cpfLimpo.length);
+    console.log("[orders/create] CPF customer:", customerCpf, "| length:", customerCpf.length);
+    console.log("[orders/create] CPF brick:", brickCpfRaw, "| length:", brickCpfRaw.length);
+    console.log("[orders/create] CPF final enviado ao MP:", cpfLimpo, "| length:", cpfLimpo.length);
     console.log("[orders/create] Email enviado ao MP:", emailLimpo);
 
     if (cpfLimpo.length !== 11) {
       await rollbackReservations();
       return NextResponse.json(
-        { error: `CPF inválido: esperado 11 dígitos, recebido ${cpfLimpo.length}.` },
+        {
+          error:
+            "CPF obrigatório para processar o pagamento. Volte à etapa de Dados Pessoais e preencha um CPF válido.",
+          code: "INVALID_CPF",
+        },
         { status: 400 }
       );
     }

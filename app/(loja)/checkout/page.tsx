@@ -383,12 +383,12 @@ export default function CheckoutPage() {
   function canProceed(): boolean {
     switch (step) {
       case 0: {
-        const cpfDigits = form.cpf.replace(/\D/g, "");
-        const cpfOk = cpfDigits.length === 0 || validarCPF(form.cpf);
+        // CPF é OBRIGATÓRIO — o Mercado Pago exige identification.number
+        // no pagamento (PIX, cartão e boleto). Sem CPF → erro 2067.
         return !!(
           form.nome.trim() &&
           form.email.trim() &&
-          cpfOk &&
+          validarCPF(form.cpf) &&
           form.telefone.replace(/\D/g, "").length >= 10
         );
       }
@@ -591,7 +591,7 @@ export default function CheckoutPage() {
                 <Field label="E-mail" required>
                   <input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="maria@exemplo.com" className={inputCls} />
                 </Field>
-                <Field label="CPF (opcional — necessário para NF)">
+                <Field label="CPF" required>
                   <input
                     type="text"
                     value={form.cpf}
