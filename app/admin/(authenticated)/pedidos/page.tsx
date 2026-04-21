@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ShoppingBag } from "lucide-react";
+import { ShoppingBag, AlertTriangle } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
+import { getPendingAlert } from "@/lib/order-expiration";
 import type { OrderStatus, PaymentMethod } from "@/types/database";
 
 interface OrderRow {
@@ -42,6 +43,13 @@ const PAYMENT_LABEL: Record<PaymentMethod, string> = {
   pix: "PIX",
   credit_card: "Cartão",
   boleto: "Boleto",
+};
+
+// Classe Tailwind para cada cor de alerta retornada por getPendingAlert()
+const ALERT_BADGE_CLASS: Record<"yellow" | "orange" | "red", string> = {
+  yellow: "bg-yellow-100 text-yellow-800 border-yellow-300",
+  orange: "bg-orange-100 text-orange-800 border-orange-300",
+  red: "bg-red-100 text-red-800 border-red-300",
 };
 
 export default function PedidosPage() {
@@ -169,14 +177,36 @@ export default function PedidosPage() {
                     {order.payment_method ? PAYMENT_LABEL[order.payment_method] : "—"}
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <span
-                      className={cn(
-                        "inline-block text-[10px] tracking-wider uppercase px-2 py-0.5 rounded-full",
-                        STATUS_CLASS[order.status]
-                      )}
-                    >
-                      {STATUS_LABEL[order.status]}
-                    </span>
+                    <div className="flex flex-col items-center gap-1">
+                      <span
+                        className={cn(
+                          "inline-block text-[10px] tracking-wider uppercase px-2 py-0.5 rounded-full",
+                          STATUS_CLASS[order.status]
+                        )}
+                      >
+                        {STATUS_LABEL[order.status]}
+                      </span>
+                      {(() => {
+                        const alert = getPendingAlert(
+                          order.status,
+                          order.payment_method,
+                          order.created_at
+                        );
+                        if (!alert) return null;
+                        return (
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1 text-[9px] tracking-wider uppercase px-2 py-0.5 rounded-full border",
+                              ALERT_BADGE_CLASS[alert.color]
+                            )}
+                            title="Pedido pendente próximo do prazo — cron cancelará automaticamente"
+                          >
+                            <AlertTriangle size={10} strokeWidth={2} />
+                            {alert.label}
+                          </span>
+                        );
+                      })()}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-right text-sm font-medium text-kc">
                     {formatCurrency(order.total)}

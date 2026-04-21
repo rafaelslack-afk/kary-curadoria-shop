@@ -5,13 +5,26 @@ interface OrderCancelledProps {
   customerName: string;
   total: number;
   reason?: string;
+  /**
+   * `true` quando o pedido já havia sido pago antes do cancelamento
+   * (fluxo de estorno). `false` quando o pagamento nunca foi identificado
+   * — ex.: PIX/Boleto expirados, cancelamento automático pelo cron.
+   * Default: `true` (mantém compatibilidade com comportamento antigo).
+   */
+  wasAlreadyPaid?: boolean;
 }
 
 function formatCurrency(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-export function OrderCancelledEmail({ orderNumber, customerName, total, reason }: OrderCancelledProps) {
+export function OrderCancelledEmail({
+  orderNumber,
+  customerName,
+  total,
+  reason,
+  wasAlreadyPaid = true,
+}: OrderCancelledProps) {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://karycuradoria.com.br";
 
   return (
@@ -53,19 +66,32 @@ export function OrderCancelledEmail({ orderNumber, customerName, total, reason }
                           </div>
                         )}
 
-                        {/* Refund info */}
-                        <div style={{ backgroundColor: "#EDE8DC", borderRadius: 8, padding: "20px 24px", marginBottom: 32 }}>
-                          <p style={{ margin: "0 0 8px", color: "#5C3317", fontSize: 14, fontWeight: 600 }}>
-                            Informações sobre reembolso
-                          </p>
-                          <p style={{ margin: 0, color: "#5C3317", fontSize: 14, lineHeight: 1.6 }}>
-                            Caso tenha efetuado o pagamento de <strong>{formatCurrency(total)}</strong>, o estorno será realizado em até 5 dias úteis no método de pagamento utilizado. Em caso de dúvidas, entre em contato conosco.
-                          </p>
-                        </div>
+                        {/* Bloco condicional: estorno vs. pagamento não identificado */}
+                        {wasAlreadyPaid ? (
+                          <div style={{ backgroundColor: "#EDE8DC", borderRadius: 8, padding: "20px 24px", marginBottom: 32 }}>
+                            <p style={{ margin: "0 0 8px", color: "#5C3317", fontSize: 14, fontWeight: 600 }}>
+                              Informações sobre reembolso
+                            </p>
+                            <p style={{ margin: 0, color: "#5C3317", fontSize: 14, lineHeight: 1.6 }}>
+                              Caso tenha efetuado o pagamento de <strong>{formatCurrency(total)}</strong>, o estorno será realizado em até 5 dias úteis no método de pagamento utilizado. Em caso de dúvidas, entre em contato conosco.
+                            </p>
+                          </div>
+                        ) : (
+                          <div style={{ backgroundColor: "#EDE8DC", borderRadius: 8, padding: "20px 24px", marginBottom: 32 }}>
+                            <p style={{ margin: "0 0 8px", color: "#5C3317", fontSize: 14, fontWeight: 600 }}>
+                              Pagamento não identificado
+                            </p>
+                            <p style={{ margin: 0, color: "#5C3317", fontSize: 14, lineHeight: 1.6 }}>
+                              Seu pedido foi cancelado pois o pagamento no valor de <strong>{formatCurrency(total)}</strong> não foi identificado dentro do prazo. Se desejar, você pode realizar um novo pedido em nossa loja.
+                            </p>
+                          </div>
+                        )}
 
                         {/* CTA */}
                         <p style={{ margin: "0 0 24px", color: "#5C3317", fontSize: 15, lineHeight: 1.6 }}>
-                          Se o cancelamento foi um engano ou você deseja fazer um novo pedido, acesse nossa loja ou fale conosco pelo WhatsApp.
+                          {wasAlreadyPaid
+                            ? "Se o cancelamento foi um engano ou você deseja fazer um novo pedido, acesse nossa loja ou fale conosco pelo WhatsApp."
+                            : "Quer finalizar a compra? Escolha novamente suas peças na loja — o estoque permanece disponível até acabar."}
                         </p>
 
                         <div style={{ textAlign: "center", marginBottom: 16 }}>

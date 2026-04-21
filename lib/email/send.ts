@@ -87,6 +87,12 @@ export interface SendOrderCancelledParams {
   customerName: string;
   total: number;
   reason?: string;
+  /**
+   * `true` se o pagamento já havia sido aprovado antes do cancelamento
+   * (→ texto de estorno). `false` se o pagamento nunca foi identificado
+   * (→ texto de "pagamento não identificado"). Default: `true`.
+   */
+  wasAlreadyPaid?: boolean;
 }
 
 export interface LowStockItem {

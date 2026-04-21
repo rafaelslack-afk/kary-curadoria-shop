@@ -137,6 +137,11 @@ export async function POST(request: Request) {
       payment.status === "rejected" ||
       payment.status === "cancelled"
     ) {
+      // Snapshot do estado ANTES do update — determina a mensagem do e-mail.
+      // "paid" ou "approved" → era um pedido já pago (estorno → wasAlreadyPaid=true).
+      // "pending" ou outro → pagamento nunca foi identificado (wasAlreadyPaid=false).
+      const wasAlreadyPaid = order.status === "paid";
+
       await admin
         .from("orders")
         .update({
@@ -146,7 +151,7 @@ export async function POST(request: Request) {
         .eq("id", order.id);
 
       console.log(
-        `[Webhook MP] Pedido #${order.order_number} marcado como CANCELADO (${payment.status})`
+        `[Webhook MP] Pedido #${order.order_number} marcado como CANCELADO (${payment.status}) | wasAlreadyPaid: ${wasAlreadyPaid}`
       );
 
       // E-mail de cancelamento
@@ -157,7 +162,13 @@ export async function POST(request: Request) {
             orderNumber: String(order.order_number),
             customerName: order.guest_name ?? "Cliente",
             total: order.total,
-            reason: payment.status === "rejected" ? "Pagamento recusado" : undefined,
+            reason:
+              payment.status === "rejected"
+                ? "Pagamento recusado"
+                : wasAlreadyPaid
+                  ? "Pagamento estornado"
+                  : "Pagamento não identificado dentro do prazo",
+            wasAlreadyPaid,
           });
         } catch (emailErr) {
           console.error("[Webhook MP] Falha ao enviar e-mail de cancelamento:", emailErr);
