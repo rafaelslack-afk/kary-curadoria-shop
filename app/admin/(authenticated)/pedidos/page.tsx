@@ -124,7 +124,8 @@ export default function PedidosPage() {
         </div>
       ) : (
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <table className="w-full">
+          <div className="overflow-x-auto">
+          <table className="min-w-[700px] w-full">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="text-left text-[11px] tracking-wider text-gray-500 uppercase px-4 py-3">
@@ -220,6 +221,7 @@ export default function PedidosPage() {
               ))}
             </tbody>
           </table>
+          </div>{/* /overflow-x-auto */}
 
           <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 text-xs text-gray-400 text-right">
             {displayed.length} pedido{displayed.length !== 1 ? "s" : ""}
