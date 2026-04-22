@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Product, ProductVariant, Category } from "@/types/database";
 import { ProductClient } from "./product-client";
+import { RelatedProducts } from "@/components/loja/RelatedProducts";
 
 interface Props {
   params: { slug: string };
@@ -139,6 +140,10 @@ export default async function ProductPage({ params }: Props) {
         product={product as Product & { categories: Category | null }}
         variants={variants}
         colorHexMap={colorHexMap}
+      />
+      <RelatedProducts
+        categoryId={product.category_id}
+        excludeId={product.id}
       />
     </>
   );

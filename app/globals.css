@@ -48,3 +48,12 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--kc);
 }
+
+/* Oculta a scrollbar visualmente sem remover o scroll (carrosséis) */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
