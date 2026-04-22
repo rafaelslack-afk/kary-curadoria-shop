@@ -31,13 +31,17 @@ export async function GET(request: Request) {
 
   const admin = createAdminClient();
 
+  // Status que representam pedidos efetivamente pagos/concluídos.
+  // 'pending' = aguardando pagamento; 'cancelled' = não conta.
+  const PAID_STATUSES = ["paid", "preparing", "shipped", "delivered"] as const;
+
   // Executa consultas em paralelo
   const [ordersRes, stockRes, recentRes, topRes] = await Promise.all([
-    // Receita + contagem de pedidos pagos no período
+    // Receita + contagem de pedidos pagos/concluídos no período
     admin
       .from("orders")
       .select("total")
-      .eq("status", "paid")
+      .in("status", PAID_STATUSES)
       .gte("created_at", desde),
 
     // Alertas de estoque: variantes ativas onde stock_qty <= stock_min
@@ -54,11 +58,11 @@ export async function GET(request: Request) {
       .order("created_at", { ascending: false })
       .limit(5),
 
-    // Top 5 produtos por quantidade vendida em 30d
+    // Top 5 produtos por quantidade vendida em 30d (pedidos pagos/concluídos)
     admin
       .from("order_items")
       .select("product_name, quantity, orders!inner(created_at, status)")
-      .eq("orders.status", "paid")
+      .in("orders.status", [...PAID_STATUSES])
       .gte("orders.created_at", startOf("30d")),
   ]);
 
