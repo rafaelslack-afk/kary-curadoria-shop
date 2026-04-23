@@ -2,6 +2,17 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendPaymentConfirmedEmail, sendOrderCancelledEmail, sendLowStockAlertEmail } from "@/lib/email/send";
 
+// Semântica dos status MP no contexto do KVO:
+//
+// "approved"  → pagamento aprovado → order.status = 'paid'
+// "rejected"  → TENTATIVA RECUSADA → order.status permanece 'pending'
+//               (cliente pode tentar novamente; NÃO cancela o pedido)
+// "cancelled" → pagamento efetivamente cancelado pelo MP/banco/cliente
+//               → order.status = 'cancelled' + e-mail de cancelamento
+//
+// A separação rejected vs. cancelled é deliberada: rejected é uma falha
+// temporária de autorização; cancelled é uma decisão final.
+
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
@@ -133,25 +144,47 @@ export async function POST(request: Request) {
       } catch (stockErr) {
         console.error("[Webhook MP] Falha ao verificar/enviar alerta de estoque:", stockErr);
       }
-    } else if (
-      payment.status === "rejected" ||
-      payment.status === "cancelled"
-    ) {
-      // Snapshot do estado ANTES do update — determina a mensagem do e-mail.
-      // "paid" ou "approved" → era um pedido já pago (estorno → wasAlreadyPaid=true).
-      // "pending" ou outro → pagamento nunca foi identificado (wasAlreadyPaid=false).
+    } else if (payment.status === "rejected") {
+      // ── Tentativa recusada ───────────────────────────────────────────────
+      // Cartão negado, saldo insuficiente, dados inválidos etc.
+      // O pedido PERMANECE 'pending' — o cliente pode tentar novamente.
+      // Registramos apenas a falha em pagbank_status e em notes.
+      // NÃO cancelar e NÃO enviar e-mail de cancelamento.
+
+      const reason = payment.status_detail ?? "rejected";
+
+      await admin
+        .from("orders")
+        .update({
+          pagbank_status: "rejected",
+          notes: `Tentativa de pagamento recusada em ${new Date().toISOString()} | motivo: ${reason}`,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", order.id);
+
+      console.log(
+        `[Webhook MP] Pedido #${order.order_number} — tentativa RECUSADA (${reason}). Status mantido: ${order.status}`
+      );
+
+    } else if (payment.status === "cancelled") {
+      // ── Pagamento cancelado de forma definitiva ──────────────────────────
+      // Ex.: PIX expirado pelo MP, cancelamento de boleto, estorno confirmado.
+      // Aqui sim cancela o pedido e envia e-mail.
+
+      // Snapshot do estado ANTES do update para determinar a mensagem do e-mail.
       const wasAlreadyPaid = order.status === "paid";
 
       await admin
         .from("orders")
         .update({
           status: "cancelled",
-          pagbank_status: payment.status,
+          pagbank_status: "cancelled",
+          updated_at: new Date().toISOString(),
         })
         .eq("id", order.id);
 
       console.log(
-        `[Webhook MP] Pedido #${order.order_number} marcado como CANCELADO (${payment.status}) | wasAlreadyPaid: ${wasAlreadyPaid}`
+        `[Webhook MP] Pedido #${order.order_number} marcado como CANCELADO | wasAlreadyPaid: ${wasAlreadyPaid}`
       );
 
       // E-mail de cancelamento
@@ -162,12 +195,7 @@ export async function POST(request: Request) {
             orderNumber: String(order.order_number),
             customerName: order.guest_name ?? "Cliente",
             total: order.total,
-            reason:
-              payment.status === "rejected"
-                ? "Pagamento recusado"
-                : wasAlreadyPaid
-                  ? "Pagamento estornado"
-                  : "Pagamento não identificado dentro do prazo",
+            reason: wasAlreadyPaid ? "Pagamento estornado" : "Pagamento não identificado dentro do prazo",
             wasAlreadyPaid,
           });
         } catch (emailErr) {

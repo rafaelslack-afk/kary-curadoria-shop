@@ -13,7 +13,7 @@
  */
 
 import React, { useEffect, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
 
 // ── Constantes MP ─────────────────────────────────────────────────────────────
 
@@ -24,6 +24,49 @@ const MP_PUBLIC_KEY =
     ? process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY_PRODUCTION ?? ""
     : process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY_SANDBOX ?? "");
 
+// ── Mapeamento de status_detail do MP → mensagens amigáveis ──────────────────
+//
+// O MP retorna `status_detail` como código de rejeição.
+// O backend envia esse código no campo `status_detail` da resposta 402.
+// Mapeamos aqui para exibir mensagem contextual dentro do Brick.
+
+const MP_REJECTION_MESSAGES: Record<string, string> = {
+  cc_rejected_bad_filled_card_number:
+    "Número do cartão inválido. Verifique os dados e tente novamente.",
+  cc_rejected_bad_filled_date:
+    "Data de validade incorreta. Verifique e tente novamente.",
+  cc_rejected_bad_filled_security_code:
+    "Código de segurança (CVV) incorreto.",
+  cc_rejected_bad_filled_other:
+    "Dados do cartão incorretos. Verifique e tente novamente.",
+  cc_rejected_insufficient_funds:
+    "Saldo insuficiente. Tente outro cartão ou pague com PIX.",
+  cc_rejected_high_risk:
+    "Pagamento não autorizado pelo banco. Tente outro cartão ou use PIX.",
+  cc_rejected_call_for_authorize:
+    "Seu banco solicitou autorização. Entre em contato com o banco ou use PIX.",
+  cc_rejected_card_disabled:
+    "Cartão bloqueado ou inativo. Use outro cartão ou pague com PIX.",
+  cc_rejected_card_error:
+    "Erro no cartão. Verifique os dados ou use outro cartão.",
+  cc_rejected_duplicated_payment:
+    "Pagamento duplicado detectado. Aguarde alguns minutos e tente novamente.",
+  cc_rejected_max_attempts:
+    "Limite de tentativas atingido. Tente novamente em alguns minutos ou use PIX.",
+  rejected_by_bank:
+    "Pagamento recusado pelo banco. Entre em contato com seu banco ou use PIX.",
+  rejected_insufficient_data:
+    "Dados insuficientes para processar. Preencha todos os campos do cartão.",
+};
+
+function getRejectionMessage(statusDetail?: string | null): string {
+  if (!statusDetail) return "Pagamento recusado. Verifique os dados ou escolha outro método.";
+  return (
+    MP_REJECTION_MESSAGES[statusDetail] ??
+    "Pagamento recusado. Verifique os dados ou escolha outro método de pagamento."
+  );
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface MercadoPagoBrickProps {
@@ -33,6 +76,11 @@ interface MercadoPagoBrickProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onFormSubmit: (formData: any) => Promise<void>;
   submitting?: boolean;
+  /**
+   * Mensagem de erro de pagamento recusado passada pelo checkout após
+   * receber 402 do backend. Exibida inline no Brick sem desmontar o iframe.
+   */
+  paymentError?: string | null;
 }
 
 // ── Componente ────────────────────────────────────────────────────────────────
@@ -43,9 +91,12 @@ function MercadoPagoBrickInner({
   cpf,
   onFormSubmit,
   submitting,
+  paymentError,
 }: MercadoPagoBrickProps) {
   const [brickReady, setBrickReady] = useState(false);
   const [supportsPaymentRequest, setSupportsPaymentRequest] = useState(false);
+  // Erros internos do SDK do Brick (inicialização, validação de formulário)
+  const [brickSdkError, setBrickSdkError] = useState<string | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const controllerRef = useRef<any>(null);
 
@@ -55,6 +106,10 @@ function MercadoPagoBrickInner({
       setSupportsPaymentRequest(true);
     }
   }, []);
+
+  // Limpa o erro de SDK quando o usuário começa a preencher novamente
+  // (onReady do Brick já sinaliza que está pronto para nova tentativa)
+  const clearSdkError = () => setBrickSdkError(null);
 
   // Ref com o handler mais recente — sem causar re-render nem re-montar o Brick
   const onFormSubmitRef = useRef(onFormSubmit);
@@ -135,7 +190,10 @@ function MercadoPagoBrickInner({
             callbacks: {
               onReady: () => {
                 console.log("[MP Brick] Pronto — amount:", amount);
-                if (!cancelled) setBrickReady(true);
+                if (!cancelled) {
+                  setBrickReady(true);
+                  setBrickSdkError(null); // limpa erro de SDK ao ficar pronto
+                }
               },
               onSubmit: async ({
                 formData,
@@ -155,11 +213,23 @@ function MercadoPagoBrickInner({
                     String(formData.payer.identification.number).replace(/\D/g, "");
                 }
 
+                // Limpa erro anterior antes de nova tentativa
+                setBrickSdkError(null);
+
                 // Chama sempre o handler mais recente via ref
                 await onFormSubmitRef.current(formData);
               },
               onError: (error: unknown) => {
-                console.error("[MP Brick] Erro:", error);
+                // Erros de SDK / validação do iframe do MP
+                console.error("[MP Brick] Erro SDK:", error);
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const mpErr = error as any;
+                const cause = mpErr?.cause ?? mpErr?.message ?? "";
+                // Só expõe ao usuário se for erro crítico (falha de SDK, não apenas aviso)
+                if (mpErr?.type === "critical" || mpErr?.type === "non_critical") {
+                  const msg = getRejectionMessage(typeof cause === "string" ? cause : undefined);
+                  if (!cancelled) setBrickSdkError(msg);
+                }
               },
             },
           }
@@ -186,6 +256,9 @@ function MercadoPagoBrickInner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // INTENCIONAL: monta uma vez. O pai usa key={amount} para forçar remonte.
 
+  // Mensagem de erro mais relevante a exibir (prioridade: erro do backend > erro de SDK)
+  const errorToShow = paymentError ?? brickSdkError;
+
   return (
     <>
       {!brickReady && (
@@ -194,11 +267,25 @@ function MercadoPagoBrickInner({
           Carregando formulário seguro…
         </div>
       )}
+
       {/* Container do iframe do Mercado Pago — sem autocomplete="off" */}
-      <div id="paymentBrick_container" />
+      <div id="paymentBrick_container" onClick={clearSdkError} />
+
+      {/* Mensagem de erro inline — pagamento recusado ou erro de SDK */}
+      {errorToShow && (
+        <div className="mt-3 flex items-start gap-2.5 px-3 py-3 bg-red-50 border border-red-200 rounded-lg">
+          <AlertCircle size={16} className="text-red-500 shrink-0 mt-0.5" strokeWidth={2} />
+          <div>
+            <p className="text-red-700 text-sm font-medium leading-snug">{errorToShow}</p>
+            <p className="text-red-500 text-xs mt-1">
+              Corrija os dados acima ou escolha outro método de pagamento.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Dica orientativa para evitar digitação manual no iframe */}
-      {brickReady && supportsPaymentRequest && (
+      {brickReady && supportsPaymentRequest && !errorToShow && (
         <div className="flex items-start gap-2 mt-3 px-3 py-2 bg-[#F5F1EA] border border-[#A0622A]/20 rounded text-[11px] text-[#5C3317]/80 leading-relaxed">
           <span className="text-base leading-none">💡</span>
           <span>
@@ -221,6 +308,6 @@ function MercadoPagoBrickInner({
   );
 }
 
-// React.memo: só re-renderiza se amount, email, cpf ou submitting mudarem.
-// onFormSubmit é estável (useCallback vazio no pai) — não causa re-render.
+// React.memo: só re-renderiza se amount, email, cpf, submitting ou paymentError mudarem.
+// O iframe do Brick não remonta — apenas o JSX ao redor é atualizado.
 export default React.memo(MercadoPagoBrickInner);

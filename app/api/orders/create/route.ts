@@ -277,13 +277,20 @@ export async function POST(request: NextRequest) {
         mpResponse = (await mpPayment.create({ body: cardBody })) as MPPaymentResponse;
         console.log("[MP Payment] CARD response:", JSON.stringify(mpResponse, null, 2));
 
-        // Cartão recusado → reverter reservas e retornar erro
+        // Cartão recusado → reverter reservas e retornar erro.
+        // Nenhum pedido é salvo no banco — o cliente pode tentar novamente
+        // com novos dados ou escolher outro método de pagamento.
         if (mpResponse.status === "rejected") {
           await rollbackReservations();
+          const detail = mpResponse.status_detail ?? null;
+          console.log("[MP Payment] CARD rejected | status_detail:", detail);
           return NextResponse.json(
             {
-              error: `Pagamento recusado: ${mpResponse.status_detail ?? "cartão não autorizado"}.`,
-              code: "PAYMENT_FAILED",
+              error: `Pagamento recusado pelo banco.`,
+              code: "PAYMENT_REJECTED",
+              // status_detail permite ao frontend exibir mensagem específica
+              // (cc_rejected_insufficient_funds, cc_rejected_bad_filled_card_number etc.)
+              status_detail: detail,
             },
             { status: 402 }
           );

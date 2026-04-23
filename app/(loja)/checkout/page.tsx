@@ -12,6 +12,32 @@ import { pixelEvent } from "@/lib/pixel";
 import MercadoPagoBrick from "@/components/loja/checkout/MercadoPagoBrick";
 import { validarCPF } from "@/lib/validations";
 
+// ── Mapeamento de status_detail do MP → mensagens amigáveis ──────────────────
+// Espelha o mapeamento do MercadoPagoBrick; aqui é usado quando o backend
+// retorna o código via campo `status_detail` na resposta 402.
+
+const MP_REJECTION_MESSAGES: Record<string, string> = {
+  cc_rejected_bad_filled_card_number: "Número do cartão inválido. Verifique os dados e tente novamente.",
+  cc_rejected_bad_filled_date: "Data de validade incorreta. Verifique e tente novamente.",
+  cc_rejected_bad_filled_security_code: "Código de segurança (CVV) incorreto.",
+  cc_rejected_bad_filled_other: "Dados do cartão incorretos. Verifique e tente novamente.",
+  cc_rejected_insufficient_funds: "Saldo insuficiente. Tente outro cartão ou pague com PIX.",
+  cc_rejected_high_risk: "Pagamento não autorizado pelo banco. Tente outro cartão ou use PIX.",
+  cc_rejected_call_for_authorize: "Seu banco solicitou autorização. Entre em contato com o banco ou use PIX.",
+  cc_rejected_card_disabled: "Cartão bloqueado ou inativo. Use outro cartão ou pague com PIX.",
+  cc_rejected_card_error: "Erro no cartão. Verifique os dados ou use outro cartão.",
+  cc_rejected_duplicated_payment: "Pagamento duplicado detectado. Aguarde alguns minutos.",
+  cc_rejected_max_attempts: "Limite de tentativas atingido. Tente novamente em alguns minutos ou use PIX.",
+  rejected_by_bank: "Pagamento recusado pelo banco. Entre em contato com seu banco ou use PIX.",
+};
+
+function getRejectionMessage(statusDetail?: string | null): string {
+  if (statusDetail && MP_REJECTION_MESSAGES[statusDetail]) {
+    return MP_REJECTION_MESSAGES[statusDetail];
+  }
+  return "Pagamento recusado. Verifique os dados ou escolha outro método de pagamento.";
+}
+
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
 interface ShippingOption {
@@ -154,6 +180,8 @@ export default function CheckoutPage() {
   const [cepLoading, setCepLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  // Mensagem de rejeição de cartão passada inline ao Brick (sem desmontar o iframe)
+  const [cardPaymentError, setCardPaymentError] = useState<string | null>(null);
   const [cpfError, setCpfError] = useState("");
   const [redirecting, setRedirecting] = useState(false);
 
@@ -275,13 +303,22 @@ export default function CheckoutPage() {
       const data = await res.json();
 
       if (!res.ok || data.error) {
-        if (
+        if (data.code === "PAYMENT_REJECTED") {
+          // Cartão recusado: exibe mensagem específica no Brick (sem desmontar iframe)
+          // e não mostra o erro genérico abaixo do formulário.
+          const msg = getRejectionMessage(data.status_detail);
+          setCardPaymentError(msg);
+          // submitError limpo — o Brick já exibe o erro inline
+          setSubmitError("");
+        } else if (
           data.code === "INVALID_CPF" ||
           data.error?.toLowerCase().includes("cpf") ||
           data.error?.toLowerCase().includes("identification")
         ) {
+          setCardPaymentError(null);
           setSubmitError("CPF inválido para pagamento. Verifique se o CPF informado está correto.");
         } else {
+          setCardPaymentError(null);
           setSubmitError(data.error ?? "Erro ao processar pagamento.");
         }
         setSubmitting(false);
@@ -799,7 +836,7 @@ export default function CheckoutPage() {
                   return (
                     <button
                       key={m}
-                      onClick={() => set("paymentMethod", m)}
+                      onClick={() => { set("paymentMethod", m); setCardPaymentError(null); }}
                       className={`p-4 border text-center transition-colors ${selected ? "border-kc bg-kc/5" : "border-kc-line hover:border-kc-muted"}`}
                     >
                       <p className={`text-sm font-medium mb-0.5 ${selected ? "text-kc" : "text-kc-dark"}`}>{labels[m]}</p>
@@ -828,6 +865,7 @@ export default function CheckoutPage() {
                   cpf={form.cpf}
                   onFormSubmit={handleBrickFormData}
                   submitting={submitting}
+                  paymentError={cardPaymentError}
                 />
               )}
 
