@@ -409,6 +409,7 @@ export async function POST(request: NextRequest) {
         guest_name: customer.nome,
         guest_email: customer.email,
         guest_cpf: cpfLimpo,
+        customer_phone: customer.telefone?.replace(/\D/g, "") || null,
         status: orderStatus,
         subtotal,
         shipping_cost: shipping.preco,
@@ -435,14 +436,51 @@ export async function POST(request: NextRequest) {
     }
 
     // ── 5b. Marcar abandono como recuperado (fire-and-forget) ───────────────
-    Promise.resolve(
-      admin
-        .from("abandoned_checkouts")
-        .update({ recovered: true, order_id: order.id, updated_at: new Date().toISOString() })
-        .eq("email", customer.email.trim().toLowerCase())
-        .eq("recovered", false)
-        .gte("created_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
-    ).catch(() => {/* não bloquear o pedido */});
+    // Regra: só é "abandono recuperado" se o cliente demorou ≥ 60 min para
+    // finalizar a compra após o registro ser capturado. Se comprou em menos de
+    // 60 min, era uma compra direta — deletamos o registro para não poluir
+    // as métricas de recuperação.
+    Promise.resolve((async () => {
+      try {
+        const { data: abandoned } = await admin
+          .from("abandoned_checkouts")
+          .select("id, created_at")
+          .eq("email", customer.email.trim().toLowerCase())
+          .eq("recovered", false)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .single();
+
+        if (!abandoned) return;
+
+        const minutesSinceCapture =
+          (Date.now() - new Date(abandoned.created_at).getTime()) / 1000 / 60;
+
+        if (minutesSinceCapture < 60) {
+          // Compra direta — remover registro (não houve abandono real)
+          await admin
+            .from("abandoned_checkouts")
+            .delete()
+            .eq("id", abandoned.id);
+          console.log(
+            `[orders/create] Abandono removido (compra direta em ${minutesSinceCapture.toFixed(1)} min): ${abandoned.id}`
+          );
+        } else {
+          // Abandono real recuperado — marcar
+          await admin
+            .from("abandoned_checkouts")
+            .update({
+              recovered: true,
+              order_id: order.id,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", abandoned.id);
+          console.log(
+            `[orders/create] Abandono recuperado após ${minutesSinceCapture.toFixed(1)} min: ${abandoned.id}`
+          );
+        }
+      } catch { /* não bloquear o pedido */ }
+    })());
 
     // ── 6. Inserir itens do pedido ───────────────────────────────────────────
     const orderItems = items.map((i) => ({

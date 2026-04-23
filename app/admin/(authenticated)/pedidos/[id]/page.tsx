@@ -13,6 +13,7 @@ import {
   Loader2,
   Check,
   Printer,
+  Phone,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, cn } from "@/lib/utils";
@@ -45,6 +46,7 @@ interface FullOrder {
   guest_name: string | null;
   guest_email: string | null;
   guest_cpf: string | null;
+  customer_phone: string | null;
   subtotal: number;
   shipping_cost: number;
   discount: number;
@@ -109,6 +111,13 @@ function SectionCard({
       <div className="p-5">{children}</div>
     </div>
   );
+}
+
+function formatPhone(phone: string): string {
+  const d = phone.replace(/\D/g, "");
+  if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+  if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return phone;
 }
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
@@ -436,6 +445,20 @@ export default function PedidoDetailPage() {
               <Field label="Nome" value={order.guest_name} />
               <Field label="E-mail" value={order.guest_email} />
               <Field label="CPF" value={order.guest_cpf} />
+              {order.customer_phone && (
+                <div>
+                  <p className="text-[11px] text-gray-400 uppercase tracking-wider mb-0.5">Telefone</p>
+                  <a
+                    href={`https://wa.me/55${order.customer_phone}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-sm text-[#A0622A] hover:underline"
+                  >
+                    <Phone size={13} className="shrink-0" />
+                    {formatPhone(order.customer_phone)}
+                  </a>
+                </div>
+              )}
             </div>
           </SectionCard>
 

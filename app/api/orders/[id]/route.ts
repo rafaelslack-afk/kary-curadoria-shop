@@ -30,7 +30,7 @@ export async function GET(
       .select(`
         id, order_number, status, payment_method,
         pagbank_charge_id, pagbank_status,
-        guest_name, guest_email, guest_cpf,
+        guest_name, guest_email, guest_cpf, customer_phone,
         subtotal, shipping_cost, discount, coupon_code, total,
         shipping_service, shipping_deadline, shipping_address_json,
         tracking_code, nf_number, nf_key, nf_status, notes,

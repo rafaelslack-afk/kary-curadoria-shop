@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ShoppingBag, AlertTriangle } from "lucide-react";
+import { ShoppingBag, AlertTriangle, MessageCircle } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { getPendingAlert } from "@/lib/order-expiration";
 import type { OrderStatus, PaymentMethod } from "@/types/database";
@@ -12,6 +12,7 @@ interface OrderRow {
   order_number: number;
   guest_name: string | null;
   guest_email: string | null;
+  customer_phone: string | null;
   status: OrderStatus;
   payment_method: PaymentMethod | null;
   total: number;
@@ -166,7 +167,21 @@ export default function PedidosPage() {
                     </Link>
                   </td>
                   <td className="px-4 py-3">
-                    <p className="text-sm text-gray-800">{order.guest_name || "—"}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm text-gray-800">{order.guest_name || "—"}</p>
+                      {order.customer_phone && (
+                        <a
+                          href={`https://wa.me/55${order.customer_phone}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Contatar pelo WhatsApp"
+                          className="text-green-600 hover:text-green-700 shrink-0"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <MessageCircle size={14} />
+                        </a>
+                      )}
+                    </div>
                     {order.guest_email && (
                       <p className="text-xs text-gray-400">{order.guest_email}</p>
                     )}
