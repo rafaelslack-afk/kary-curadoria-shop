@@ -89,12 +89,40 @@ export async function addToMECart(orderData: MEOrderData) {
       unitary_value: p.unitPrice,
       weight: p.weight,
     })),
-    volumes: orderData.products.map((p) => ({
-      height: p.height,
-      width: p.width,
-      length: p.length,
-      weight: p.weight,
-    })),
+    // ── Volume único consolidado ──────────────────────────────────────────
+    // Melhor Envio rejeita envios com múltiplos volumes em transportadoras
+    // que não suportam multi-volume (PAC, SEDEX padrão, etc.).
+    // Solução: sempre 1 caixa única com:
+    //   peso    = soma de todos os itens (× quantidade)
+    //   largura = máximo entre todos os produtos
+    //   altura  = máximo entre todos os produtos
+    //   comprimento = soma dos comprimentos (× quantidade), limitado a 100cm
+    volumes: (() => {
+      const DEFAULT = { weight: 0.5, width: 20, height: 5, length: 30 }
+
+      const consolidated = orderData.products.reduce(
+        (acc, p) => {
+          const qty = p.quantity ?? 1
+          acc.weight += (p.weight > 0 ? p.weight : DEFAULT.weight) * qty
+          acc.width   = Math.max(acc.width,  p.width  > 0 ? p.width  : DEFAULT.width)
+          acc.height  = Math.max(acc.height, p.height > 0 ? p.height : DEFAULT.height)
+          acc.length  = Math.min(
+            acc.length + (p.length > 0 ? p.length : DEFAULT.length) * qty,
+            100 // limite máximo Correios: 100 cm
+          )
+          return acc
+        },
+        { weight: 0, width: 0, height: 0, length: 0 }
+      )
+
+      // Dimensões mínimas aceitas pelos Correios
+      return [{
+        weight: Math.max(consolidated.weight, 0.3),
+        width:  Math.max(consolidated.width,  11),
+        height: Math.max(consolidated.height,  2),
+        length: Math.max(consolidated.length, 16),
+      }]
+    })(),
     options: {
       insurance_value: orderData.products.reduce(
         (sum, p) => sum + p.unitPrice * p.quantity,

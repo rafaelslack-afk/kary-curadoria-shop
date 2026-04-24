@@ -63,19 +63,33 @@ export async function POST(
     const customerEmail = order.guest_email ?? ''
     const customerDoc = (order.guest_cpf ?? '').replace(/\D/g, '')
 
+    // Dimensões padrão de segurança quando o produto não tem cadastro completo
+    const DEFAULT_DIMENSIONS = { weight_g: 500, width_cm: 20, height_cm: 5, length_cm: 30 }
+
     // Montar produtos para o ME usando variantMap
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const products = (order.order_items as any[]).map((item) => {
       const variant = variantMap[item.variant_id]
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const product = (variant?.products as any)
+
+      const missingDims =
+        !product?.weight_g && !product?.width_cm &&
+        !product?.height_cm && !product?.length_cm
+      if (missingDims) {
+        console.warn(
+          `[Melhor Envio] Produto sem dimensões cadastradas — usando padrão:`,
+          { product_id: item.product_id, product_name: item.product_name }
+        )
+      }
+
       return {
         name: item.product_name as string,
         quantity: item.quantity as number,
-        weight: ((product?.weight_g ?? variant?.weight_g ?? 500) as number) / 1000,
-        width: (product?.width_cm ?? 20) as number,
-        height: (product?.height_cm ?? 5) as number,
-        length: (product?.length_cm ?? 30) as number,
+        weight: ((product?.weight_g ?? variant?.weight_g ?? DEFAULT_DIMENSIONS.weight_g) as number) / 1000,
+        width:  (product?.width_cm  ?? DEFAULT_DIMENSIONS.width_cm)  as number,
+        height: (product?.height_cm ?? DEFAULT_DIMENSIONS.height_cm) as number,
+        length: (product?.length_cm ?? DEFAULT_DIMENSIONS.length_cm) as number,
         unitPrice: Number(item.unit_price),
       }
     })
