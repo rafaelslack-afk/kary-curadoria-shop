@@ -14,6 +14,12 @@ export async function GET() {
     .eq("active", true)
     .single();
 
-  if (!data) return NextResponse.json(null);
-  return NextResponse.json(data);
+  if (!data) {
+    return NextResponse.json(null, {
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
+  return NextResponse.json(data, {
+    headers: { "Cache-Control": "no-store" },
+  });
 }

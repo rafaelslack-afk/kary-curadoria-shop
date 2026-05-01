@@ -20,7 +20,7 @@ export function FloatingCoupon() {
     const wasDismissed = sessionStorage.getItem("coupon_dismissed");
     if (wasDismissed) return;
 
-    fetch("/api/coupons/floating")
+    fetch("/api/coupons/floating", { cache: "no-store" })
       .then((r) => r.json())
       .then((data) => {
         if (data) {
