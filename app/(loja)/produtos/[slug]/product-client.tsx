@@ -522,6 +522,9 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
                   <CreditCard size={13} className="shrink-0" />
                   ou {inst.label}
                 </p>
+                <p className="text-xs text-[#B89070] mt-0.5">
+                  A partir de 4x com juros do emissor do cartão
+                </p>
               </div>
             ) : null;
           })()}

@@ -323,7 +323,11 @@ export default function CarrinhoPage() {
               <div className="flex items-center gap-2.5 bg-[#F5F1EA] border border-[#D9C9B8] rounded-lg px-3.5 py-2.5">
                 <CreditCard size={15} className="text-[#A0622A] shrink-0" />
                 <span className="text-xs text-[#5C3317]">
-                  <strong>Parcelamento disponível</strong>{" "}no cartão de crédito
+                  Parcele em{" "}
+                  <strong>
+                    3x de R$ {(total / 3).toFixed(2).replace(".", ",")} sem juros
+                  </strong>{" "}
+                  no cartão
                 </span>
               </div>
             )}
