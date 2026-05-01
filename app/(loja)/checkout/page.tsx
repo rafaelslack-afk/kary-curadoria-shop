@@ -135,19 +135,20 @@ function OrderSummary({ shipping, discount }: { shipping: ShippingOption | null;
       <ul className="space-y-3 max-h-48 overflow-y-auto">
         {items.map((item) => (
           <li key={item.variantId} className="flex items-start gap-2.5">
-            <div className="w-10 shrink-0 aspect-[3/4] bg-kc-cream overflow-hidden relative">
+            <div className="w-10 shrink-0 aspect-[3/4] bg-kc-cream overflow-hidden">
               {item.image && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={item.image} alt={item.productName} className="w-full h-full object-cover" />
               )}
-              <span className="absolute -top-1 -right-1 bg-kc text-white text-[8px] w-4 h-4 rounded-full flex items-center justify-center">
-                {item.quantity}
-              </span>
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-[11px] text-kc-dark font-medium leading-snug line-clamp-1">{item.productName}</p>
               <p className="text-[9px] text-kc-muted">
-                {[item.color, item.size ? `Tam. ${item.size}` : null].filter(Boolean).join(" · ") || "—"}
+                {[
+                  item.color,
+                  item.size ? `Tam. ${item.size}` : null,
+                  `Qtd: ${item.quantity}`,
+                ].filter(Boolean).join(" · ")}
               </p>
             </div>
             <span className="text-[11px] text-kc-dark shrink-0">{formatCurrency(item.price * item.quantity)}</span>
