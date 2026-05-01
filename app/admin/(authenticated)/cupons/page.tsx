@@ -124,11 +124,12 @@ export default function CuponsPage() {
   }
 
   async function toggleActive(c: Coupon) {
-    await fetch(`/api/admin/coupons/${c.id}`, {
+    const res = await fetch(`/api/admin/coupons/${c.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ active: !c.active }),
     });
+    if (!res.ok) return;
     setCoupons((prev) =>
       prev.map((x) => (x.id === c.id ? { ...x, active: !x.active } : x))
     );

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
 
 interface FloatingCoupon {
   code: string;
@@ -15,21 +16,34 @@ export function FloatingCoupon() {
   const [visible, setVisible] = useState(false);
   const [copied, setCopied] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+  const pathname = usePathname();
+  const hasShownRef = useRef(false);
 
   useEffect(() => {
+    if (dismissed) return;
+
     const wasDismissed = sessionStorage.getItem("coupon_dismissed");
     if (wasDismissed) return;
 
-    fetch("/api/coupons/floating", { cache: "no-store" })
+    fetch(`/api/coupons/floating?t=${Date.now()}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((data) => {
-        if (data) {
-          setCoupon(data);
+        if (!data) {
+          // Cupom desativado — limpa estado imediatamente
+          setCoupon(null);
+          setVisible(false);
+          hasShownRef.current = false;
+          return;
+        }
+        setCoupon(data);
+        // Exibe o card apenas na primeira vez que o cupom é carregado
+        if (!hasShownRef.current) {
+          hasShownRef.current = true;
           setTimeout(() => setVisible(true), 3000);
         }
       })
       .catch(() => {});
-  }, []);
+  }, [pathname, dismissed]);
 
   function handleCopy() {
     if (!coupon) return;
