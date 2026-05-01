@@ -1,7 +1,7 @@
 import { CreditCard, Truck, ShieldCheck, Clock } from "lucide-react";
 
 const benefits = [
-  { icon: CreditCard, text: "3x sem juros" },
+  { icon: CreditCard, text: "Parcelamento no cartão" },
   { icon: Truck,      text: "Frete grátis SP acima de R$ 400" },
   { icon: ShieldCheck,text: "Troca garantida" },
   { icon: Clock,      text: "Entrega para todo Brasil" },

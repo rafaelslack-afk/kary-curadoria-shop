@@ -819,7 +819,7 @@ export default function CheckoutPage() {
               <div className="grid grid-cols-2 gap-3">
                 {(["pix", "credit_card"] as const).map((m) => {
                   const labels = { pix: "PIX", credit_card: "Cartão" };
-                  const descs  = { pix: "Aprovação instantânea", credit_card: "Crédito · até 3x sem juros" };
+                  const descs  = { pix: "Aprovação instantânea", credit_card: "Parcelamento disponível" };
                   const selected = form.paymentMethod === m;
                   return (
                     <button
@@ -849,9 +849,7 @@ export default function CheckoutPage() {
                   <div className="flex items-center gap-2.5 bg-[#F5F1EA] border-l-[3px] border-l-[#A0622A] border-y border-r border-[#D9C9B8] rounded-r-lg px-3.5 py-2.5">
                     <CreditCard size={15} className="text-[#A0622A] shrink-0" />
                     <span className="text-xs text-[#5C3317]">
-                      Cartão de crédito:{" "}
-                      <strong>até 3x sem juros</strong>
-                      {" "}· A partir de 4x, juros do emissor do cartão.
+                      Cartão de crédito: <strong>parcelamento disponível</strong>{" "}· Condições de parcelamento conforme seu cartão.
                     </span>
                   </div>
                   {/* key={total}: força remonte do Brick apenas quando o valor total muda. */}

@@ -4,6 +4,6 @@ export function getBestInstallment(price: number) {
   return {
     n: 3,
     value,
-    label: `3x de R$ ${value.toFixed(2).replace(".", ",")} sem juros`,
+    label: `3x de R$ ${value.toFixed(2).replace(".", ",")} no cartão`,
   };
 }
