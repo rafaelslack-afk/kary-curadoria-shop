@@ -25,10 +25,13 @@ const MP_PUBLIC_KEY = process.env.NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY ?? "";
 
 // ── Estilos injetados nos campos seguros (via API do MP, não via CSS externo) ──
 // Os campos seguros são iframes — o MP expõe esta API de estilos para customização.
+// O padding aqui precisa espelhar o dos inputs normais (px-3 py-2.5) porque
+// o container div não transmite padding ao iframe filho.
 const FIELD_STYLE = {
   color: "#1f2937",
   fontSize: "14px",
   fontFamily: "ui-sans-serif, system-ui, -apple-system, sans-serif",
+  padding: "10px 12px",
   "::placeholder": { color: "#9ca3af" },
 };
 
@@ -253,8 +256,8 @@ export function CardTokenizerForm({
             </label>
             <div
               id="mp-card-number"
-              className="w-full border border-kc-line bg-white px-3 flex items-center"
-              style={{ minHeight: "42px" }}
+              className="w-full border border-kc-line bg-white overflow-hidden"
+              style={{ height: "44px" }}
             />
           </div>
 
@@ -281,8 +284,8 @@ export function CardTokenizerForm({
               </label>
               <div
                 id="mp-expiration-date"
-                className="w-full border border-kc-line bg-white px-3 flex items-center"
-                style={{ minHeight: "42px" }}
+                className="w-full border border-kc-line bg-white overflow-hidden"
+                style={{ height: "44px" }}
               />
             </div>
             <div>
@@ -291,8 +294,8 @@ export function CardTokenizerForm({
               </label>
               <div
                 id="mp-security-code"
-                className="w-full border border-kc-line bg-white px-3 flex items-center"
-                style={{ minHeight: "42px" }}
+                className="w-full border border-kc-line bg-white overflow-hidden"
+                style={{ height: "44px" }}
               />
             </div>
           </div>
