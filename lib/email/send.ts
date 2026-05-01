@@ -45,7 +45,8 @@ async function sendHtml(payload: {
 
 export interface EmailOrderItem {
   name: string;
-  variant?: string;
+  variant?: string; // tamanho
+  color?: string;   // cor
   quantity: number;
   unit_price: number;
 }

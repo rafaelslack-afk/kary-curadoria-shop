@@ -2,7 +2,8 @@ import * as React from "react";
 
 interface OrderItem {
   name: string;
-  variant?: string;
+  variant?: string; // tamanho
+  color?: string;   // cor
   quantity: number;
   unit_price: number;
 }
@@ -174,9 +175,10 @@ export function PaymentConfirmedEmail({ orderNumber, customerName, items, total 
                               <tr key={i} style={{ backgroundColor: i % 2 === 0 ? WHITE : "#FDFAF6" }}>
                                 <td style={{ padding: "13px 14px", fontFamily: "Arial, sans-serif", fontSize: 14, color: BRAND, borderBottom: `1px solid ${LINE}` }}>
                                   {item.name}
-                                  {item.variant ? (
-                                    <span style={{ display: "block", fontSize: 12, color: MUTED, marginTop: 2 }}>
-                                      {item.variant}
+                                  {(item.color || item.variant) ? (
+                                    <span style={{ display: "block", fontSize: 12, color: MUTED, marginTop: 3 }}>
+                                      {[item.color, item.variant ? `Tam. ${item.variant}` : null]
+                                        .filter(Boolean).join(" · ")}
                                     </span>
                                   ) : null}
                                 </td>

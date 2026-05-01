@@ -146,7 +146,9 @@ function OrderSummary({ shipping, discount }: { shipping: ShippingOption | null;
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-[11px] text-kc-dark font-medium leading-snug line-clamp-1">{item.productName}</p>
-              <p className="text-[9px] text-kc-muted">Tam. {item.size}</p>
+              <p className="text-[9px] text-kc-muted">
+                {[item.color, item.size ? `Tam. ${item.size}` : null].filter(Boolean).join(" · ") || "—"}
+              </p>
             </div>
             <span className="text-[11px] text-kc-dark shrink-0">{formatCurrency(item.price * item.quantity)}</span>
           </li>
@@ -286,6 +288,7 @@ export default function CheckoutPage() {
           productId: i.productId,
           productName: i.productName,
           size: i.size,
+          color: i.color ?? null,
           sku: i.sku,
           price: i.price,
           quantity: i.quantity,
@@ -480,6 +483,7 @@ export default function CheckoutPage() {
           productId: i.productId,
           productName: i.productName,
           size: i.size,
+          color: i.color ?? null,
           sku: i.sku,
           price: i.price,
           quantity: i.quantity,
