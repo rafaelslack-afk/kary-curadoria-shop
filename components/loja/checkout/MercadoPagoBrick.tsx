@@ -169,15 +169,14 @@ function MercadoPagoBrickInner({
               paymentMethods: {
                 creditCard: "all",
                 debitCard: "all",
-                // Google Pay e Apple Pay aparecem nativamente no Brick quando
-                // o dispositivo/navegador suporta — evita digitação manual
-                // no iframe (onde o autofill do Chrome é bloqueado).
+                // Google Pay e Apple Pay aparecem nativamente quando o
+                // dispositivo/navegador suporta.
                 googlePay: "all",
                 applePay: "all",
-                // Boleto e ATM (lotérica) desabilitados — PIX está no botão
-                // separado do checkout, não precisa aparecer aqui também.
-                ticket: "none",
-                atm: "none",
+                // Nota: boleto (ticket) e ATM não são incluídos — o Brick
+                // só exibe métodos explicitamente configurados, então
+                // simplesmente omitir já os desabilita. Usar "none" é
+                // inválido no SDK e quebra a inicialização.
               },
               visual: {
                 style: {
