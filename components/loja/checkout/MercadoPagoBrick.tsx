@@ -179,6 +179,13 @@ function MercadoPagoBrickInner({
                 applePay: "all",
               },
               visual: {
+                // Pula a tela de lista de métodos (onde aparece o badge
+                // "Sem acréscimo" fixo e enganoso) e abre direto o formulário
+                // do cartão — onde o seletor de parcelas mostra as condições
+                // corretas: 1x–3x sem juros, 4x+ com juros do emissor.
+                defaultPaymentOption: {
+                  creditCardForm: true,
+                },
                 style: {
                   theme: "default",
                   customVariables: {
