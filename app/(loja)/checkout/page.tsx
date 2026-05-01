@@ -3,13 +3,13 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Script from "next/script";
 import { useRouter } from "next/navigation";
-import { Check, ChevronRight, Loader2, Info, X, CreditCard } from "lucide-react";
+import { Check, ChevronRight, Loader2, Info, X } from "lucide-react";
 import { useCartStore } from "@/lib/store/cart";
 import { calculateCouponDiscount } from "@/lib/coupons";
 import { formatCurrency } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
 import { pixelEvent } from "@/lib/pixel";
-import MercadoPagoBrick from "@/components/loja/checkout/MercadoPagoBrick";
+import { CardTokenizerForm } from "@/components/loja/checkout/CardTokenizerForm";
 import { validarCPF } from "@/lib/validations";
 
 // ── Mapeamento de status_detail do MP → mensagens amigáveis ──────────────────
@@ -844,25 +844,18 @@ export default function CheckoutPage() {
               )}
 
               {form.paymentMethod === "credit_card" && (
-                <>
-                  {/* Banner informativo de parcelamento */}
-                  <div className="flex items-center gap-2.5 bg-[#F5F1EA] border-l-[3px] border-l-[#A0622A] border-y border-r border-[#D9C9B8] rounded-r-lg px-3.5 py-2.5">
-                    <CreditCard size={15} className="text-[#A0622A] shrink-0" />
-                    <span className="text-xs text-[#5C3317]">
-                      Cartão de crédito:{" "}<strong>até 3x sem juros</strong>{" "}· A partir de 4x, juros do emissor do cartão.
-                    </span>
-                  </div>
-                  {/* key={total}: força remonte do Brick apenas quando o valor total muda. */}
-                  <MercadoPagoBrick
-                    key={total}
-                    amount={total}
-                    email={form.email}
-                    cpf={form.cpf}
-                    onFormSubmit={handleBrickFormData}
-                    submitting={submitting}
-                    paymentError={cardPaymentError}
-                  />
-                </>
+                /* key={total}: recria o formulário apenas quando o valor total muda
+                   (ex: troca de opção de frete), garantindo que o amount do
+                   InstallmentSelector e dos campos MP estejam sempre corretos. */
+                <CardTokenizerForm
+                  key={total}
+                  amount={total}
+                  email={form.email}
+                  cpf={form.cpf}
+                  onFormSubmit={handleBrickFormData}
+                  submitting={submitting}
+                  paymentError={cardPaymentError}
+                />
               )}
 
               {submitError && (

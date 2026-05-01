@@ -1,10 +1,10 @@
-import { CreditCard, Truck, ShieldCheck, Clock } from "lucide-react";
+import { CreditCard, ShieldCheck, Clock, Truck } from "lucide-react";
 
 const benefits = [
-  { icon: CreditCard, text: "3x sem juros" },
-  { icon: Truck,      text: "Frete grátis SP acima de R$ 400" },
-  { icon: ShieldCheck,text: "Troca garantida" },
-  { icon: Clock,      text: "Entrega para todo Brasil" },
+  { icon: CreditCard,  text: "3x sem juros" },
+  { icon: ShieldCheck, text: "Troca garantida" },
+  { icon: Clock,       text: "Entrega para todo Brasil" },
+  { icon: Truck,       text: "Frete calculado no checkout" },
 ];
 
 export function BenefitsBar() {
