@@ -268,18 +268,8 @@ export function CardTokenizerForm({
       {/* Conteúdo — invisible até ready para evitar layout shift */}
       <div className={!ready ? "invisible" : ""}>
 
-        {/* ── Seletor de parcelas ──
-            Usa valores reais do MP (mpPayerCosts) quando o BIN foi detectado,
-            ou estimativa local enquanto o cartão não foi digitado. */}
-        <InstallmentSelector
-          total={amount}
-          selected={selectedInstallments}
-          onChange={setSelectedInstallments}
-          mpPayerCosts={mpPayerCosts}
-        />
-
         {/* ── Dados do cartão ── */}
-        <div className="space-y-4 mt-6">
+        <div className="space-y-4">
           <p className="text-[10px] tracking-[0.18em] text-kc-muted uppercase flex items-center gap-1.5">
             <Lock size={10} />
             Dados do cartão
@@ -335,6 +325,19 @@ export function CardTokenizerForm({
               />
             </div>
           </div>
+        </div>
+
+        {/* ── Seletor de parcelas ──
+            Fica após os campos do cartão: ao digitar o número, o BIN é detectado
+            e mp.getInstallments() retorna os valores reais antes de o cliente
+            precisar escolher as parcelas. */}
+        <div className="mt-6">
+          <InstallmentSelector
+            total={amount}
+            selected={selectedInstallments}
+            onChange={setSelectedInstallments}
+            mpPayerCosts={mpPayerCosts}
+          />
         </div>
 
         {/* ── Erro ── */}
