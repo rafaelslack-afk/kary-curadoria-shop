@@ -1,7 +1,6 @@
 import { Navbar } from "@/components/loja/navbar";
 import { Footer } from "@/components/loja/footer";
 import { WhatsAppFloat } from "@/components/loja/whatsapp-float";
-import { FloatingCoupon } from "@/components/loja/floating-coupon";
 import { isStorePrelaunchActive } from "@/lib/store-launch";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -11,14 +10,6 @@ interface NavLink {
   id: string;
   label: string;
   href: string;
-}
-
-interface FloatingCouponData {
-  code: string;
-  floating_title: string | null;
-  floating_description: string | null;
-  value: number;
-  type: "percent" | "fixed";
 }
 
 const FALLBACK_LINKS: NavLink[] = [
@@ -44,21 +35,6 @@ async function getNavLinks(): Promise<NavLink[]> {
   }
 }
 
-async function getFloatingCoupon(): Promise<FloatingCouponData | null> {
-  try {
-    const admin = createAdminClient();
-    const { data } = await admin
-      .from("coupons")
-      .select("code, floating_title, floating_description, value, type")
-      .eq("is_floating", true)
-      .eq("active", true)
-      .single();
-    return data ?? null;
-  } catch {
-    return null;
-  }
-}
-
 export default async function LojaLayout({
   children,
 }: {
@@ -68,10 +44,7 @@ export default async function LojaLayout({
     return <div className="min-h-screen">{children}</div>;
   }
 
-  const [navLinks, floatingCoupon] = await Promise.all([
-    getNavLinks(),
-    getFloatingCoupon(),
-  ]);
+  const navLinks = await getNavLinks();
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -79,7 +52,6 @@ export default async function LojaLayout({
       <main className="flex-1">{children}</main>
       <Footer />
       <WhatsAppFloat />
-      {floatingCoupon && <FloatingCoupon initialData={floatingCoupon} />}
     </div>
   );
 }
