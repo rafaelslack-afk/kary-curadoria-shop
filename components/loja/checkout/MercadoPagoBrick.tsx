@@ -13,7 +13,7 @@
  */
 
 import React, { useEffect, useRef, useState } from "react";
-import { Loader2, AlertCircle, CreditCard } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
 
 // ── Constantes MP ─────────────────────────────────────────────────────────────
 
@@ -168,20 +168,19 @@ function MercadoPagoBrickInner({
             customization: {
               paymentMethods: {
                 creditCard: "all",
-                // debitCard omitido: conta MP não tem débito habilitado além
-                // do "Débito virtual Caixa" (produto CEF), que não é cartão
-                // de débito convencional. Remover evita confundir o cliente.
+                debitCard: "all",
                 googlePay: "all",
                 applePay: "all",
               },
               visual: {
-                // Pula a tela de lista de métodos (onde aparece o badge
-                // "Sem acréscimo" fixo e enganoso) e abre direto o formulário
-                // do cartão — onde o seletor de parcelas mostra as condições
-                // corretas: 1x–3x sem juros, 4x+ com juros do emissor.
+                // Abre direto no formulário do cartão, pulando a tela de
+                // seleção de método com a lista de parcelas genéricas.
                 defaultPaymentOption: {
                   creditCardForm: true,
                 },
+                // Oculta o título do Brick — parcelas já exibidas pelo
+                // InstallmentSelector customizado acima do Brick.
+                hideFormTitle: true,
                 style: {
                   theme: "default",
                   customVariables: {
@@ -274,31 +273,8 @@ function MercadoPagoBrickInner({
         </div>
       )}
 
-      {/* Banner de esclarecimento de parcelas — sempre visível, especialmente útil no mobile
-          onde o Brick exibe uma lista de pré-visualização com taxas genéricas antes do
-          cliente inserir o cartão. Após digitar o cartão, o MP aplica as condições reais. */}
-      <div className="flex items-start gap-2.5 bg-[#F5F1EA] border border-[#D9C9B8] border-l-[3px] border-l-[#A0622A] rounded-r-lg px-3.5 py-3 mb-4">
-        <CreditCard size={15} className="text-[#A0622A] shrink-0 mt-0.5" />
-        <div>
-          <p className="text-xs font-semibold text-[#5C3317] mb-0.5">
-            Parcelamento sem juros disponível
-          </p>
-          <p className="text-xs text-[#5C3317] leading-relaxed">
-            Cartão de crédito: <strong>1x, 2x e 3x sem juros</strong> para você.
-            Os valores exibidos na lista abaixo são uma estimativa — após informar
-            os dados do cartão, o desconto é aplicado automaticamente.
-          </p>
-        </div>
-      </div>
-
       {/* Container do iframe do Mercado Pago — sem autocomplete="off" */}
       <div id="paymentBrick_container" onClick={clearSdkError} />
-
-      {/* Reforço abaixo do Brick */}
-      <p className="text-xs text-[#B89070] text-center mt-3">
-        Os valores de parcelas são confirmados após inserir os dados do cartão.
-        1x, 2x e 3x sem acréscimos.
-      </p>
 
       {/* Mensagem de erro inline — pagamento recusado ou erro de SDK */}
       {errorToShow && (
