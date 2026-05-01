@@ -13,7 +13,7 @@
  */
 
 import React, { useEffect, useRef, useState } from "react";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, CreditCard } from "lucide-react";
 
 // ── Constantes MP ─────────────────────────────────────────────────────────────
 
@@ -168,19 +168,13 @@ function MercadoPagoBrickInner({
             customization: {
               paymentMethods: {
                 creditCard: "all",
-                debitCard: "all",
                 googlePay: "all",
                 applePay: "all",
               },
               visual: {
-                // Abre direto no formulário do cartão, pulando a tela de
-                // seleção de método com a lista de parcelas genéricas.
                 defaultPaymentOption: {
                   creditCardForm: true,
                 },
-                // Oculta o título do Brick — parcelas já exibidas pelo
-                // InstallmentSelector customizado acima do Brick.
-                hideFormTitle: true,
                 style: {
                   theme: "default",
                   customVariables: {
@@ -272,6 +266,23 @@ function MercadoPagoBrickInner({
           Carregando formulário seguro…
         </div>
       )}
+
+      {/* Banner de esclarecimento — mobile exibe lista de parcelas com taxas
+          genéricas antes de o cliente inserir o cartão; este aviso previne
+          a confusão sem exigir interação dupla. */}
+      <div className="flex items-start gap-2.5 bg-[#F5F1EA] border border-[#D9C9B8] border-l-[3px] border-l-[#A0622A] rounded-r-lg px-3.5 py-3 mb-4">
+        <CreditCard size={15} className="text-[#A0622A] shrink-0 mt-0.5" />
+        <div>
+          <p className="text-xs font-semibold text-[#5C3317] mb-0.5">
+            1x, 2x e 3x sem juros para você
+          </p>
+          <p className="text-xs text-[#5C3317] leading-relaxed">
+            Os valores exibidos abaixo são uma estimativa — após informar os dados
+            do cartão, as condições reais (sem juros nas 3 primeiras parcelas) são
+            aplicadas automaticamente.
+          </p>
+        </div>
+      </div>
 
       {/* Container do iframe do Mercado Pago — sem autocomplete="off" */}
       <div id="paymentBrick_container" onClick={clearSdkError} />

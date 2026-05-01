@@ -3,14 +3,13 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Script from "next/script";
 import { useRouter } from "next/navigation";
-import { Check, ChevronRight, Loader2, Info, X } from "lucide-react";
+import { Check, ChevronRight, Loader2, Info, X, CreditCard } from "lucide-react";
 import { useCartStore } from "@/lib/store/cart";
 import { calculateCouponDiscount } from "@/lib/coupons";
 import { formatCurrency } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
 import { pixelEvent } from "@/lib/pixel";
 import MercadoPagoBrick from "@/components/loja/checkout/MercadoPagoBrick";
-import { InstallmentSelector } from "@/components/loja/checkout/InstallmentSelector";
 import { validarCPF } from "@/lib/validations";
 
 // ── Mapeamento de status_detail do MP → mensagens amigáveis ──────────────────
@@ -183,8 +182,6 @@ export default function CheckoutPage() {
   const [submitError, setSubmitError] = useState("");
   // Mensagem de rejeição de cartão passada inline ao Brick (sem desmontar o iframe)
   const [cardPaymentError, setCardPaymentError] = useState<string | null>(null);
-  // Parcelas selecionadas no seletor customizado (sobrescreve o valor do Brick no submit)
-  const [selectedInstallments, setSelectedInstallments] = useState(1);
   const [cpfError, setCpfError] = useState("");
   const [redirecting, setRedirecting] = useState(false);
 
@@ -258,11 +255,6 @@ export default function CheckoutPage() {
   // ── Handler de submit do cartão (ref atualizada a cada render) ──
   // Atribuição direta na ref — não dispara re-render, sempre tem o closure mais recente
   cardSubmitHandlerRef.current = async (formData: unknown) => {
-    // Sobrescrever installments com o valor do seletor customizado.
-    // O Brick pode ter seu próprio seletor interno — o valor do nosso
-    // componente é o que vale para a cobrança final no MP.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (formData as any).installments = selectedInstallments;
     setSubmitting(true);
     setSubmitError("");
     try {
@@ -832,7 +824,7 @@ export default function CheckoutPage() {
                   return (
                     <button
                       key={m}
-                      onClick={() => { set("paymentMethod", m); setCardPaymentError(null); setSelectedInstallments(1); }}
+                      onClick={() => { set("paymentMethod", m); setCardPaymentError(null); }}
                       className={`p-4 border text-center transition-colors ${selected ? "border-kc bg-kc/5" : "border-kc-line hover:border-kc-muted"}`}
                     >
                       <p className={`text-sm font-medium mb-0.5 ${selected ? "text-kc" : "text-kc-dark"}`}>{labels[m]}</p>
@@ -853,15 +845,13 @@ export default function CheckoutPage() {
 
               {form.paymentMethod === "credit_card" && (
                 <>
-                  {/* Seletor de parcelas customizado — exibe valores reais calculados
-                      localmente (1x–3x sem juros, 4x–12x com 1,99% a.m.), evitando
-                      a tela de pré-seleção do Brick que mostra taxas genéricas. */}
-                  <InstallmentSelector
-                    total={total}
-                    selected={selectedInstallments}
-                    onChange={setSelectedInstallments}
-                  />
-
+                  {/* Banner informativo de parcelamento */}
+                  <div className="flex items-center gap-2.5 bg-[#F5F1EA] border-l-[3px] border-l-[#A0622A] border-y border-r border-[#D9C9B8] rounded-r-lg px-3.5 py-2.5">
+                    <CreditCard size={15} className="text-[#A0622A] shrink-0" />
+                    <span className="text-xs text-[#5C3317]">
+                      Cartão de crédito:{" "}<strong>até 3x sem juros</strong>{" "}· A partir de 4x, juros do emissor do cartão.
+                    </span>
+                  </div>
                   {/* key={total}: força remonte do Brick apenas quando o valor total muda. */}
                   <MercadoPagoBrick
                     key={total}
