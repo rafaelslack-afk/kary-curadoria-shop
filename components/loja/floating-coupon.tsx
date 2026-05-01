@@ -1,57 +1,33 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
 
-interface FloatingCoupon {
+interface CouponData {
   code: string;
-  floating_title: string;
-  floating_description: string;
+  floating_title: string | null;
+  floating_description: string | null;
   value: number;
   type: "percent" | "fixed";
 }
 
-export function FloatingCoupon() {
-  const [coupon, setCoupon] = useState<FloatingCoupon | null>(null);
+export function FloatingCoupon({ initialData }: { initialData: CouponData }) {
   const [visible, setVisible] = useState(false);
   const [copied, setCopied] = useState(false);
   const [dismissed, setDismissed] = useState(false);
-  const pathname = usePathname();
-  const hasShownRef = useRef(false);
 
   useEffect(() => {
-    if (dismissed) return;
-
-    const wasDismissed = sessionStorage.getItem("coupon_dismissed");
-    if (wasDismissed) return;
-
-    fetch(`/api/coupons/floating?t=${Date.now()}`, { cache: "no-store" })
-      .then((r) => r.json())
-      .then((data) => {
-        if (!data) {
-          // Cupom desativado — limpa estado imediatamente
-          setCoupon(null);
-          setVisible(false);
-          hasShownRef.current = false;
-          return;
-        }
-        setCoupon(data);
-        // Exibe o card apenas na primeira vez que o cupom é carregado
-        if (!hasShownRef.current) {
-          hasShownRef.current = true;
-          setTimeout(() => setVisible(true), 3000);
-        }
-      })
-      .catch(() => {});
-  }, [pathname, dismissed]);
+    if (sessionStorage.getItem("coupon_dismissed")) {
+      setDismissed(true);
+      return;
+    }
+    const timer = setTimeout(() => setVisible(true), 3000);
+    return () => clearTimeout(timer);
+  }, []);
 
   function handleCopy() {
-    if (!coupon) return;
-    navigator.clipboard.writeText(coupon.code);
+    navigator.clipboard.writeText(initialData.code);
     setCopied(true);
-    setTimeout(() => {
-      handleDismiss();
-    }, 1500);
+    setTimeout(() => handleDismiss(), 1500);
   }
 
   function handleDismiss() {
@@ -60,12 +36,12 @@ export function FloatingCoupon() {
     setTimeout(() => setDismissed(true), 400);
   }
 
-  if (!coupon || dismissed) return null;
+  if (dismissed) return null;
 
   const discountLabel =
-    coupon.type === "percent"
-      ? `${coupon.value}% OFF`
-      : `R$ ${Number(coupon.value).toFixed(2).replace(".", ",")} OFF`;
+    initialData.type === "percent"
+      ? `${initialData.value}% OFF`
+      : `R$ ${Number(initialData.value).toFixed(2).replace(".", ",")} OFF`;
 
   return (
     <div
@@ -146,7 +122,7 @@ export function FloatingCoupon() {
             textTransform: "uppercase",
           }}
         >
-          {coupon.floating_title || "🎉 Oferta Especial"}
+          {initialData.floating_title || "🎉 Oferta Especial"}
         </p>
 
         {/* Desconto em destaque */}
@@ -171,7 +147,7 @@ export function FloatingCoupon() {
             lineHeight: 1.4,
           }}
         >
-          {coupon.floating_description || "Copie o código e aplique no carrinho"}
+          {initialData.floating_description || "Copie o código e aplique no carrinho"}
         </p>
 
         {/* Código + botão copiar */}
@@ -196,7 +172,7 @@ export function FloatingCoupon() {
               fontFamily: "monospace",
             }}
           >
-            {coupon.code}
+            {initialData.code}
           </span>
           <button
             onClick={handleCopy}

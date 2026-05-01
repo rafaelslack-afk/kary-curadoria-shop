@@ -13,6 +13,14 @@ interface NavLink {
   href: string;
 }
 
+interface FloatingCouponData {
+  code: string;
+  floating_title: string | null;
+  floating_description: string | null;
+  value: number;
+  type: "percent" | "fixed";
+}
+
 const FALLBACK_LINKS: NavLink[] = [
   { id: "1", label: "Coleções", href: "/produtos" },
   { id: "2", label: "Linho", href: "/produtos?categoria=conjuntos-de-linho" },
@@ -36,6 +44,21 @@ async function getNavLinks(): Promise<NavLink[]> {
   }
 }
 
+async function getFloatingCoupon(): Promise<FloatingCouponData | null> {
+  try {
+    const admin = createAdminClient();
+    const { data } = await admin
+      .from("coupons")
+      .select("code, floating_title, floating_description, value, type")
+      .eq("is_floating", true)
+      .eq("active", true)
+      .single();
+    return data ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export default async function LojaLayout({
   children,
 }: {
@@ -45,7 +68,10 @@ export default async function LojaLayout({
     return <div className="min-h-screen">{children}</div>;
   }
 
-  const navLinks = await getNavLinks();
+  const [navLinks, floatingCoupon] = await Promise.all([
+    getNavLinks(),
+    getFloatingCoupon(),
+  ]);
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -53,7 +79,7 @@ export default async function LojaLayout({
       <main className="flex-1">{children}</main>
       <Footer />
       <WhatsAppFloat />
-      <FloatingCoupon />
+      {floatingCoupon && <FloatingCoupon initialData={floatingCoupon} />}
     </div>
   );
 }
