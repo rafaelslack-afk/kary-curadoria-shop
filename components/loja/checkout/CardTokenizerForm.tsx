@@ -17,7 +17,7 @@
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Loader2, AlertCircle, CreditCard, Lock } from "lucide-react";
-import { InstallmentSelector } from "./InstallmentSelector";
+import { InstallmentSelector, type MpPayerCost } from "./InstallmentSelector";
 
 // ── Constante MP ──────────────────────────────────────────────────────────────
 
@@ -62,6 +62,8 @@ export function CardTokenizerForm({
   const [selectedInstallments, setSelectedInstallments] = useState(1);
   const [paymentMethodId, setPaymentMethodId] = useState("");
   const [issuerId, setIssuerId] = useState("");
+  // Parcelas reais do MP (preenchido após BIN detection); null = usa estimativa local
+  const [mpPayerCosts, setMpPayerCosts] = useState<MpPayerCost[] | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [tokenizing, setTokenizing] = useState(false);
 
@@ -76,6 +78,7 @@ export function CardTokenizerForm({
   const cpfRef = useRef(cpf);
   const emailRef = useRef(email);
   const onFormSubmitRef = useRef(onFormSubmit);
+  const amountRef = useRef(amount);
 
   // Sincroniza refs a cada render (sem re-montar campos)
   useEffect(() => { cardholderNameRef.current = cardholderName; }, [cardholderName]);
@@ -84,6 +87,7 @@ export function CardTokenizerForm({
   useEffect(() => { issuerIdRef.current = issuerId; }, [issuerId]);
   useEffect(() => { cpfRef.current = cpf; }, [cpf]);
   useEffect(() => { emailRef.current = email; }, [email]);
+  useEffect(() => { amountRef.current = amount; }, [amount]);
   useEffect(() => { onFormSubmitRef.current = onFormSubmit; });
 
   // ── Inicialização dos campos seguros ─────────────────────────────────────────
@@ -133,26 +137,55 @@ export function CardTokenizerForm({
           .create("securityCode", { placeholder: "CVV", style: FIELD_STYLE })
           .mount("mp-security-code");
 
-        // Detecção de bandeira e emissor via BIN (6 primeiros dígitos)
+        // Detecção de bandeira, emissor e parcelas reais via BIN (6 primeiros dígitos)
         cardNumber.on("binChange", async ({ bin }: { bin: string }) => {
           if (cancelled) return;
           if (!bin) {
             setPaymentMethodId("");
             setIssuerId("");
+            setMpPayerCosts(null);
             return;
           }
           try {
+            // 1. Identifica a bandeira do cartão
             const { results } = await mp.getPaymentMethods({ bin });
             if (!results?.length || cancelled) return;
             const method = results[0];
             setPaymentMethodId(method.id);
 
+            // 2. Identifica o emissor (banco)
             const issuers = await mp.getIssuers({ paymentMethodId: method.id, bin });
             if (!cancelled && issuers?.length) {
               setIssuerId(String(issuers[0].id));
             }
+
+            // 3. Busca as parcelas reais para este cartão e valor — substitui estimativa
+            const installmentsData = await mp.getInstallments({
+              amount: String(amountRef.current.toFixed(2)),
+              bin,
+              paymentTypeId: "credit_card",
+            });
+            if (cancelled) return;
+            const payerCosts: MpPayerCost[] = (
+              installmentsData?.[0]?.payer_costs ?? []
+            ).map(
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              (c: any) => ({
+                installments: c.installments as number,
+                installment_rate: c.installment_rate as number,
+                installment_amount: c.installment_amount as number,
+                total_amount: c.total_amount as number,
+              })
+            );
+            if (payerCosts.length > 0) {
+              setMpPayerCosts(payerCosts);
+              // Se a parcela selecionada não existe nas opções reais, volta para 1x
+              setSelectedInstallments((prev) =>
+                payerCosts.some((c) => c.installments === prev) ? prev : 1
+              );
+            }
           } catch {
-            /* falha silenciosa — não bloquear o formulário */
+            /* falha silenciosa — mantém estimativa local */
           }
         });
 
@@ -235,11 +268,14 @@ export function CardTokenizerForm({
       {/* Conteúdo — invisible até ready para evitar layout shift */}
       <div className={!ready ? "invisible" : ""}>
 
-        {/* ── Seletor de parcelas customizado ── */}
+        {/* ── Seletor de parcelas ──
+            Usa valores reais do MP (mpPayerCosts) quando o BIN foi detectado,
+            ou estimativa local enquanto o cartão não foi digitado. */}
         <InstallmentSelector
           total={amount}
           selected={selectedInstallments}
           onChange={setSelectedInstallments}
+          mpPayerCosts={mpPayerCosts}
         />
 
         {/* ── Dados do cartão ── */}
