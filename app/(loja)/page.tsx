@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ProductCard } from "@/components/loja/product-card";
 import { BannerCarousel } from "@/components/loja/banner-carousel";
+import { BenefitsBar } from "@/components/loja/BenefitsBar";
 import { PrelaunchHome } from "@/components/loja/prelaunch-home";
 import { buildWhatsAppUrl, INSTAGRAM_URL } from "@/lib/site";
 import { formatLaunchDatePtBr, isStorePrelaunchActive } from "@/lib/store-launch";
@@ -235,6 +236,10 @@ export default async function Home() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(localBusinessJsonLd) }}
       />
       <BannerCarousel banners={banners} />
+
+      <div className="max-w-7xl mx-auto px-6 pt-5 pb-1">
+        <BenefitsBar />
+      </div>
 
       <section id="nossa-loja" className="max-w-7xl mx-auto px-6 py-10 scroll-mt-24">
         <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-[1.15fr_0.85fr]">

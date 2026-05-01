@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Minus, Plus, Trash2, ShoppingBag, Tag, ChevronRight, AlertTriangle } from "lucide-react";
+import { Minus, Plus, Trash2, ShoppingBag, Tag, ChevronRight, AlertTriangle, CreditCard } from "lucide-react";
 import { useCartStore } from "@/lib/store/cart";
 import { calculateCouponDiscount } from "@/lib/coupons";
 import { formatCurrency } from "@/lib/utils";
@@ -318,6 +318,20 @@ export default function CarrinhoPage() {
               </div>
             </div>
 
+            {/* Parcelamento */}
+            {total >= 10 && (
+              <div className="flex items-center gap-2.5 bg-[#F5F1EA] border border-[#D9C9B8] rounded-lg px-3.5 py-2.5">
+                <CreditCard size={15} className="text-[#A0622A] shrink-0" />
+                <span className="text-xs text-[#5C3317]">
+                  Parcele em{" "}
+                  <strong>
+                    3x de R$ {(total / 3).toFixed(2).replace(".", ",")} sem juros
+                  </strong>{" "}
+                  no cartão
+                </span>
+              </div>
+            )}
+
             {/* Checkout CTA */}
             {hasOutOfStock ? (
               <div className="space-y-2">
@@ -347,7 +361,7 @@ export default function CarrinhoPage() {
 
             {/* Payment methods */}
             <div className="flex items-center justify-center gap-3 pt-1">
-              {["PIX", "CARTÃO", "BOLETO"].map((m) => (
+              {["PIX", "CARTÃO", "DÉBITO"].map((m) => (
                 <span
                   key={m}
                   className="text-[8px] tracking-[0.1em] border border-kc-line text-kc-muted px-1.5 py-0.5"

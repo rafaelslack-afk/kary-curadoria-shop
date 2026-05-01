@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Script from "next/script";
 import { useRouter } from "next/navigation";
-import { Check, ChevronRight, Loader2, Info, X } from "lucide-react";
+import { Check, ChevronRight, Loader2, Info, X, CreditCard } from "lucide-react";
 import { useCartStore } from "@/lib/store/cart";
 import { calculateCouponDiscount } from "@/lib/coupons";
 import { formatCurrency } from "@/lib/utils";
@@ -64,7 +64,7 @@ interface FormData {
   estado: string;
   shippingOption: ShippingOption | null;
   // Step 2 — Pagamento
-  paymentMethod: "pix" | "credit_card" | "boleto" | "";
+  paymentMethod: "pix" | "credit_card" | "";
 }
 
 const INITIAL_FORM: FormData = {
@@ -440,9 +440,6 @@ export default function CheckoutPage() {
           form.shippingOption
         );
       case 2:
-        if (form.paymentMethod === "boleto") {
-          return !!(form.paymentMethod && validarCPF(form.cpf));
-        }
         return !!form.paymentMethod;
       default:
         return false;
@@ -519,15 +516,6 @@ export default function CheckoutPage() {
         }));
         clearCart();
         router.push(`/checkout/pix?order_id=${data.orderId}`);
-      } else if (form.paymentMethod === "boleto") {
-        sessionStorage.setItem("kvo-boleto", JSON.stringify({
-          orderId: data.orderId,
-          boletoPdf: data.boletoPdf,
-          boletoLine: data.boletoLine,
-          orderNumber: data.orderNumber,
-        }));
-        clearCart();
-        router.push("/checkout/sucesso");
       } else {
         sessionStorage.setItem("kvo-order", JSON.stringify({
           orderId: data.orderId,
@@ -828,10 +816,10 @@ export default function CheckoutPage() {
             <div className="space-y-5">
               <h2 className="font-serif text-lg font-medium text-kc-dark">Forma de pagamento</h2>
 
-              <div className="grid grid-cols-3 gap-3">
-                {(["pix", "credit_card", "boleto"] as const).map((m) => {
-                  const labels = { pix: "PIX", credit_card: "Cartão", boleto: "Boleto" };
-                  const descs  = { pix: "Aprovação instantânea", credit_card: "Débito ou crédito", boleto: "Vence em 3 dias" };
+              <div className="grid grid-cols-2 gap-3">
+                {(["pix", "credit_card"] as const).map((m) => {
+                  const labels = { pix: "PIX", credit_card: "Cartão" };
+                  const descs  = { pix: "Aprovação instantânea", credit_card: "Crédito · Débito · Pix" };
                   const selected = form.paymentMethod === m;
                   return (
                     <button
@@ -856,48 +844,27 @@ export default function CheckoutPage() {
               )}
 
               {form.paymentMethod === "credit_card" && (
-                // key={total}: força remonte do Brick apenas quando o valor total muda.
-                // React.memo dentro do componente impede re-renders por outros states.
-                <MercadoPagoBrick
-                  key={total}
-                  amount={total}
-                  email={form.email}
-                  cpf={form.cpf}
-                  onFormSubmit={handleBrickFormData}
-                  submitting={submitting}
-                  paymentError={cardPaymentError}
-                />
-              )}
-
-              {form.paymentMethod === "boleto" && (
-                <div className="space-y-4">
-                  <div className="bg-amber-50 border border-amber-200 p-4 space-y-1">
-                    <p className="text-xs font-medium text-amber-800">Pagamento via Boleto</p>
-                    <p className="text-[11px] text-amber-700">
-                      O boleto será gerado após a confirmação. Prazo de vencimento: 3 dias corridos. A compensação pode levar até 2 dias úteis após o pagamento.
-                    </p>
+                <>
+                  {/* Banner de parcelamento */}
+                  <div className="flex items-center gap-2.5 bg-[#F5F1EA] border-l-[3px] border-l-[#A0622A] border-y border-r border-[#D9C9B8] rounded-r-lg px-3.5 py-2.5">
+                    <CreditCard size={15} className="text-[#A0622A] shrink-0" />
+                    <span className="text-xs text-[#5C3317]">
+                      Cartão de crédito:{" "}
+                      <strong>até 3x sem juros</strong>
+                      {" "}· A partir de 4x, juros do emissor do cartão.
+                    </span>
                   </div>
-                  <Field label="CPF obrigatório para emissão do boleto" required>
-                    <input
-                      type="text"
-                      value={form.cpf}
-                      onChange={(e) => { const masked = maskCpf(e.target.value); set("cpf", masked); if (cpfError) setCpfError(""); }}
-                      onBlur={() => {
-                        const digits = form.cpf.replace(/\D/g, "");
-                        console.log("[CPF field — boleto] form.cpf value:", form.cpf, "| digits:", digits);
-                        if (digits.length === 11 && !validarCPF(form.cpf)) {
-                          setCpfError("CPF inválido. Verifique os números digitados.");
-                        } else {
-                          setCpfError("");
-                        }
-                      }}
-                      placeholder="000.000.000-00"
-                      inputMode="numeric"
-                      className={`${inputCls} ${cpfError ? "border-red-400" : ""}`}
-                    />
-                    {cpfError && <p className="text-xs text-red-500 mt-1">{cpfError}</p>}
-                  </Field>
-                </div>
+                  {/* key={total}: força remonte do Brick apenas quando o valor total muda. */}
+                  <MercadoPagoBrick
+                    key={total}
+                    amount={total}
+                    email={form.email}
+                    cpf={form.cpf}
+                    onFormSubmit={handleBrickFormData}
+                    submitting={submitting}
+                    paymentError={cardPaymentError}
+                  />
+                </>
               )}
 
               {submitError && (

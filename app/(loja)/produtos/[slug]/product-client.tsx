@@ -4,8 +4,9 @@ import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ShoppingBag, Check, Zap, ZoomIn, Truck } from "lucide-react";
+import { ChevronLeft, ShoppingBag, Check, Zap, ZoomIn, Truck, CreditCard } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { getBestInstallment } from "@/lib/installments";
 import { useCartStore } from "@/lib/store/cart";
 import { buildWhatsAppUrl } from "@/lib/site";
 import { trackEvent } from "@/lib/analytics";
@@ -512,6 +513,21 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
               {formatCurrency(product.price)}
             </span>
           </div>
+
+          {(() => {
+            const inst = getBestInstallment(product.price);
+            return inst ? (
+              <div className="-mt-2">
+                <p className="text-sm text-[#A0622A] font-medium flex items-center gap-1.5">
+                  <CreditCard size={13} className="shrink-0" />
+                  ou {inst.label}
+                </p>
+                <p className="text-xs text-[#B89070] mt-0.5">
+                  A partir de 4x com juros do emissor do cartão
+                </p>
+              </div>
+            ) : null;
+          })()}
 
           <div className="h-px bg-kc-line" />
 

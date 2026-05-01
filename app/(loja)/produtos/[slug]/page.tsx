@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { Product, ProductVariant, Category } from "@/types/database";
 import { ProductClient } from "./product-client";
 import { RelatedProducts } from "@/components/loja/RelatedProducts";
+import { BenefitsBar } from "@/components/loja/BenefitsBar";
 
 interface Props {
   params: { slug: string };
@@ -141,6 +142,9 @@ export default async function ProductPage({ params }: Props) {
         variants={variants}
         colorHexMap={colorHexMap}
       />
+      <div className="max-w-7xl mx-auto px-4 lg:px-6 pb-6">
+        <BenefitsBar />
+      </div>
       <RelatedProducts
         categoryId={product.category_id}
         excludeId={product.id}

@@ -169,11 +169,14 @@ function MercadoPagoBrickInner({
               paymentMethods: {
                 creditCard: "all",
                 debitCard: "all",
-                // Google Pay e Apple Pay aparecem nativamente no Brick quando
-                // o dispositivo/navegador suporta — evita digitação manual
-                // no iframe (onde o autofill do Chrome é bloqueado).
+                // Carteira MP: engloba Pix (via MP), saldo e conta MP
+                mercadoPago: "all",
+                // Google Pay e Apple Pay nativos quando o dispositivo suporta
                 googlePay: "all",
                 applePay: "all",
+                // Boleto e ATM (lotérica) explicitamente desabilitados
+                ticket: "none",
+                atm: "none",
               },
               visual: {
                 style: {
