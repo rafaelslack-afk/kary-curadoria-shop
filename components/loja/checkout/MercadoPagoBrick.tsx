@@ -168,13 +168,9 @@ function MercadoPagoBrickInner({
             customization: {
               paymentMethods: {
                 creditCard: "all",
-                // debitCard:"all" exibe seção separada para cartão de débito.
-                // Em sandbox aparece apenas "Débito virtual Caixa" (limitação
-                // do ambiente de teste do MP). Em produção exibe Visa Débito,
-                // Mastercard Débito, Elo Débito etc. conforme aprovação da
-                // conta MP.
-                debitCard: "all",
-                // Google Pay e Apple Pay nativos quando o dispositivo suporta
+                // debitCard omitido: conta MP não tem débito habilitado além
+                // do "Débito virtual Caixa" (produto CEF), que não é cartão
+                // de débito convencional. Remover evita confundir o cliente.
                 googlePay: "all",
                 applePay: "all",
               },

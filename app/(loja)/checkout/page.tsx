@@ -819,7 +819,7 @@ export default function CheckoutPage() {
               <div className="grid grid-cols-2 gap-3">
                 {(["pix", "credit_card"] as const).map((m) => {
                   const labels = { pix: "PIX", credit_card: "Cartão" };
-                  const descs  = { pix: "Aprovação instantânea", credit_card: "Crédito ou débito" };
+                  const descs  = { pix: "Aprovação instantânea", credit_card: "Crédito · até 3x sem juros" };
                   const selected = form.paymentMethod === m;
                   return (
                     <button
