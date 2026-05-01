@@ -167,16 +167,13 @@ function MercadoPagoBrickInner({
             },
             customization: {
               paymentMethods: {
-                // creditCard: "all" processa crédito E débito físico (Visa,
-                // Mastercard, Elo, Hipercard) via detecção de BIN — o Brick
-                // identifica automaticamente se o número digitado é crédito
-                // ou débito e aplica o fluxo correto.
-                //
-                // debitCard: "all" criava uma seção separada que no Brasil
-                // exibe apenas "Débito virtual Caixa" (produto específico da
-                // CEF) e omitia os demais débitos. Removido para que todos
-                // os débitos físicos funcionem pelo campo unificado.
                 creditCard: "all",
+                // debitCard:"all" exibe seção separada para cartão de débito.
+                // Em sandbox aparece apenas "Débito virtual Caixa" (limitação
+                // do ambiente de teste do MP). Em produção exibe Visa Débito,
+                // Mastercard Débito, Elo Débito etc. conforme aprovação da
+                // conta MP.
+                debitCard: "all",
                 // Google Pay e Apple Pay nativos quando o dispositivo suporta
                 googlePay: "all",
                 applePay: "all",
