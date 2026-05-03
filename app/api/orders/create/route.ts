@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ── 2. Validar preços contra o banco (NUNCA confiar no frontend) ─────────
-    const productIds = [...new Set(items.map((i) => i.productId))];
+    const productIds = Array.from(new Set(items.map((i) => i.productId)));
 
     const { data: dbProducts, error: productsErr } = await admin
       .from("products")

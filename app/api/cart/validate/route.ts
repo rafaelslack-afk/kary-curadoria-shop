@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
   }
 
   const admin = createAdminClient();
-  const productIds = [...new Set(items.map((i) => i.productId))];
+  const productIds = Array.from(new Set(items.map((i) => i.productId)));
 
   const { data: products } = await admin
     .from("products")
