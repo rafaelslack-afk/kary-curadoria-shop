@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = (await request.json()) as CreateOrderBody;
-    const { customer, address, shipping, payment, items, subtotal, discount, couponCode } = body;
+    const { customer, address, shipping, payment, items, discount, couponCode } = body;
 
     // ── 1. Validação básica ──────────────────────────────────────────────────
     if (!items?.length) {
