@@ -174,7 +174,7 @@ function OrderSummary({ shipping, discount }: { shipping: ShippingOption | null;
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { items, coupon: appliedCoupon, subtotal, clearCart } = useCartStore();
+  const { items, coupon: appliedCoupon, subtotal, clearCart, updateItemPrice } = useCartStore();
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<FormData>(INITIAL_FORM);
   const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([]);
@@ -187,6 +187,9 @@ export default function CheckoutPage() {
   const [cardPaymentError, setCardPaymentError] = useState<string | null>(null);
   const [cpfError, setCpfError] = useState("");
   const [redirecting, setRedirecting] = useState(false);
+  const [priceUpdateAlert, setPriceUpdateAlert] = useState<
+    { nome: string; preco_carrinho: number; preco_atual: number }[]
+  >([]);
 
   // CEP pré-preenchido vindo da simulação na página do produto
   const [cepFromSession, setCepFromSession] = useState(false);
@@ -307,6 +310,19 @@ export default function CheckoutPage() {
       const data = await res.json();
 
       if (!res.ok || data.error) {
+        if (data.code === "preco_desatualizado") {
+          const updated: { product_id: string; nome: string; preco_carrinho: number; preco_atual: number }[] =
+            data.items_atualizados ?? [];
+          for (const u of updated) {
+            const cartItem = items.find((i) => i.productId === u.product_id);
+            if (cartItem) updateItemPrice(cartItem.variantId, u.preco_atual);
+          }
+          setPriceUpdateAlert(updated.map((u) => ({ nome: u.nome, preco_carrinho: u.preco_carrinho, preco_atual: u.preco_atual })));
+          setCardPaymentError(null);
+          setSubmitError("");
+          setSubmitting(false);
+          return;
+        }
         if (data.code === "PAYMENT_REJECTED") {
           // Cartão recusado: exibe mensagem específica no Brick (sem desmontar iframe)
           // e não mostra o erro genérico abaixo do formulário.
@@ -503,6 +519,16 @@ export default function CheckoutPage() {
       const data = await res.json();
 
       if (!res.ok || data.error) {
+        if (data.code === "preco_desatualizado") {
+          const updated: { product_id: string; nome: string; preco_carrinho: number; preco_atual: number }[] =
+            data.items_atualizados ?? [];
+          for (const u of updated) {
+            const cartItem = items.find((i) => i.productId === u.product_id);
+            if (cartItem) updateItemPrice(cartItem.variantId, u.preco_atual);
+          }
+          setPriceUpdateAlert(updated.map((u) => ({ nome: u.nome, preco_carrinho: u.preco_carrinho, preco_atual: u.preco_atual })));
+          return;
+        }
         setSubmitError(data.error ?? "Erro ao processar pedido.");
         return;
       }
@@ -604,6 +630,31 @@ export default function CheckoutPage() {
         <p className="text-[10px] tracking-[0.26em] text-kc-muted mb-1 uppercase">Compra</p>
         <h1 className="font-serif text-2xl font-medium text-kc-dark">Checkout</h1>
       </div>
+
+      {priceUpdateAlert.length > 0 && (
+        <div className="mb-6 border border-amber-300 bg-amber-50 p-4">
+          <div className="flex items-start gap-3">
+            <Info size={14} className="text-amber-600 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-xs font-medium text-amber-800 mb-1">Preços atualizados</p>
+              <p className="text-xs text-amber-700 mb-2">
+                Os preços de alguns itens foram atualizados desde que você adicionou ao carrinho. Seu pedido foi recalculado com os valores atuais — revise o resumo e confirme novamente.
+              </p>
+              <ul className="space-y-0.5">
+                {priceUpdateAlert.map((u) => (
+                  <li key={u.nome} className="text-[11px] text-amber-700">
+                    <span className="font-medium">{u.nome}</span>: de{" "}
+                    {formatCurrency(u.preco_carrinho)} → {formatCurrency(u.preco_atual)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <button onClick={() => setPriceUpdateAlert([])} className="text-amber-400 hover:text-amber-600 shrink-0">
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      )}
 
       <StepIndicator current={step} steps={STEPS} />
 

@@ -25,6 +25,7 @@ interface CartStore {
   addItem: (item: Omit<CartItem, "quantity"> & { quantity?: number }) => void;
   removeItem: (variantId: string) => void;
   updateQuantity: (variantId: string, quantity: number) => void;
+  updateItemPrice: (variantId: string, price: number) => void;
   setCoupon: (coupon: AppliedCoupon | null) => void;
   clearCoupon: () => void;
   clearCart: () => void;
@@ -79,6 +80,14 @@ export const useCartStore = create<CartStore>()(
         set((state) => ({
           items: state.items.map((i) =>
             i.variantId === variantId ? { ...i, quantity } : i
+          ),
+        }));
+      },
+
+      updateItemPrice: (variantId, price) => {
+        set((state) => ({
+          items: state.items.map((i) =>
+            i.variantId === variantId ? { ...i, price } : i
           ),
         }));
       },

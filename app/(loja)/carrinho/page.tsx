@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Minus, Plus, Trash2, ShoppingBag, Tag, ChevronRight, AlertTriangle, CreditCard } from "lucide-react";
+import { Minus, Plus, Trash2, ShoppingBag, Tag, ChevronRight, AlertTriangle, CreditCard, X } from "lucide-react";
 import { useCartStore } from "@/lib/store/cart";
 import { calculateCouponDiscount } from "@/lib/coupons";
 import { formatCurrency } from "@/lib/utils";
@@ -14,6 +14,7 @@ export default function CarrinhoPage() {
     coupon: appliedCoupon,
     removeItem,
     updateQuantity,
+    updateItemPrice,
     subtotal,
     setCoupon,
     clearCoupon,
@@ -21,6 +22,7 @@ export default function CarrinhoPage() {
   const [couponCode, setCouponCode] = useState("");
   const [couponError, setCouponError] = useState("");
   const [couponLoading, setCouponLoading] = useState(false);
+  const [priceUpdated, setPriceUpdated] = useState(false);
 
   // Estoque em tempo real
   const [stockMap, setStockMap] = useState<Record<string, number>>({});
@@ -43,6 +45,35 @@ export default function CarrinhoPage() {
   useEffect(() => {
     checkStock();
   }, [checkStock]);
+
+  // Validar preços ao carregar o carrinho — atualiza silenciosamente se houver diferença
+  useEffect(() => {
+    if (items.length === 0) return;
+    (async () => {
+      try {
+        const res = await fetch("/api/cart/validate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            items: items.map((i) => ({
+              variantId: i.variantId,
+              productId: i.productId,
+              unit_price: i.price,
+            })),
+          }),
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.updated) {
+          for (const item of data.items as { variantId: string; needs_update: boolean; current_price: number }[]) {
+            if (item.needs_update) updateItemPrice(item.variantId, item.current_price);
+          }
+          setPriceUpdated(true);
+        }
+      } catch { /* silently fail */ }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const outOfStockItems = items.filter(
     (item) => item.variantId in stockMap && stockMap[item.variantId] < item.quantity
@@ -125,6 +156,18 @@ export default function CarrinhoPage() {
           {items.length} {items.length === 1 ? "item" : "itens"}
         </p>
       </div>
+
+      {priceUpdated && (
+        <div className="mb-5 flex items-start gap-3 border border-amber-300 bg-amber-50 px-4 py-3">
+          <AlertTriangle size={14} className="text-amber-600 shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-800 flex-1">
+            Os preços de alguns itens foram atualizados desde que você adicionou ao carrinho. Os valores abaixo já refletem os preços atuais.
+          </p>
+          <button onClick={() => setPriceUpdated(false)} className="text-amber-500 hover:text-amber-700 shrink-0">
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 

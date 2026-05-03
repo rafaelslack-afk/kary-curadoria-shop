@@ -127,7 +127,58 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Token do cartão não informado (brickFormData.token ausente)." }, { status: 400 });
     }
 
-    // ── 2. Validar estoque (leitura atômica via adminClient) ─────────────────
+    // ── 2. Validar preços contra o banco (NUNCA confiar no frontend) ─────────
+    const productIds = [...new Set(items.map((i) => i.productId))];
+
+    const { data: dbProducts, error: productsErr } = await admin
+      .from("products")
+      .select("id, price, name, active")
+      .in("id", productIds);
+
+    if (productsErr || !dbProducts) {
+      return NextResponse.json({ error: "Erro ao verificar preços dos produtos." }, { status: 500 });
+    }
+
+    const productsMap = new Map(dbProducts.map((p) => [p.id, p]));
+
+    for (const item of items) {
+      const product = productsMap.get(item.productId);
+
+      if (!product || !product.active) {
+        return NextResponse.json(
+          {
+            error: `O produto "${item.productName}" não está mais disponível.`,
+            code: "produto_indisponivel",
+          },
+          { status: 400 }
+        );
+      }
+
+      if (Math.abs(product.price - item.price) > 0.01) {
+        return NextResponse.json(
+          {
+            error: "Os preços do seu carrinho foram atualizados. Por favor, revise seu pedido antes de continuar.",
+            code: "preco_desatualizado",
+            items_atualizados: [
+              {
+                product_id: product.id,
+                nome: product.name,
+                preco_carrinho: item.price,
+                preco_atual: product.price,
+              },
+            ],
+          },
+          { status: 409 }
+        );
+      }
+    }
+
+    // Subtotal recalculado com preços do banco — nunca usar o valor enviado pelo frontend
+    const serverSubtotal = items.reduce((acc, item) => {
+      return acc + productsMap.get(item.productId)!.price * item.quantity;
+    }, 0);
+
+    // ── 3. Validar estoque (leitura atômica via adminClient) ─────────────────
     const variantIds = items.map((i) => i.variantId);
 
     const { data: variants, error: variantsErr } = await admin
@@ -192,7 +243,7 @@ export async function POST(request: NextRequest) {
     console.log(`[orders/create] ${reservedItems.length} item(s) reservado(s).`);
 
     // ── 4. Chamar Mercado Pago ───────────────────────────────────────────────
-    const total = subtotal - discount + shipping.preco;
+    const total = serverSubtotal - discount + shipping.preco;
     const { firstName, lastName } = splitName(customer.nome);
 
     const customerCpf = customer.cpf.replace(/\D/g, "");
@@ -411,7 +462,7 @@ export async function POST(request: NextRequest) {
         guest_cpf: cpfLimpo,
         customer_phone: customer.telefone?.replace(/\D/g, "") || null,
         status: orderStatus,
-        subtotal,
+        subtotal: serverSubtotal,
         shipping_cost: shipping.preco,
         shipping_service: shipping.servico,
         shipping_deadline: shipping.prazo,
@@ -483,18 +534,21 @@ export async function POST(request: NextRequest) {
     })());
 
     // ── 6. Inserir itens do pedido ───────────────────────────────────────────
-    const orderItems = items.map((i) => ({
-      order_id: order.id,
-      product_id: i.productId,
-      variant_id: i.variantId,
-      product_name: i.productName,
-      size_snapshot: i.size,
-      color_snapshot: (i as { color?: string | null }).color ?? null,
-      sku_snapshot: i.sku,
-      quantity: i.quantity,
-      unit_price: i.price,
-      total_price: i.price * i.quantity,
-    }));
+    const orderItems = items.map((i) => {
+      const dbPrice = productsMap.get(i.productId)!.price;
+      return {
+        order_id: order.id,
+        product_id: i.productId,
+        variant_id: i.variantId,
+        product_name: i.productName,
+        size_snapshot: i.size,
+        color_snapshot: (i as { color?: string | null }).color ?? null,
+        sku_snapshot: i.sku,
+        quantity: i.quantity,
+        unit_price: dbPrice,
+        total_price: dbPrice * i.quantity,
+      };
+    });
 
     const { error: itemsErr } = await admin.from("order_items").insert(orderItems);
     if (itemsErr) {
@@ -534,9 +588,9 @@ export async function POST(request: NextRequest) {
           variant: i.size,
           color: (i as { color?: string | null }).color ?? undefined,
           quantity: i.quantity,
-          unit_price: i.price,
+          unit_price: productsMap.get(i.productId)?.price ?? i.price,
         })),
-        subtotal,
+        subtotal: serverSubtotal,
         shippingCost: shipping.preco,
         discount,
         total,
@@ -570,7 +624,7 @@ export async function POST(request: NextRequest) {
           variant: i.size,
           color: (i as { color?: string | null }).color ?? undefined,
           quantity: i.quantity,
-          unit_price: i.price,
+          unit_price: productsMap.get(i.productId)?.price ?? i.price,
         }));
         await sendPaymentConfirmedEmail({
           to: customer.email,
