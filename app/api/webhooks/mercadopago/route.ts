@@ -44,15 +44,23 @@ export async function POST(request: Request) {
         ? process.env.MERCADOPAGO_ACCESS_TOKEN_PRODUCTION
         : process.env.MERCADOPAGO_ACCESS_TOKEN_SANDBOX;
 
-    const mpResponse = await fetch(
-      `https://api.mercadopago.com/v1/payments/${paymentId}`,
-      {
-        headers: {
-          Authorization: `Bearer ${mpToken}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
+    const mpController = new AbortController();
+    const mpTimeout = setTimeout(() => mpController.abort(), 15_000);
+    let mpResponse: Response;
+    try {
+      mpResponse = await fetch(
+        `https://api.mercadopago.com/v1/payments/${paymentId}`,
+        {
+          signal: mpController.signal,
+          headers: {
+            Authorization: `Bearer ${mpToken}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+    } finally {
+      clearTimeout(mpTimeout);
+    }
 
     if (!mpResponse.ok) {
       console.error("[Webhook MP] Erro ao buscar pagamento:", paymentId);

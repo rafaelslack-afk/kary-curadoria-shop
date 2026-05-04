@@ -82,21 +82,29 @@ export async function POST(request: NextRequest) {
 
     let data: unknown[];
     try {
-      const res = await fetch(`${ME_BASE}/me/shipment/calculate`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${getToken()}`,
-          "User-Agent": "Aplicação KVO (contato@karycuradoria.com.br)",
-          Accept: "application/json",
-        },
-        body: JSON.stringify({
-          from: { postal_code: cepOrigem },
-          to:   { postal_code: cepDestino.replace(/\D/g, "") },
-          products: meProducts,
-          options: { receipt: false, own_hand: false },
-        }),
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15_000);
+      let res: Response;
+      try {
+        res = await fetch(`${ME_BASE}/me/shipment/calculate`, {
+          method: "POST",
+          signal: controller.signal,
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${getToken()}`,
+            "User-Agent": "Aplicação KVO (contato@karycuradoria.com.br)",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            from: { postal_code: cepOrigem },
+            to:   { postal_code: cepDestino.replace(/\D/g, "") },
+            products: meProducts,
+            options: { receipt: false, own_hand: false },
+          }),
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
 
       if (!res.ok) {
         const text = await res.text();

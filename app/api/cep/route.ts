@@ -11,9 +11,17 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`, {
-      next: { revalidate: 86400 }, // cache 24h — endereços raramente mudam
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
+    let res: Response;
+    try {
+      res = await fetch(`https://viacep.com.br/ws/${cep}/json/`, {
+        signal: controller.signal,
+        next: { revalidate: 86400 }, // cache 24h — endereços raramente mudam
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!res.ok) {
       return NextResponse.json({ error: "Erro ao consultar ViaCEP." }, { status: 502 });
