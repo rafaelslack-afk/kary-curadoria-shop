@@ -15,7 +15,30 @@ export async function GET(
     .from("product_variants")
     .select("*")
     .eq("product_id", params.id)
-    .order("size", { ascending: true });
+    .order("sku", { ascending: true });
+
+  // ── Diagnóstico temporário ─────────────────────────────────────────────────
+  console.log(`[Variants API] product_id queried: ${params.id}`);
+  console.log(`[Variants API] total rows returned: ${data?.length ?? 0}`);
+  if (error) console.error(`[Variants API] query error:`, JSON.stringify(error));
+  console.log(`[Variants API] SKUs returned:`, data?.map((v) => v.sku));
+  const inResult = data?.find((v) => v.sku === "CON-0006-CRUA-M");
+  console.log(`[Variants API] CON-0006-CRUA-M in result: ${!!inResult}`);
+
+  // Busca a variante pelo UUID fixo para revelar o product_id real no banco
+  const MISSING_ID = "31095030-06cd-4cba-889a-5a961d66f965";
+  const { data: byId, error: byIdErr } = await supabase
+    .from("product_variants")
+    .select("id, sku, product_id, size, color, active, stock_qty")
+    .eq("id", MISSING_ID)
+    .maybeSingle();
+  console.log(`[Variants API] lookup by UUID ${MISSING_ID}:`, byId ?? "(not found)");
+  if (byIdErr) console.error(`[Variants API] UUID lookup error:`, JSON.stringify(byIdErr));
+  if (byId) {
+    console.log(`[Variants API] variant product_id in DB: ${byId.product_id}`);
+    console.log(`[Variants API] product_id match: ${byId.product_id === params.id}`);
+  }
+  // ── Fim diagnóstico ────────────────────────────────────────────────────────
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
