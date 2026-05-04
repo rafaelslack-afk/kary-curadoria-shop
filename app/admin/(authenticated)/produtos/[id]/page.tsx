@@ -113,11 +113,15 @@ export default function EditarProdutoPage() {
   useEffect(() => {
     Promise.all([
       fetch(`/api/products/${id}`).then((r) => r.json()),
+      // Busca variantes pelo endpoint dedicado — mais confiável que o nested
+      // product_variants(*) do Supabase, que pode omitir rows por paginação
+      // implícita do PostgREST ou não-determinismo de ordenação.
+      fetch(`/api/products/${id}/variants`).then((r) => r.json()),
       fetch("/api/categories?active=true").then((r) => r.json()),
       fetch("/api/admin/colors").then((r) => r.json()),
       fetch("/api/admin/sizes").then((r) => r.json()),
     ])
-      .then(([product, cats, colors, sizes]) => {
+      .then(([product, variantsRaw, cats, colors, sizes]) => {
         setName(product.name ?? "");
         setSlug(product.slug ?? "");
         setSlugEdited(true); // não sobrescrever o slug carregado ao mudar o nome
@@ -135,7 +139,9 @@ export default function EditarProdutoPage() {
         setLengthCm(product.length_cm ? String(product.length_cm) : "");
         setWidthCm(product.width_cm ? String(product.width_cm) : "");
         setHeightCm(product.height_cm ? String(product.height_cm) : "");
-        const variantRows = (product.product_variants ?? []).map(
+
+        // Usa o endpoint dedicado de variantes (query direta, sem nested select)
+        const variantRows = (Array.isArray(variantsRaw) ? variantsRaw : (product.product_variants ?? [])).map(
           (v: ProductVariant) => ({ ...v, _dirty: false })
         );
         setVariants(variantRows);
@@ -422,9 +428,9 @@ export default function EditarProdutoPage() {
           body: JSON.stringify({ size: cell.sizeName, color: cell.colorName, sku: cell.sku, stock_qty: cell.stock_qty, stock_min: cell.stock_min }),
         });
       }
-      const res = await fetch(`/api/products/${id}`);
+      const res = await fetch(`/api/products/${id}/variants`);
       const data = await res.json();
-      setVariants((data.product_variants ?? []).map((v: ProductVariant) => ({ ...v })));
+      setVariants((Array.isArray(data) ? data : []).map((v: ProductVariant) => ({ ...v })));
       setSelectedColorIds([]);
       setSelectedSizeIds([]);
       setNewGrid([]);
