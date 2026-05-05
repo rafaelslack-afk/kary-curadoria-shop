@@ -97,10 +97,13 @@ export interface SendOrderCancelledParams {
 }
 
 export interface LowStockItem {
-  productName: string;
-  variantLabel: string;
   sku: string;
-  stock: number;
+  size: string;
+  color: string | null;
+  stock_qty: number;
+  stock_min: number;
+  productName: string;
+  skuBase: string;
 }
 
 export async function sendOrderCreatedEmail(params: SendOrderCreatedParams) {
@@ -139,11 +142,15 @@ export async function sendOrderCancelledEmail(params: SendOrderCancelledParams) 
   });
 }
 
-export async function sendLowStockAlertEmail(items: LowStockItem[]) {
-  if (items.length === 0) return;
+export async function sendLowStockAlertEmail(params: {
+  orderNumber: string;
+  items: LowStockItem[];
+}) {
+  if (params.items.length === 0) return;
+  const ALERT_TO = "contato@karycuradoria.com.br";
   await sendHtml({
-    to: ADMIN,
-    subject: `Alerta: ${items.length} variação(ões) com estoque baixo`,
-    component: createElement(LowStockAlertEmail, { items }),
+    to: ALERT_TO,
+    subject: `⚠ Estoque baixo — Pedido #${params.orderNumber}`,
+    component: createElement(LowStockAlertEmail, params),
   });
 }

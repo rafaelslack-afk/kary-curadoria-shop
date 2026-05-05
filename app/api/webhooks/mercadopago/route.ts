@@ -66,7 +66,7 @@ export async function POST(request: Request) {
     const admin = createAdminClient();
     const { data: order } = await admin
       .from("orders")
-      .select("id, status, order_number, guest_name, guest_email, total, order_items(product_name, size_snapshot, quantity, unit_price)")
+      .select("id, status, order_number, guest_name, guest_email, total, order_items(variant_id, product_name, size_snapshot, color_snapshot, quantity, unit_price)")
       .eq("pagbank_charge_id", String(paymentId))
       .single();
 
@@ -123,23 +123,44 @@ export async function POST(request: Request) {
         }
       }
 
-      // Verificar estoque baixo após débito (trigger Supabase já rodou)
+      // Verificar estoque baixo apenas para variantes deste pedido
       try {
-        const { data: lowStock } = await admin
-          .from("product_variants")
-          .select("id, sku, size, color, stock_qty, products!inner(name)")
-          .lte("stock_qty", 3)
-          .eq("active", true);
-
-        if (lowStock && lowStock.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const orderItems = (order as any).order_items ?? [];
+        const orderVariantIds: string[] = orderItems
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const items = lowStock.map((v: any) => ({
-            productName: Array.isArray(v.products) ? v.products[0]?.name ?? "—" : v.products?.name ?? "—",
-            variantLabel: [v.size, v.color].filter(Boolean).join(" / ") || "—",
-            sku: v.sku ?? "—",
-            stock: v.stock_qty,
-          }));
-          await sendLowStockAlertEmail(items);
+          .map((i: any) => i.variant_id)
+          .filter(Boolean);
+
+        if (orderVariantIds.length > 0) {
+          const { data: orderVariants } = await admin
+            .from("product_variants")
+            .select("id, sku, size, color, stock_qty, stock_min, products!inner(name, sku_base)")
+            .in("id", orderVariantIds);
+
+          // Filtra em JS: só itens abaixo do stock_min individual de cada variante
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const lowStock = (orderVariants ?? []).filter((v: any) => v.stock_qty <= v.stock_min);
+
+          if (lowStock.length > 0) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const alertItems = lowStock.map((v: any) => {
+              const prod = Array.isArray(v.products) ? v.products[0] : v.products;
+              return {
+                sku: v.sku ?? "—",
+                size: v.size ?? "—",
+                color: v.color ?? null,
+                stock_qty: v.stock_qty,
+                stock_min: v.stock_min,
+                productName: prod?.name ?? "—",
+                skuBase: prod?.sku_base ?? "—",
+              };
+            });
+            await sendLowStockAlertEmail({
+              orderNumber: String(order.order_number),
+              items: alertItems,
+            });
+          }
         }
       } catch (stockErr) {
         console.error("[Webhook MP] Falha ao verificar/enviar alerta de estoque:", stockErr);
