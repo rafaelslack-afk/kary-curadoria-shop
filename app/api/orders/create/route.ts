@@ -127,6 +127,68 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Token do cartão não informado (brickFormData.token ausente)." }, { status: 400 });
     }
 
+    // ── 1.5. Validar cupom no servidor ──────────────────────────────────────
+    // Revalida independentemente do que o front-end calculou. Cupons inativos
+    // são aceitos somente se o cliente tiver abandono recente (≤ 7 dias),
+    // alinhado com a janela de recuperação do sistema de abandono do KVO.
+    let validatedCoupon: {
+      code: string;
+      used_count: number;
+      max_uses: number | null;
+      expires_at: string | null;
+    } | null = null;
+
+    if (couponCode) {
+      const { data: coupon } = await admin
+        .from("coupons")
+        .select("code, active, max_uses, used_count, expires_at")
+        .eq("code", couponCode)
+        .maybeSingle();
+
+      if (!coupon) {
+        return NextResponse.json(
+          { error: "Cupom não encontrado.", code: "INVALID_COUPON" },
+          { status: 400 }
+        );
+      }
+
+      if (!coupon.active) {
+        // Aceita somente se houver abandono registrado nos últimos 7 dias
+        const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        const { data: abandoned } = await admin
+          .from("abandoned_checkouts")
+          .select("id")
+          .eq("email", customer.email.trim().toLowerCase())
+          .gte("created_at", since)
+          .limit(1)
+          .maybeSingle();
+
+        if (!abandoned) {
+          return NextResponse.json(
+            { error: "Este cupom não está mais disponível.", code: "INVALID_COUPON" },
+            { status: 400 }
+          );
+        }
+        // Abandono recente encontrado — aceitar como cortesia de recuperação
+      }
+
+      if (coupon.max_uses !== null && coupon.used_count >= coupon.max_uses) {
+        return NextResponse.json(
+          { error: "Este cupom atingiu o limite de utilizações.", code: "COUPON_EXHAUSTED" },
+          { status: 400 }
+        );
+      }
+
+      if (coupon.expires_at && new Date(coupon.expires_at) < new Date()) {
+        return NextResponse.json(
+          { error: "Este cupom está expirado.", code: "COUPON_EXPIRED" },
+          { status: 400 }
+        );
+      }
+
+      validatedCoupon = coupon;
+    }
+
     // ── 2. Validar estoque (leitura atômica via adminClient) ─────────────────
     const variantIds = items.map((i) => i.variantId);
 
@@ -518,6 +580,22 @@ export async function POST(request: NextRequest) {
         .eq("variant_id", item.variantId)
         .eq("type", "reserva")
         .is("order_id", null);
+    }
+
+    // ── 7.5. Incrementar used_count do cupom ────────────────────────────────
+    // Executado somente após o pedido ser confirmado no banco. O +1 usa o
+    // used_count capturado na validação (passo 1.5); para cargas concorrentes
+    // muito altas seria necessário um RPC atômico, mas é adequado aqui.
+    if (couponCode && validatedCoupon) {
+      const { error: couponIncrErr } = await admin
+        .from("coupons")
+        .update({ used_count: validatedCoupon.used_count + 1 })
+        .eq("code", couponCode);
+      if (couponIncrErr) {
+        console.error("[orders/create] Falha ao incrementar used_count do cupom:", couponIncrErr.message);
+      } else {
+        console.log(`[orders/create] Cupom ${couponCode} used_count incrementado para ${validatedCoupon.used_count + 1}`);
+      }
     }
 
     // ── 8. Disparar e-mail de confirmação ───────────────────────────────────
