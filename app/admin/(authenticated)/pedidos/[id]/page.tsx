@@ -56,6 +56,7 @@ interface FullOrder {
   shipping_deadline: number | null;
   shipping_address_json: Address;
   tracking_code: string | null;
+  label_url: string | null;
   nf_number: string | null;
   nf_key: string | null;
   nf_status: NfStatus | null;
@@ -167,6 +168,7 @@ export default function PedidoDetailPage() {
       setOrder(data);
       setStatus(data.status);
       setTrackingCode(data.tracking_code ?? "");
+      setLabelUrl(data.label_url ?? null);
       setNfNumber(data.nf_number ?? "");
       setNfKey(data.nf_key ?? "");
       setNfStatus(data.nf_status ?? "");
@@ -497,31 +499,36 @@ export default function PedidoDetailPage() {
               </a>
             )}
 
-            {/* Gerar Etiqueta Melhor Envio */}
-            {(order.status === "paid" || order.status === "preparing") && (
+            {/* Gerar / Imprimir Etiqueta Melhor Envio */}
+            {(order.status === "paid" || order.status === "preparing" || labelUrl) && (
               <div className="mt-4 pt-4 border-t border-gray-100 space-y-2">
                 <p className="text-[11px] text-gray-400 uppercase tracking-wider">
                   Melhor Envio
                 </p>
-                <Button
-                  size="sm"
-                  disabled={generatingLabel}
-                  onClick={handleGenerateLabel}
-                  className="w-full bg-[#A0622A] hover:bg-[#8a5224] text-white disabled:opacity-60"
-                >
-                  {generatingLabel ? (
-                    <>
-                      <Loader2 size={13} className="animate-spin mr-1.5" />
-                      Gerando etiqueta...
-                    </>
-                  ) : (
-                    <>
-                      <Printer size={13} className="mr-1.5" />
-                      Gerar Etiqueta de Envio
-                    </>
-                  )}
-                </Button>
 
+                {/* Botão Gerar: apenas enquanto etiqueta ainda não foi gerada */}
+                {(order.status === "paid" || order.status === "preparing") && (
+                  <Button
+                    size="sm"
+                    disabled={generatingLabel}
+                    onClick={handleGenerateLabel}
+                    className="w-full bg-[#A0622A] hover:bg-[#8a5224] text-white disabled:opacity-60"
+                  >
+                    {generatingLabel ? (
+                      <>
+                        <Loader2 size={13} className="animate-spin mr-1.5" />
+                        Gerando etiqueta...
+                      </>
+                    ) : (
+                      <>
+                        <Printer size={13} className="mr-1.5" />
+                        Gerar Etiqueta de Envio
+                      </>
+                    )}
+                  </Button>
+                )}
+
+                {/* Link Imprimir: sempre visível quando etiqueta já foi gerada */}
                 {labelUrl && (
                   <a
                     href={labelUrl}

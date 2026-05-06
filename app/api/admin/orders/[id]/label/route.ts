@@ -9,7 +9,6 @@ import {
   printMELabel,
   getMETracking,
 } from '@/lib/melhorenvio-shipping'
-import { sendOrderShippedEmail } from '@/lib/email/send'
 
 export async function POST(
   _request: Request,
@@ -134,30 +133,16 @@ export async function POST(
 
     console.log('[label] Tracking:', trackingCode, '| URL:', labelUrl)
 
-    // Atualizar pedido com rastreio e status
+    // Atualizar pedido: status → 'preparing', salvar label_url e tracking (se disponível)
     await admin
       .from('orders')
       .update({
-        tracking_code: trackingCode ?? order.tracking_code,
-        status: 'shipped',
+        status: 'preparing',
+        label_url: labelUrl,
+        ...(trackingCode ? { tracking_code: trackingCode } : {}),
         updated_at: new Date().toISOString(),
       })
       .eq('id', params.id)
-
-    // Enviar e-mail ao cliente
-    if (trackingCode && customerEmail) {
-      try {
-        await sendOrderShippedEmail({
-          to: customerEmail,
-          orderNumber: String(order.order_number),
-          customerName,
-          trackingCode,
-        })
-        console.log('[label] E-mail de envio disparado para:', customerEmail)
-      } catch (emailErr) {
-        console.error('[label] Erro ao enviar e-mail:', emailErr)
-      }
-    }
 
     return NextResponse.json({
       ok: true,

@@ -33,7 +33,7 @@ export async function GET(
         guest_name, guest_email, guest_cpf, customer_phone,
         subtotal, shipping_cost, discount, coupon_code, total,
         shipping_service, shipping_deadline, shipping_address_json,
-        tracking_code, nf_number, nf_key, nf_status, notes,
+        tracking_code, label_url, nf_number, nf_key, nf_status, notes,
         created_at, updated_at,
         order_items (
           id, product_id, variant_id,
@@ -133,6 +133,15 @@ export async function PUT(
     return NextResponse.json({ error: "Pedido nao encontrado." }, { status: 404 });
   }
 
+  // Auto-avança para 'shipped' quando tracking_code é salvo e pedido está em 'preparing'
+  if (
+    "tracking_code" in patch &&
+    requestedTrackingCode.length > 0 &&
+    previousOrder.status === "preparing"
+  ) {
+    patch.status = "shipped";
+  }
+
   const previousTrackingCode = previousOrder.tracking_code?.trim() ?? "";
   const { data, error } = await admin
     .from("orders")
@@ -158,18 +167,21 @@ export async function PUT(
       .eq("type", "reserva");
   }
 
-  const shouldSendTrackingEmail =
-    requestedTrackingCode.length > 0 &&
-    requestedTrackingCode !== previousTrackingCode &&
+  // Envia e-mail de envio quando status transita para 'shipped'
+  const effectiveTrackingCode = requestedTrackingCode || previousTrackingCode;
+  const shouldSendShippedEmail =
+    previousOrder.status !== "shipped" &&
+    data.status === "shipped" &&
+    effectiveTrackingCode.length > 0 &&
     Boolean(previousOrder.guest_email);
 
-  if (shouldSendTrackingEmail && previousOrder.guest_email) {
+  if (shouldSendShippedEmail && previousOrder.guest_email) {
     try {
       await sendOrderShippedEmail({
         to: previousOrder.guest_email,
         orderNumber: String(previousOrder.order_number),
         customerName: previousOrder.guest_name ?? "Cliente",
-        trackingCode: requestedTrackingCode,
+        trackingCode: effectiveTrackingCode,
         carrier: previousOrder.shipping_service ?? undefined,
       });
     } catch (emailErr) {
