@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Script from "next/script";
 import { useRouter } from "next/navigation";
-import { Check, ChevronRight, Loader2, Info, X, Tag } from "lucide-react";
+import { Check, ChevronRight, Loader2, Info, X } from "lucide-react";
 import { useCartStore } from "@/lib/store/cart";
 import { calculateCouponDiscount } from "@/lib/coupons";
 import { formatCurrency } from "@/lib/utils";
@@ -174,7 +174,7 @@ function OrderSummary({ shipping, discount }: { shipping: ShippingOption | null;
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { items, coupon: appliedCoupon, subtotal, clearCart, setCoupon, clearCoupon } = useCartStore();
+  const { items, coupon: appliedCoupon, subtotal, clearCart } = useCartStore();
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<FormData>(INITIAL_FORM);
   const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([]);
@@ -187,9 +187,6 @@ export default function CheckoutPage() {
   const [cardPaymentError, setCardPaymentError] = useState<string | null>(null);
   const [cpfError, setCpfError] = useState("");
   const [redirecting, setRedirecting] = useState(false);
-  const [couponCode, setCouponCode] = useState("");
-  const [couponError, setCouponError] = useState("");
-  const [couponLoading, setCouponLoading] = useState(false);
 
   // CEP pré-preenchido vindo da simulação na página do produto
   const [cepFromSession, setCepFromSession] = useState(false);
@@ -253,39 +250,6 @@ export default function CheckoutPage() {
 
   function set(field: keyof FormData, value: string | ShippingOption | null) {
     setForm((f) => ({ ...f, [field]: value }));
-  }
-
-  async function handleApplyCoupon() {
-    if (!couponCode.trim()) return;
-    setCouponLoading(true);
-    setCouponError("");
-    try {
-      const sub = subtotal();
-      const res = await fetch(`/api/coupons/validate?code=${encodeURIComponent(couponCode.trim())}&subtotal=${sub}`);
-      const data = await res.json();
-      if (!res.ok || data.error) {
-        setCouponError(data.error ?? "Cupom inválido.");
-        clearCoupon();
-      } else {
-        setCoupon({
-          code: data.code,
-          discount: data.value,
-          type: data.type,
-          minOrder: data.min_order ?? 0,
-        });
-        setCouponError("");
-      }
-    } catch {
-      setCouponError("Erro ao validar cupom. Tente novamente.");
-    } finally {
-      setCouponLoading(false);
-    }
-  }
-
-  function removeCoupon() {
-    clearCoupon();
-    setCouponCode("");
-    setCouponError("");
   }
 
   const discount = calculateCouponDiscount(subtotal(), appliedCoupon);
@@ -856,66 +820,6 @@ export default function CheckoutPage() {
           {step === 2 && (
             <div className="space-y-5">
               <h2 className="font-serif text-lg font-medium text-kc-dark">Forma de pagamento</h2>
-
-              {/* ── Bloco de cupom ── */}
-              <div className="rounded-lg bg-[#F5F1EA] border border-[#D9C9B8] px-4 py-3">
-                {appliedCoupon ? (
-                  <div>
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <Tag size={13} className="text-[#A0622A]" />
-                      <span className="text-[13px] text-[#5C3317]">Cupom aplicado</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-[13px] text-[#5C3317]">
-                        <span className="font-medium">{appliedCoupon.code}</span>
-                        {" — "}
-                        {appliedCoupon.type === "percent"
-                          ? `${appliedCoupon.discount}% de desconto`
-                          : `${formatCurrency(appliedCoupon.discount)} de desconto`}
-                      </p>
-                      <button
-                        onClick={removeCoupon}
-                        className="text-[#5C3317]/60 hover:text-red-500 transition-colors shrink-0"
-                        aria-label="Remover cupom"
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                    {discount > 0 && (
-                      <p className="text-[12px] text-[#A0622A] mt-1">
-                        Economia: {formatCurrency(discount)}
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <Tag size={13} className="text-[#A0622A]" />
-                      <span className="text-[13px] text-[#5C3317]">Tem um cupom de desconto?</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={couponCode}
-                        onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                        onKeyDown={(e) => e.key === "Enter" && handleApplyCoupon()}
-                        placeholder="CÓDIGO"
-                        className={`${inputCls} flex-1 tracking-wider`}
-                      />
-                      <button
-                        onClick={handleApplyCoupon}
-                        disabled={couponLoading || !couponCode.trim()}
-                        className="bg-[#A0622A] text-white text-[13px] px-4 py-2.5 hover:bg-[#5C3317] transition-colors disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
-                      >
-                        {couponLoading ? "..." : "APLICAR"}
-                      </button>
-                    </div>
-                    {couponError && (
-                      <p className="text-[11px] text-red-500 mt-1.5">{couponError}</p>
-                    )}
-                  </div>
-                )}
-              </div>
 
               <div className="grid grid-cols-2 gap-3">
                 {(["pix", "credit_card"] as const).map((m) => {
