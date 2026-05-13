@@ -4,11 +4,14 @@ import {
   Clock,
   ShieldCheck,
   RefreshCw,
-  Store,
+  MapPin,
   MessageCircle,
   Mail,
   X,
   ChevronRight,
+  AlertTriangle,
+  Check,
+  Info,
 } from "lucide-react";
 
 // ── Metadata ──────────────────────────────────────────────────────────────────
@@ -16,7 +19,7 @@ import {
 export const metadata: Metadata = {
   title: "Trocas e Devoluções",
   description:
-    "Conheça a política de trocas e devoluções da Kary Curadoria. Seu direito garantido com transparência e agilidade.",
+    "Conheça a política completa de trocas e devoluções da Kary Curadoria. Prazos, condições de frete por região e procedimentos detalhados para sua tranquilidade.",
   openGraph: {
     title: "Trocas e Devoluções | Kary Curadoria",
     description: "Política de trocas e devoluções da Kary Curadoria.",
@@ -30,48 +33,72 @@ const cards = [
   {
     icon: Clock,
     title: "Direito de Arrependimento",
-    text: "7 dias após o recebimento para desistir da compra, conforme o CDC.",
+    text: "7 dias corridos após o recebimento para desistir da compra, conforme o CDC.",
   },
   {
     icon: ShieldCheck,
     title: "Defeito de Fabricação",
-    text: "30 dias para acionar troca ou reembolso em caso de defeito.",
+    text: "30 dias corridos após o recebimento para acionar troca ou reembolso. Kary Curadoria arca com todos os fretes.",
   },
   {
     icon: RefreshCw,
     title: "Troca de Tamanho ou Cor",
-    text: "15 dias após o recebimento para solicitar troca.",
+    text: "7 dias corridos após o recebimento para solicitar troca. Consulte as condições de frete por região.",
   },
   {
-    icon: Store,
+    icon: MapPin,
     title: "Troca na Loja Física",
-    text: "Traga o produto até nossa loja no Brás e troque sem complicação.",
+    text: "7 dias corridos após o recebimento. Traga o produto até nossa loja no Brás e troque sem complicação.",
   },
 ];
 
 const tableRows = [
   {
     situacao: "Arrependimento (CDC)",
-    prazo: "7 dias do recebimento",
-    frete: "Cliente envia, Kary reembolsa o frete",
-    resolucao: "Reembolso integral",
+    prazo: "7 dias corridos do recebimento",
+    freteEnvio: "Cliente paga",
+    freteReenvio: "Cliente paga",
+    regiao: "Todas",
+    resolucao: "Reembolso integral do produto",
   },
   {
     situacao: "Defeito de fabricação",
-    prazo: "30 dias do recebimento",
-    frete: "Kary arca com o frete de retorno",
+    prazo: "30 dias corridos do recebimento",
+    freteEnvio: "Kary paga",
+    freteReenvio: "Kary paga",
+    regiao: "Todas",
     resolucao: "Troca ou reembolso integral",
   },
   {
     situacao: "Troca de tamanho ou cor",
-    prazo: "15 dias do recebimento",
-    frete: "Cliente responsável pelo envio",
-    resolucao: "Crédito na loja Kary Curadoria",
+    prazo: "7 dias corridos do recebimento",
+    freteEnvio: "Cliente paga",
+    freteReenvio: "Cliente paga 50%",
+    regiao: "Sul / Sudeste / Centro-Oeste",
+    resolucao: "Troca ou crédito na loja",
   },
   {
-    situacao: "Troca presencial na loja",
-    prazo: "15 dias do recebimento",
-    frete: "Sem frete",
+    situacao: "Troca de tamanho ou cor",
+    prazo: "7 dias corridos do recebimento",
+    freteEnvio: "Cliente paga",
+    freteReenvio: "Cliente paga integralmente",
+    regiao: "Norte / Nordeste",
+    resolucao: "Troca ou crédito na loja",
+  },
+  {
+    situacao: "Troca + upgrade ≥ R$ 180",
+    prazo: "7 dias corridos do recebimento",
+    freteEnvio: "Cliente paga",
+    freteReenvio: "Kary paga",
+    regiao: "Todas",
+    resolucao: "Troca + envio do novo pedido",
+  },
+  {
+    situacao: "Troca presencial (Brás)",
+    prazo: "7 dias corridos do recebimento",
+    freteEnvio: "Sem frete",
+    freteReenvio: "Sem frete",
+    regiao: "—",
     resolucao: "Troca ou crédito na loja",
   },
 ];
@@ -79,24 +106,41 @@ const tableRows = [
 const steps = [
   {
     n: 1,
-    title: "Entre em contato",
-    text: "Fale conosco pelo WhatsApp (11) 94022-4088 ou pelo e-mail contato@karycuradoria.com.br informando o número do seu pedido e o motivo da solicitação.",
+    title: "Solicite por e-mail",
+    text: "Entre em contato pelo e-mail contato@karycuradoria.com.br informando seu nome completo, número do pedido, as peças a serem trocadas, o motivo da solicitação e qualquer observação que considere relevante.",
   },
   {
     n: 2,
-    title: "Aguarde a aprovação",
-    text: "Nossa equipe analisará sua solicitação em até 2 dias úteis e retornará com as instruções para envio.",
+    title: "Confirme seus dados",
+    text: "Após o contato, nossa equipe irá confirmar os dados do seu endereço e as instruções para envio.",
   },
   {
     n: 3,
-    title: "Envie o produto",
-    text: "Embale o produto com cuidado, com etiqueta original e sem sinais de uso. Envie pelos Correios com o código de rastreio.",
+    title: "Embale e poste",
+    text: "Envie o produto com a etiqueta original fixada, sem sinais de uso, sem odor e sem alterações. Você tem 5 dias corridos a partir da aprovação da troca pela Kary para realizar a postagem nos Correios.",
   },
   {
     n: 4,
-    title: "Receba a resolução",
-    text: "Após recebermos e conferirmos o produto, realizamos a troca ou o reembolso em até 5 dias úteis.",
+    title: "Aguarde a análise",
+    text: "Após recebermos o produto, nossa equipe verificará se todas as condições de devolução foram cumpridas.",
   },
+  {
+    n: 5,
+    title: "Receba a resolução",
+    text: "Confirmadas as condições, realizamos a troca ou o reembolso em até 5 dias úteis.",
+  },
+];
+
+const condicoesProduto = [
+  "O produto deve ser enviado com a etiqueta original fixada, sem sinais de uso, sem odor e sem ter sido lavado. O consumidor é responsável por danos causados por má utilização.",
+  "Após o recebimento, nossa equipe realizará a verificação do produto. Confirmadas as condições, providenciaremos a troca, crédito ou reembolso conforme as regras desta política.",
+  "As peças devolvidas não poderão ter sofrido qualquer alteração como bainhas, ajustes laterais, ajustes de altura ou modificações de qualquer outra natureza.",
+];
+
+const condicoesGerais = [
+  "Produto devolvido sem comunicação prévia, fora do prazo ou com ausência de itens e acessórios que o acompanham será reenviado ao consumidor sem aviso prévio.",
+  "Todos os produtos passarão por análise prévia. Constatado defeito ou descumprimento das condições de devolução, o produto será reenviado ao cliente.",
+  "O prazo de 5 dias corridos para postagem é contado a partir da data de aprovação da troca pela Kary Curadoria, não da data de recebimento do pedido.",
 ];
 
 const semDireito = [
@@ -168,7 +212,14 @@ export default function TrocasEDevolucoesPage() {
           <table className="w-full text-sm bg-white/70">
             <thead>
               <tr className="border-b border-[#A0622A]/15">
-                {["Situação", "Prazo", "Frete", "Resolução"].map((col) => (
+                {[
+                  "Situação",
+                  "Prazo",
+                  "Frete Envio (cliente→Kary)",
+                  "Frete Reenvio (Kary→cliente)",
+                  "Região",
+                  "Resolução",
+                ].map((col) => (
                   <th
                     key={col}
                     className="text-left text-[10px] tracking-[0.18em] text-[#A0622A] uppercase px-5 py-4 font-medium"
@@ -187,8 +238,10 @@ export default function TrocasEDevolucoesPage() {
                   }`}
                 >
                   <td className="px-5 py-4 font-medium text-[#5C3317]">{row.situacao}</td>
-                  <td className="px-5 py-4 text-[#5C3317]/70">{row.prazo}</td>
-                  <td className="px-5 py-4 text-[#5C3317]/70">{row.frete}</td>
+                  <td className="px-5 py-4 text-[#5C3317]/70 whitespace-nowrap">{row.prazo}</td>
+                  <td className="px-5 py-4 text-[#5C3317]/70">{row.freteEnvio}</td>
+                  <td className="px-5 py-4 text-[#5C3317]/70">{row.freteReenvio}</td>
+                  <td className="px-5 py-4 text-[#5C3317]/70">{row.regiao}</td>
                   <td className="px-5 py-4 text-[#5C3317]/70">{row.resolucao}</td>
                 </tr>
               ))}
@@ -223,6 +276,91 @@ export default function TrocasEDevolucoesPage() {
               </div>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* ── DEVOLUÇÃO INVOLUNTÁRIA PELOS CORREIOS ── */}
+      <section className="max-w-5xl mx-auto px-6 pb-16">
+        <h2
+          className="font-serif text-2xl md:text-3xl font-medium text-[#5C3317] mb-8"
+          style={{ fontFamily: "Cormorant Garamond, Georgia, serif" }}
+        >
+          Devolução Involuntária pelos Correios
+        </h2>
+
+        <div
+          style={{
+            backgroundColor: "#FFF3CD",
+            borderLeft: "4px solid #A0622A",
+            borderRadius: 8,
+            padding: 16,
+          }}
+          className="flex gap-4"
+        >
+          <AlertTriangle
+            size={20}
+            strokeWidth={1.75}
+            className="text-[#A0622A] shrink-0 mt-0.5"
+          />
+          <p className="text-sm text-[#5C3317]/80 leading-relaxed">
+            Caso o pedido seja devolvido pelos Correios com status de{" "}
+            <strong>&ldquo;endereço inválido&rdquo;</strong>,{" "}
+            <strong>&ldquo;destinatário desconhecido&rdquo;</strong>,{" "}
+            <strong>&ldquo;mudou-se&rdquo;</strong>,{" "}
+            <strong>&ldquo;proprietário não encontrado&rdquo;</strong>,{" "}
+            <strong>&ldquo;aguardando retirada&rdquo;</strong> ou situação semelhante, os custos
+            com a postagem de reenvio serão de responsabilidade do consumidor.
+            <br />
+            <br />
+            O pagamento do novo frete deverá ser realizado via PIX ou link de pagamento enviado
+            pela nossa equipe.
+          </p>
+        </div>
+      </section>
+
+      {/* ── CONDIÇÕES DO PRODUTO PARA TROCA ── */}
+      <section className="max-w-5xl mx-auto px-6 pb-16">
+        <h2
+          className="font-serif text-2xl md:text-3xl font-medium text-[#5C3317] mb-8"
+          style={{ fontFamily: "Cormorant Garamond, Georgia, serif" }}
+        >
+          Condições do Produto para Troca
+        </h2>
+
+        <div className="bg-white/70 border border-[#A0622A]/15 rounded-xl p-7">
+          <ul className="space-y-4">
+            {condicoesProduto.map((item, i) => (
+              <li key={i} className="flex items-start gap-3">
+                <span className="shrink-0 w-5 h-5 rounded-full bg-[#A0622A]/10 flex items-center justify-center mt-0.5">
+                  <Check size={11} strokeWidth={2.5} className="text-[#A0622A]" />
+                </span>
+                <span className="text-sm text-[#5C3317]/75 leading-relaxed">{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      {/* ── CONDIÇÕES GERAIS ── */}
+      <section className="max-w-5xl mx-auto px-6 pb-16">
+        <h2
+          className="font-serif text-2xl md:text-3xl font-medium text-[#5C3317] mb-8"
+          style={{ fontFamily: "Cormorant Garamond, Georgia, serif" }}
+        >
+          Condições Gerais
+        </h2>
+
+        <div className="bg-white/70 border border-[#A0622A]/15 rounded-xl p-7">
+          <ul className="space-y-4">
+            {condicoesGerais.map((item, i) => (
+              <li key={i} className="flex items-start gap-3">
+                <span className="shrink-0 w-5 h-5 rounded-full bg-[#A0622A]/10 flex items-center justify-center mt-0.5">
+                  <Info size={11} strokeWidth={2.5} className="text-[#A0622A]" />
+                </span>
+                <span className="text-sm text-[#5C3317]/75 leading-relaxed">{item}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       </section>
 
