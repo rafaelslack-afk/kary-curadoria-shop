@@ -3,10 +3,10 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Script from "next/script";
 import { useRouter } from "next/navigation";
-import { Check, ChevronRight, Loader2, Info, X } from "lucide-react";
+import { Check, ChevronRight, Loader2, Info, X, Tag } from "lucide-react";
 import { useCartStore } from "@/lib/store/cart";
-import { calculateCouponDiscount } from "@/lib/coupons";
 import { formatCurrency } from "@/lib/utils";
+import { useCoupon } from "@/lib/hooks/useCoupon";
 import { trackEvent } from "@/lib/analytics";
 import { pixelEvent } from "@/lib/pixel";
 import { CardTokenizerForm } from "@/components/loja/checkout/CardTokenizerForm";
@@ -123,7 +123,7 @@ function StepIndicator({ current, steps }: { current: number; steps: string[] })
 
 // ── Resumo do pedido ──────────────────────────────────────────────────────────
 
-function OrderSummary({ shipping, discount }: { shipping: ShippingOption | null; discount: number }) {
+function OrderSummary({ shipping, discount, couponCode }: { shipping: ShippingOption | null; discount: number; couponCode?: string }) {
   const { items, subtotal } = useCartStore();
   const sub = subtotal();
   const ship = shipping?.preco ?? 0;
@@ -158,7 +158,12 @@ function OrderSummary({ shipping, discount }: { shipping: ShippingOption | null;
       <div className="h-px bg-kc-line" />
       <div className="space-y-1.5 text-xs">
         <div className="flex justify-between text-kc-muted"><span>Subtotal</span><span>{formatCurrency(sub)}</span></div>
-        {discount > 0 && <div className="flex justify-between text-emerald-600"><span>Desconto</span><span>− {formatCurrency(discount)}</span></div>}
+        {discount > 0 && (
+          <div className="flex justify-between text-emerald-600">
+            <span>Desconto{couponCode ? ` (${couponCode})` : ""}</span>
+            <span>− {formatCurrency(discount)}</span>
+          </div>
+        )}
         <div className="flex justify-between text-kc-muted"><span>Frete</span><span>{shipping ? formatCurrency(ship) : "—"}</span></div>
       </div>
       <div className="h-px bg-kc-line" />
@@ -174,7 +179,13 @@ function OrderSummary({ shipping, discount }: { shipping: ShippingOption | null;
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { items, coupon: appliedCoupon, subtotal, clearCart } = useCartStore();
+  const { items, subtotal, clearCart } = useCartStore();
+  const {
+    couponCode, setCouponCode,
+    appliedCoupon: localCoupon,
+    couponError, couponLoading,
+    applyCoupon, removeCoupon,
+  } = useCoupon(subtotal());
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<FormData>(INITIAL_FORM);
   const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([]);
@@ -252,7 +263,7 @@ export default function CheckoutPage() {
     setForm((f) => ({ ...f, [field]: value }));
   }
 
-  const discount = calculateCouponDiscount(subtotal(), appliedCoupon);
+  const discount = localCoupon?.discount ?? 0;
   const total = subtotal() - discount + (form.shippingOption?.preco ?? 0);
 
   // ── Handler de submit do cartão (ref atualizada a cada render) ──
@@ -296,7 +307,7 @@ export default function CheckoutPage() {
         })),
         subtotal: subtotal(),
         discount,
-        couponCode: discount > 0 ? (appliedCoupon?.code ?? null) : null,
+        couponCode: discount > 0 ? (localCoupon?.code ?? null) : null,
       };
 
       const res = await fetch("/api/orders/create", {
@@ -491,7 +502,7 @@ export default function CheckoutPage() {
         })),
         subtotal: subtotal(),
         discount,
-        couponCode: discount > 0 ? (appliedCoupon?.code ?? null) : null,
+        couponCode: discount > 0 ? (localCoupon?.code ?? null) : null,
       };
 
       const res = await fetch("/api/orders/create", {
@@ -821,6 +832,60 @@ export default function CheckoutPage() {
             <div className="space-y-5">
               <h2 className="font-serif text-lg font-medium text-kc-dark">Forma de pagamento</h2>
 
+              {/* ── Cupom de desconto ── */}
+              {!localCoupon ? (
+                <div className="bg-[#F5F1EA] border border-[#D9C9B8] rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Tag size={15} className="text-[#A0622A]" />
+                    <span className="text-sm font-medium text-[#5C3317]">
+                      Tem um cupom de desconto?
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={couponCode}
+                      onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                      onKeyDown={(e) => e.key === "Enter" && applyCoupon()}
+                      placeholder="Digite o código"
+                      className="flex-1 border border-[#D9C9B8] rounded-lg px-3 py-2 text-sm bg-white text-[#5C3317] placeholder:text-[#B89070] focus:outline-none focus:border-[#A0622A]"
+                    />
+                    <button
+                      onClick={applyCoupon}
+                      disabled={couponLoading || !couponCode.trim()}
+                      className="bg-[#A0622A] text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-[#8a5224] transition-colors"
+                    >
+                      {couponLoading ? "Validando..." : "APLICAR"}
+                    </button>
+                  </div>
+                  {couponError && (
+                    <p className="text-red-600 text-xs mt-2">{couponError}</p>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-[#E8F5E9] border border-green-200 rounded-xl p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Tag size={15} className="text-green-600" />
+                      <div>
+                        <p className="text-sm font-semibold text-green-800">
+                          Cupom {localCoupon.code} aplicado
+                        </p>
+                        <p className="text-xs text-green-700">
+                          Economia de R$ {localCoupon.discount.toFixed(2).replace(".", ",")}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={removeCoupon}
+                      className="text-green-700 hover:text-red-600 transition-colors text-xs underline"
+                    >
+                      Remover
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 {(["pix", "credit_card"] as const).map((m) => {
                   const labels = { pix: "PIX", credit_card: "Cartão" };
@@ -901,7 +966,7 @@ export default function CheckoutPage() {
 
         {/* ── Resumo lateral ── */}
         <div className="lg:col-span-1">
-          <OrderSummary shipping={form.shippingOption} discount={discount} />
+          <OrderSummary shipping={form.shippingOption} discount={discount} couponCode={localCoupon?.code} />
         </div>
       </div>
     </div>

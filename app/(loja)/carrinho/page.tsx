@@ -5,22 +5,25 @@ import Image from "next/image";
 import Link from "next/link";
 import { Minus, Plus, Trash2, ShoppingBag, Tag, ChevronRight, AlertTriangle, CreditCard } from "lucide-react";
 import { useCartStore } from "@/lib/store/cart";
-import { calculateCouponDiscount } from "@/lib/coupons";
 import { formatCurrency } from "@/lib/utils";
+import { useCoupon } from "@/lib/hooks/useCoupon";
 
 export default function CarrinhoPage() {
   const {
     items,
-    coupon: appliedCoupon,
     removeItem,
     updateQuantity,
     subtotal,
-    setCoupon,
-    clearCoupon,
   } = useCartStore();
-  const [couponCode, setCouponCode] = useState("");
-  const [couponError, setCouponError] = useState("");
-  const [couponLoading, setCouponLoading] = useState(false);
+
+  const sub = subtotal();
+
+  const {
+    couponCode, setCouponCode,
+    appliedCoupon,
+    couponError, couponLoading,
+    applyCoupon, removeCoupon,
+  } = useCoupon(sub);
 
   // Estoque em tempo real
   const [stockMap, setStockMap] = useState<Record<string, number>>({});
@@ -49,48 +52,8 @@ export default function CarrinhoPage() {
   );
   const hasOutOfStock = outOfStockItems.length > 0;
 
-  const sub = subtotal();
-  const discountAmount = calculateCouponDiscount(sub, appliedCoupon);
-
+  const discountAmount = appliedCoupon?.discount ?? 0;
   const total = sub - discountAmount;
-
-  useEffect(() => {
-    setCouponCode(appliedCoupon?.code ?? "");
-  }, [appliedCoupon]);
-
-  async function handleApplyCoupon() {
-    if (!couponCode.trim()) return;
-    setCouponLoading(true);
-    setCouponError("");
-
-    try {
-      const res = await fetch(`/api/coupons/validate?code=${encodeURIComponent(couponCode.trim())}&subtotal=${sub}`);
-      const data = await res.json();
-
-      if (!res.ok || data.error) {
-        setCouponError(data.error ?? "Cupom inválido.");
-        clearCoupon();
-      } else {
-        setCoupon({
-          code: data.code,
-          discount: data.value,
-          type: data.type,
-          minOrder: data.min_order ?? 0,
-        });
-        setCouponError("");
-      }
-    } catch {
-      setCouponError("Erro ao validar cupom. Tente novamente.");
-    } finally {
-      setCouponLoading(false);
-    }
-  }
-
-  function removeCoupon() {
-    clearCoupon();
-    setCouponCode("");
-    setCouponError("");
-  }
 
   if (items.length === 0) {
     return (
@@ -250,7 +213,7 @@ export default function CarrinhoPage() {
                     </span>
                     <p className="text-[9px] text-emerald-600">
                       {appliedCoupon.type === "percent"
-                        ? `${appliedCoupon.discount}% de desconto`
+                        ? `${appliedCoupon.value}% de desconto`
                         : `${formatCurrency(appliedCoupon.discount)} de desconto`}
                     </p>
                   </div>
@@ -267,12 +230,12 @@ export default function CarrinhoPage() {
                     type="text"
                     value={couponCode}
                     onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                    onKeyDown={(e) => e.key === "Enter" && handleApplyCoupon()}
+                    onKeyDown={(e) => e.key === "Enter" && applyCoupon()}
                     placeholder="CÓDIGO"
                     className="flex-1 border border-kc-line bg-white px-3 py-2 text-xs text-kc-dark placeholder-kc-muted/60 focus:outline-none focus:border-kc tracking-wider"
                   />
                   <button
-                    onClick={handleApplyCoupon}
+                    onClick={applyCoupon}
                     disabled={couponLoading || !couponCode.trim()}
                     className="border border-kc text-kc text-[10px] tracking-[0.1em] px-3 py-2 hover:bg-kc hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
