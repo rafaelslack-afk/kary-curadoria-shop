@@ -909,7 +909,7 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
               }}
             >
               <span style={{ fontSize: 10, color: "#B89070" }}>Aceito:</span>
-              {["PIX", "Visa", "Master", "Elo", "Amex", "Boleto"].map((m) => (
+              {["PIX", "Visa", "Master", "Elo", "Amex"].map((m) => (
                 <span
                   key={m}
                   style={{

@@ -118,7 +118,7 @@ export default function PoliticaDePrivacidadePage() {
           "Nome completo",
           "E-mail",
           "Telefone / WhatsApp",
-          "CPF (apenas quando necessário para emissão de nota fiscal ou boleto)",
+          "CPF (necessário para emissão de nota fiscal e processamento de pagamento)",
           "Endereço de entrega (CEP, logradouro, número, complemento, cidade, estado)",
         ]} />
 
@@ -167,7 +167,7 @@ export default function PoliticaDePrivacidadePage() {
           </p>
         </Prose>
         <BulletList items={[
-          "Mercado Pago: processamento de pagamentos (Pix, cartão, boleto)",
+          "Mercado Pago: processamento de pagamentos (Pix e cartão de crédito)",
           "Correios: entrega dos pedidos (nome e endereço de entrega)",
           "Supabase: infraestrutura de banco de dados (servidores seguros)",
           "Google Analytics: análise de navegação de forma anonimizada",
