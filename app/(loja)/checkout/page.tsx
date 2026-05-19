@@ -347,6 +347,7 @@ export default function CheckoutPage() {
         customerName: form.nome,
         customerEmail: form.email,
         prazo: form.shippingOption!.prazo,
+        total: subtotal() - discount + form.shippingOption!.preco,
       }));
       clearCart();
       router.push("/checkout/sucesso");
@@ -539,6 +540,7 @@ export default function CheckoutPage() {
           customerName: form.nome,
           customerEmail: form.email,
           prazo: form.shippingOption!.prazo,
+          total: orderTotal,
         }));
         clearCart();
         router.push("/checkout/sucesso");
