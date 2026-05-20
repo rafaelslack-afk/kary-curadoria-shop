@@ -44,33 +44,31 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // NOVA VALIDAÇÃO 1 — produto específico
+  // Validação — produto específico (aceita lista de IDs do carrinho)
   if (coupon.product_id) {
-    const productId = searchParams.get("product_id");
-    if (!productId || productId !== coupon.product_id) {
+    const productIdsParam = searchParams.get("product_ids");
+    const productIds = productIdsParam ? productIdsParam.split(",") : [];
+    if (productIds.length === 0 || !productIds.includes(coupon.product_id)) {
       return NextResponse.json(
-        { error: "Este cupom é válido apenas para um produto específico." },
+        { error: "Este cupom é válido apenas para um produto específico que não está no seu carrinho." },
         { status: 400 }
       );
     }
   }
 
-  // NOVA VALIDAÇÃO 2 — método de pagamento
-  if (coupon.allowed_payment_methods && coupon.allowed_payment_methods !== "all") {
-    const paymentMethod = searchParams.get("payment_method");
-    if (paymentMethod && paymentMethod !== coupon.allowed_payment_methods) {
-      const methodLabel = coupon.allowed_payment_methods === "pix" ? "PIX" : "cartão de crédito";
-      return NextResponse.json(
-        { error: `Este cupom é válido apenas para pagamento via ${methodLabel}.` },
-        { status: 400 }
-      );
-    }
-  }
+  // Cálculo do desconto
+  const discount =
+    coupon.type === "percent"
+      ? (subtotal * coupon.value) / 100
+      : Math.min(coupon.value, subtotal);
 
   return NextResponse.json({
     code: coupon.code,
     type: coupon.type,
     value: coupon.value,
     min_order: coupon.min_order,
+    discount,
+    allowed_payment_methods: coupon.allowed_payment_methods ?? "all",
+    product_id: coupon.product_id ?? null,
   });
 }

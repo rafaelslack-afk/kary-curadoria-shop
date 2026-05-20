@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Script from "next/script";
 import { useRouter } from "next/navigation";
-import { Check, ChevronRight, Loader2, Info, X, Tag } from "lucide-react";
+import { Check, ChevronRight, Loader2, Info, X, Tag, AlertTriangle } from "lucide-react";
 import { useCartStore } from "@/lib/store/cart";
 import { formatCurrency } from "@/lib/utils";
 import { useCoupon } from "@/lib/hooks/useCoupon";
@@ -188,7 +188,7 @@ export default function CheckoutPage() {
     couponError, couponLoading,
     applyCoupon, removeCoupon,
   } = useCoupon(subtotal(), {
-    paymentMethod: form.paymentMethod || undefined,
+    productIds: items.map((i) => i.productId),
   });
   const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([]);
   const [shippingLoading, setShippingLoading] = useState(false);
@@ -267,6 +267,13 @@ export default function CheckoutPage() {
 
   const discount = localCoupon?.discount ?? 0;
   const total = subtotal() - discount + (form.shippingOption?.preco ?? 0);
+
+  function isPaymentMethodBlocked(method: string): boolean {
+    if (!localCoupon) return false;
+    const allowed = localCoupon.allowed_payment_methods;
+    if (!allowed || allowed === "all") return false;
+    return method !== allowed;
+  }
 
   // ── Handler de submit do cartão (ref atualizada a cada render) ──
   // Atribuição direta na ref — não dispara re-render, sempre tem o closure mais recente
@@ -458,7 +465,7 @@ export default function CheckoutPage() {
           form.shippingOption
         );
       case 2:
-        return !!form.paymentMethod;
+        return !!form.paymentMethod && !isPaymentMethodBlocked(form.paymentMethod);
       default:
         return false;
     }
@@ -892,21 +899,48 @@ export default function CheckoutPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 {(["pix", "credit_card"] as const).map((m) => {
-                  const labels = { pix: "PIX", credit_card: "Cartão" };
-                  const descs  = { pix: "Aprovação instantânea", credit_card: "Crédito · até 3x sem juros" };
+                  const labels   = { pix: "PIX", credit_card: "Cartão" };
+                  const descs    = { pix: "Aprovação instantânea", credit_card: "Crédito · até 3x sem juros" };
                   const selected = form.paymentMethod === m;
+                  const blocked  = isPaymentMethodBlocked(m);
                   return (
                     <button
                       key={m}
-                      onClick={() => { set("paymentMethod", m); setCardPaymentError(null); }}
-                      className={`p-4 border text-center transition-colors ${selected ? "border-kc bg-kc/5" : "border-kc-line hover:border-kc-muted"}`}
+                      disabled={blocked}
+                      onClick={() => { if (!blocked) { set("paymentMethod", m); setCardPaymentError(null); } }}
+                      className={`p-4 border text-center transition-colors ${
+                        blocked
+                          ? "border-kc-line opacity-40 cursor-not-allowed"
+                          : selected
+                            ? "border-kc bg-kc/5"
+                            : "border-kc-line hover:border-kc-muted"
+                      }`}
                     >
-                      <p className={`text-sm font-medium mb-0.5 ${selected ? "text-kc" : "text-kc-dark"}`}>{labels[m]}</p>
+                      <p className={`text-sm font-medium mb-0.5 ${selected && !blocked ? "text-kc" : "text-kc-dark"}`}>{labels[m]}</p>
                       <p className="text-[9px] text-kc-muted">{descs[m]}</p>
                     </button>
                   );
                 })}
               </div>
+
+              {/* Aviso quando o método selecionado é incompatível com o cupom */}
+              {localCoupon && form.paymentMethod && isPaymentMethodBlocked(form.paymentMethod) && (
+                <div className="flex items-start gap-3 bg-amber-50 border border-amber-300 rounded-lg px-4 py-3">
+                  <AlertTriangle size={15} className="text-amber-600 shrink-0 mt-0.5" />
+                  <div className="flex-1 text-xs text-amber-800 leading-relaxed">
+                    O cupom <strong>{localCoupon.code}</strong> é válido apenas para pagamento via{" "}
+                    <strong>{localCoupon.allowed_payment_methods === "pix" ? "PIX" : "cartão de crédito"}</strong>.
+                    Selecione o método correto ou{" "}
+                    <button
+                      onClick={removeCoupon}
+                      className="underline underline-offset-2 hover:text-amber-900 transition-colors font-medium"
+                    >
+                      remova o cupom
+                    </button>
+                    .
+                  </div>
+                </div>
+              )}
 
               {form.paymentMethod === "pix" && (
                 <div className="bg-emerald-50 border border-emerald-200 p-4 space-y-1">

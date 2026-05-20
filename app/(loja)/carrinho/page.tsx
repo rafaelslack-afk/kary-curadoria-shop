@@ -23,7 +23,7 @@ export default function CarrinhoPage() {
     appliedCoupon,
     couponError, couponLoading,
     applyCoupon, removeCoupon,
-  } = useCoupon(sub);
+  } = useCoupon(sub, { productIds: items.map((i) => i.productId) });
 
   // Estoque em tempo real
   const [stockMap, setStockMap] = useState<Record<string, number>>({});
