@@ -401,7 +401,7 @@ export default function TrocasEDevolucoesPage() {
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <a
-              href="https://wa.me/5511940224088"
+              href="https://wa.me/5511913187730"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2.5 bg-[#5C3317] text-[#EDE8DC] text-[11px] tracking-[0.2em] uppercase px-8 py-4 hover:bg-[#A0622A] transition-colors"

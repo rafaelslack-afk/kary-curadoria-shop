@@ -102,7 +102,7 @@ export async function POST(
       customerName,
       customerDocument: customerDoc,
       customerEmail,
-      customerPhone: (address?.telefone ?? address?.phone ?? '11940224088') as string,
+      customerPhone: (address?.telefone ?? address?.phone ?? '11913187730') as string,
       address: {
         cep: (address?.cep ?? '') as string,
         street: (address?.logradouro ?? address?.street ?? '') as string,

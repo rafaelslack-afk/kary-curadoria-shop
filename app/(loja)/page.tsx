@@ -184,7 +184,7 @@ const localBusinessJsonLd = {
   name: "Kary Curadoria",
   image: "https://karycuradoria.com.br/og-image.jpg",
   url: "https://karycuradoria.com.br",
-  telephone: "+55-11-94022-4088",
+  telephone: "+55-11-91318-7730",
   email: "contato@karycuradoria.com.br",
   address: {
     "@type": "PostalAddress",

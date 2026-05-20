@@ -54,7 +54,7 @@ export async function addToMECart(orderData: MEOrderData) {
     agency: null,
     from: {
       name: 'Kary Curadoria',
-      phone: '11940224088',
+      phone: '11913187730',
       email: 'contato@karycuradoria.com.br',
       document: process.env.MELHORENVIO_CPF ?? '',         // CPF titular da conta ME
       company_document: process.env.MELHORENVIO_CNPJ ?? '', // CNPJ da loja

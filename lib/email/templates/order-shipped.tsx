@@ -196,8 +196,8 @@ export function OrderShippedEmail({ orderNumber, customerName, trackingCode, car
 
                         <p style={{ margin: 0, fontFamily: "Arial, sans-serif", fontSize: 12, color: MUTED, textAlign: "center", lineHeight: 1.7 }}>
                           Dúvidas? Fale conosco pelo WhatsApp{" "}
-                          <a href="https://wa.me/5511940224088" style={{ color: ACCENT, textDecoration: "none" }}>
-                            (11) 94022-4088
+                          <a href="https://wa.me/5511913187730" style={{ color: ACCENT, textDecoration: "none" }}>
+                            (11) 91318-7730
                           </a>
                           {" "}ou responda este e-mail.
                         </p>

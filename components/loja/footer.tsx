@@ -57,7 +57,7 @@ export function Footer() {
                   className="flex items-center gap-2.5 text-xs text-kc-cream/70 hover:text-kc-cream transition-colors"
                 >
                   <WhatsAppIcon size={14} />
-                  +55 11 94022-4088
+                  +55 11 91318-7730
                 </a>
               </li>
               <li>

@@ -293,7 +293,7 @@ export default function SobrePage() {
               e onde você pode encontrar pessoalmente as peças que chamaram sua atenção online.
             </p>
             <a
-              href="https://wa.me/5511940224088"
+              href="https://wa.me/5511913187730"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2.5 bg-[#5C3317] text-[#EDE8DC] text-[11px] tracking-[0.2em] uppercase px-7 py-3.5 hover:bg-[#A0622A] transition-colors"
@@ -318,7 +318,7 @@ export default function SobrePage() {
                   emoji: "📍",
                   lines: ["Rua Min. Firmino Whitaker, 49/55", "Box 142 — Brás, São Paulo / SP"],
                 },
-                { emoji: "📱", lines: ["WhatsApp: (11) 94022-4088"] },
+                { emoji: "📱", lines: ["WhatsApp: (11) 91318-7730"] },
                 { emoji: "📧", lines: ["contato@karycuradoria.com.br"] },
                 { emoji: "📸", lines: ["@karycuradoria"] },
               ].map(({ emoji, lines }) => (

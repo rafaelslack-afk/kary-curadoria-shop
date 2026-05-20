@@ -1,5 +1,5 @@
 export const INSTAGRAM_URL = "https://instagram.com/karycuradoria";
-export const WHATSAPP_NUMBER = "5511940224088";
+export const WHATSAPP_NUMBER = "5511913187730";
 
 export function buildWhatsAppUrl(message?: string): string {
   if (!message) {

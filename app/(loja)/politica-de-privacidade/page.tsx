@@ -95,8 +95,8 @@ export default function PoliticaDePrivacidadePage() {
             </a>
             <br />
             WhatsApp:{" "}
-            <a href="https://wa.me/5511940224088" target="_blank" rel="noopener noreferrer" className="text-[#A0622A] hover:underline">
-              (11) 94022-4088
+            <a href="https://wa.me/5511913187730" target="_blank" rel="noopener noreferrer" className="text-[#A0622A] hover:underline">
+              (11) 91318-7730
             </a>
           </p>
           <p>
@@ -274,7 +274,7 @@ export default function PoliticaDePrivacidadePage() {
           <ul className="space-y-3 mb-7">
             {[
               { emoji: "📧", text: "contato@karycuradoria.com.br", href: "mailto:contato@karycuradoria.com.br" },
-              { emoji: "📱", text: "(11) 94022-4088", href: "https://wa.me/5511940224088" },
+              { emoji: "📱", text: "(11) 91318-7730", href: "https://wa.me/5511913187730" },
               { emoji: "📍", text: "Rua Min. Firmino Whitaker, 49/55 — Box 142, Brás, São Paulo / SP", href: null },
             ].map(({ emoji, text, href }) => (
               <li key={emoji} className="flex items-start gap-3">
@@ -299,7 +299,7 @@ export default function PoliticaDePrivacidadePage() {
           </ul>
 
           <a
-            href="https://wa.me/5511940224088"
+            href="https://wa.me/5511913187730"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2.5 bg-[#5C3317] text-[#EDE8DC] text-[11px] tracking-[0.2em] uppercase px-7 py-3.5 hover:bg-[#A0622A] transition-colors"
