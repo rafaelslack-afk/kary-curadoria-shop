@@ -9,6 +9,7 @@ declare global {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function pixelEvent(event: string, params?: Record<string, any>) {
+  if (!event || typeof event !== 'string') return;
   if (typeof window !== 'undefined' && window.fbq) {
     window.fbq('track', event, params);
   }
