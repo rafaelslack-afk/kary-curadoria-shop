@@ -21,7 +21,9 @@ export async function PUT(
   if (body.active !== undefined)               update.active               = body.active;
   if (body.is_floating !== undefined)          update.is_floating          = body.is_floating;
   if (body.floating_title !== undefined)       update.floating_title       = body.floating_title || null;
-  if (body.floating_description !== undefined) update.floating_description = body.floating_description || null;
+  if (body.floating_description !== undefined)    update.floating_description    = body.floating_description || null;
+  if (body.product_id !== undefined)              update.product_id              = body.product_id || null;
+  if (body.allowed_payment_methods !== undefined) update.allowed_payment_methods = body.allowed_payment_methods || "all";
 
   // Se vai ser flutuante, desativar outros cupons flutuantes antes
   if (body.is_floating === true) {

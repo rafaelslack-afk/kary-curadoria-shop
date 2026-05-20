@@ -18,6 +18,15 @@ interface Coupon {
   is_floating: boolean;
   floating_title: string | null;
   floating_description: string | null;
+  product_id: string | null;
+  product_sku?: string | null;   // populado via join no fetch
+  allowed_payment_methods: string;
+}
+
+interface ProductOption {
+  id: string;
+  name: string;
+  sku_base: string | null;
 }
 
 const EMPTY_FORM = {
@@ -31,10 +40,13 @@ const EMPTY_FORM = {
   is_floating: false,
   floating_title: "",
   floating_description: "",
+  product_id: null as string | null,
+  allowed_payment_methods: "all",
 };
 
 export default function CuponsPage() {
   const [coupons, setCoupons] = useState<Coupon[]>([]);
+  const [products, setProducts] = useState<ProductOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Coupon | null>(null);
@@ -42,7 +54,7 @@ export default function CuponsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => { fetchCoupons(); }, []);
+  useEffect(() => { fetchCoupons(); fetchProducts(); }, []);
 
   async function fetchCoupons() {
     try {
@@ -50,6 +62,23 @@ export default function CuponsPage() {
       if (res.ok) setCoupons(await res.json());
     } catch { /* ignore */ }
     finally { setLoading(false); }
+  }
+
+  async function fetchProducts() {
+    try {
+      const res = await fetch("/api/products?active=true&limit=200");
+      if (res.ok) {
+        const data = await res.json();
+        const list: ProductOption[] = (Array.isArray(data) ? data : data.products ?? [])
+          .map((p: { id: string; name: string; sku_base: string | null }) => ({
+            id: p.id, name: p.name, sku_base: p.sku_base,
+          }))
+          .sort((a: ProductOption, b: ProductOption) =>
+            (a.sku_base ?? a.name).localeCompare(b.sku_base ?? b.name)
+          );
+        setProducts(list);
+      }
+    } catch { /* ignore */ }
   }
 
   function openCreate() {
@@ -72,6 +101,8 @@ export default function CuponsPage() {
       is_floating: c.is_floating ?? false,
       floating_title: c.floating_title ?? "",
       floating_description: c.floating_description ?? "",
+      product_id: c.product_id ?? null,
+      allowed_payment_methods: c.allowed_payment_methods ?? "all",
     });
     setError("");
     setShowForm(true);
@@ -96,6 +127,8 @@ export default function CuponsPage() {
         is_floating: form.is_floating,
         floating_title: form.is_floating ? form.floating_title : null,
         floating_description: form.is_floating ? form.floating_description : null,
+        product_id: form.product_id || null,
+        allowed_payment_methods: form.allowed_payment_methods || "all",
       };
 
       const res = editing
@@ -271,6 +304,58 @@ export default function CuponsPage() {
             </div>
           </div>
 
+          {/* Produto específico */}
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <label className="block text-sm font-medium text-[#5C3317] mb-1">
+              Produto exclusivo{" "}
+              <span className="text-[#B89070] font-normal">(opcional)</span>
+            </label>
+            <p className="text-xs text-[#B89070] mb-2">
+              Se selecionado, o cupom só funciona para este produto específico. Ideal para campanhas VIP.
+            </p>
+            <select
+              value={form.product_id || ""}
+              onChange={(e) => setForm({ ...form, product_id: e.target.value || null })}
+              className="w-full border border-[#D9C9B8] rounded-lg px-3 py-2 text-sm text-[#5C3317] bg-white focus:outline-none focus:border-kc"
+            >
+              <option value="">Todos os produtos</option>
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.sku_base ? `${p.sku_base} — ` : ""}{p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Métodos de pagamento */}
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-[#5C3317] mb-1">
+              Métodos de pagamento aceitos
+            </label>
+            <p className="text-xs text-[#B89070] mb-2">
+              Define em quais formas de pagamento este cupom pode ser utilizado.
+            </p>
+            <div className="flex gap-5">
+              {[
+                { value: "all",         label: "PIX e Cartão" },
+                { value: "pix",         label: "Apenas PIX" },
+                { value: "credit_card", label: "Apenas Cartão" },
+              ].map((opt) => (
+                <label key={opt.value} className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="allowed_payment_methods"
+                    value={opt.value}
+                    checked={form.allowed_payment_methods === opt.value}
+                    onChange={(e) => setForm({ ...form, allowed_payment_methods: e.target.value })}
+                    className="accent-kc"
+                  />
+                  <span className="text-sm text-[#5C3317]">{opt.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
           {/* Ativo toggle */}
           <div className="flex items-center gap-3 mt-4">
             <button
@@ -407,7 +492,7 @@ export default function CuponsPage() {
           <table className="w-full">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                {["Código", "Tipo", "Desconto", "Pedido Mínimo", "Usos", "Validade", "Status", "Ações"].map((h) => (
+                {["Código", "Tipo", "Desconto", "Pedido Mínimo", "Usos", "Validade", "Produto", "Pagamento", "Status", "Ações"].map((h) => (
                   <th
                     key={h}
                     className="text-left text-[11px] tracking-wider text-gray-500 uppercase px-4 py-3"
@@ -466,6 +551,29 @@ export default function CuponsPage() {
                         <span className="text-gray-300">Sem limite</span>
                       )}
                     </td>
+
+                    {/* Produto */}
+                    <td className="px-4 py-3 text-sm">
+                      {c.product_id ? (
+                        <span className="bg-[#A0622A]/10 text-[#5C3317] text-[10px] font-medium tracking-wider px-2 py-0.5 rounded-full">
+                          {products.find((p) => p.id === c.product_id)?.sku_base ?? "Específico"}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 text-xs">Todos</span>
+                      )}
+                    </td>
+
+                    {/* Pagamento */}
+                    <td className="px-4 py-3 text-sm">
+                      {c.allowed_payment_methods === "pix" ? (
+                        <span className="bg-blue-100 text-blue-700 text-[10px] font-medium tracking-wider px-2 py-0.5 rounded-full">PIX</span>
+                      ) : c.allowed_payment_methods === "credit_card" ? (
+                        <span className="bg-purple-100 text-purple-700 text-[10px] font-medium tracking-wider px-2 py-0.5 rounded-full">Cartão</span>
+                      ) : (
+                        <span className="text-gray-400 text-xs">PIX e Cartão</span>
+                      )}
+                    </td>
+
                     <td className="px-4 py-3">
                       <button
                         onClick={() => toggleActive(c)}

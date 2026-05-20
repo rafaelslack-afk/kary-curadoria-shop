@@ -180,14 +180,16 @@ function OrderSummary({ shipping, discount, couponCode }: { shipping: ShippingOp
 export default function CheckoutPage() {
   const router = useRouter();
   const { items, subtotal, clearCart } = useCartStore();
+  const [step, setStep] = useState(0);
+  const [form, setForm] = useState<FormData>(INITIAL_FORM);
   const {
     couponCode, setCouponCode,
     appliedCoupon: localCoupon,
     couponError, couponLoading,
     applyCoupon, removeCoupon,
-  } = useCoupon(subtotal());
-  const [step, setStep] = useState(0);
-  const [form, setForm] = useState<FormData>(INITIAL_FORM);
+  } = useCoupon(subtotal(), {
+    paymentMethod: form.paymentMethod || undefined,
+  });
   const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([]);
   const [shippingLoading, setShippingLoading] = useState(false);
   const [shippingError, setShippingError] = useState("");

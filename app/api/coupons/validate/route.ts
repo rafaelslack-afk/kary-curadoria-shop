@@ -44,6 +44,29 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // NOVA VALIDAÇÃO 1 — produto específico
+  if (coupon.product_id) {
+    const productId = searchParams.get("product_id");
+    if (!productId || productId !== coupon.product_id) {
+      return NextResponse.json(
+        { error: "Este cupom é válido apenas para um produto específico." },
+        { status: 400 }
+      );
+    }
+  }
+
+  // NOVA VALIDAÇÃO 2 — método de pagamento
+  if (coupon.allowed_payment_methods && coupon.allowed_payment_methods !== "all") {
+    const paymentMethod = searchParams.get("payment_method");
+    if (paymentMethod && paymentMethod !== coupon.allowed_payment_methods) {
+      const methodLabel = coupon.allowed_payment_methods === "pix" ? "PIX" : "cartão de crédito";
+      return NextResponse.json(
+        { error: `Este cupom é válido apenas para pagamento via ${methodLabel}.` },
+        { status: 400 }
+      );
+    }
+  }
+
   return NextResponse.json({
     code: coupon.code,
     type: coupon.type,

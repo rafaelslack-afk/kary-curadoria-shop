@@ -9,7 +9,13 @@ export interface HookAppliedCoupon {
   discount: number // desconto calculado em R$ para o cartTotal atual
 }
 
-export function useCoupon(cartTotal: number) {
+export function useCoupon(
+  cartTotal: number,
+  options?: {
+    productId?: string
+    paymentMethod?: string
+  }
+) {
   const [couponCode, setCouponCode] = useState('')
   const [appliedCoupon, setAppliedCoupon] = useState<HookAppliedCoupon | null>(null)
   const [couponError, setCouponError] = useState('')
@@ -28,9 +34,10 @@ export function useCoupon(cartTotal: number) {
     setCouponError('')
 
     try {
-      const res = await fetch(
-        `/api/coupons/validate?code=${encodeURIComponent(code)}&subtotal=${cartTotal}`
-      )
+      const params = new URLSearchParams({ code, subtotal: String(cartTotal) })
+      if (options?.productId)    params.append('product_id',     options.productId)
+      if (options?.paymentMethod) params.append('payment_method', options.paymentMethod)
+      const res = await fetch(`/api/coupons/validate?${params}`)
       const data = await res.json()
 
       if (!res.ok || data.error) {

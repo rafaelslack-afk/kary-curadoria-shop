@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
   const {
     code, type, value, min_order, max_uses, expires_at, active,
     is_floating, floating_title, floating_description,
+    product_id, allowed_payment_methods,
   } = body;
 
   if (!code || !type || value == null) {
@@ -50,6 +51,8 @@ export async function POST(request: NextRequest) {
       is_floating: is_floating ?? false,
       floating_title: floating_title || null,
       floating_description: floating_description || null,
+      product_id: product_id || null,
+      allowed_payment_methods: allowed_payment_methods || "all",
     })
     .select()
     .single();
