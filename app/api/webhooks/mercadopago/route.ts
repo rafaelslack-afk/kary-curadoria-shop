@@ -5,13 +5,11 @@ import { sendPaymentConfirmedEmail, sendOrderCancelledEmail, sendLowStockAlertEm
 // Semântica dos status MP no contexto do KVO:
 //
 // "approved"  → pagamento aprovado → order.status = 'paid'
-// "rejected"  → TENTATIVA RECUSADA → order.status permanece 'pending'
-//               (cliente pode tentar novamente; NÃO cancela o pedido)
-// "cancelled" → pagamento efetivamente cancelado pelo MP/banco/cliente
+// "rejected"  → cartão recusado → order.status = 'cancelled'
+//               estoque reservado é revertido + e-mail de cancelamento.
+//               Não há como recuperar o mesmo pedido; cliente refaz o checkout.
+// "cancelled" → pagamento cancelado pelo MP/banco/cliente
 //               → order.status = 'cancelled' + e-mail de cancelamento
-//
-// A separação rejected vs. cancelled é deliberada: rejected é uma falha
-// temporária de autorização; cancelled é uma decisão final.
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -166,26 +164,73 @@ export async function POST(request: Request) {
         console.error("[Webhook MP] Falha ao verificar/enviar alerta de estoque:", stockErr);
       }
     } else if (payment.status === "rejected") {
-      // ── Tentativa recusada ───────────────────────────────────────────────
-      // Cartão negado, saldo insuficiente, dados inválidos etc.
-      // O pedido PERMANECE 'pending' — o cliente pode tentar novamente.
-      // Registramos apenas a falha em pagbank_status e em notes.
-      // NÃO cancelar e NÃO enviar e-mail de cancelamento.
+      // ── Cartão recusado ──────────────────────────────────────────────────
+      // Cartão negado, saldo insuficiente, alto risco, dados inválidos etc.
+      // Não há como recuperar o mesmo pedido — cancela e reverte o estoque.
+      // Cliente precisará refazer o checkout com outro cartão ou via PIX.
 
       const reason = payment.status_detail ?? "rejected";
 
+      // 1. Cancelar o pedido
       await admin
         .from("orders")
         .update({
+          status: "cancelled",
           pagbank_status: "rejected",
-          notes: `Tentativa de pagamento recusada em ${new Date().toISOString()} | motivo: ${reason}`,
+          notes: `Pagamento recusado em ${new Date().toISOString()} | motivo: ${reason}`,
           updated_at: new Date().toISOString(),
         })
         .eq("id", order.id);
 
+      // 2. Reverter estoque reservado para cada item do pedido
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rejectedItems = (order as any).order_items ?? [];
+      for (const item of rejectedItems) {
+        // Lê estoque atual e soma de volta a quantidade reservada
+        const { data: variant } = await admin
+          .from("product_variants")
+          .select("stock_qty")
+          .eq("id", item.variant_id)
+          .single();
+
+        if (variant) {
+          await admin
+            .from("product_variants")
+            .update({ stock_qty: variant.stock_qty + item.quantity })
+            .eq("id", item.variant_id);
+        }
+
+        // Atualiza o log de inventário: reserva → ajuste (estorno)
+        await admin
+          .from("inventory_log")
+          .update({
+            type: "ajuste",
+            reason: `Reserva revertida — pagamento recusado (${reason}) — pedido #${order.order_number}`,
+          })
+          .eq("order_id", order.id)
+          .eq("variant_id", item.variant_id)
+          .eq("type", "reserva");
+      }
+
       console.log(
-        `[Webhook MP] Pedido #${order.order_number} — tentativa RECUSADA (${reason}). Status mantido: ${order.status}`
+        `[Webhook MP] Pedido #${order.order_number} — CANCELADO e estoque revertido (${reason})`
       );
+
+      // 3. E-mail informando o cliente
+      if (order.guest_email) {
+        try {
+          await sendOrderCancelledEmail({
+            to: order.guest_email,
+            orderNumber: String(order.order_number),
+            customerName: order.guest_name ?? "Cliente",
+            total: order.total,
+            reason: "Pagamento recusado",
+            wasAlreadyPaid: false,
+          });
+        } catch (emailErr) {
+          console.error("[Webhook MP] Falha ao enviar e-mail de cancelamento (rejected):", emailErr);
+        }
+      }
 
     } else if (payment.status === "cancelled") {
       // ── Pagamento cancelado de forma definitiva ──────────────────────────
