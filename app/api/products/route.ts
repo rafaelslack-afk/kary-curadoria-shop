@@ -2,13 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { withRetry } from "@/lib/supabase/retry";
 import type { ProductInsert } from "@/types/database";
+import { STOCK_BUFFER } from "@/lib/constants";
 
 // GET /api/products — List products with optional filters
 export const runtime = "nodejs";
-
-// Buffer de segurança durante testes de integração ERP.
-// Remover (ou setar para 0) após 30 dias de integração estável.
-const STOCK_BUFFER = 1;
 
 export async function GET(request: NextRequest) {
   try {

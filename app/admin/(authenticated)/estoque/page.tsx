@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, Warehouse, Search, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { STOCK_BUFFER } from "@/lib/constants";
 
 interface VariantStock {
   id: string;
@@ -275,7 +276,13 @@ export default function EstoquePage() {
                   SKU
                 </th>
                 <th className="text-center text-[11px] tracking-wider text-gray-500 uppercase px-4 py-3">
-                  Estoque
+                  Disponível
+                </th>
+                <th
+                  className="text-center text-[11px] tracking-wider text-[#A0622A] uppercase px-4 py-3 cursor-help"
+                  title={`Estoque real no ERP. O estoque disponível na loja é Real − ${STOCK_BUFFER} (buffer de segurança).`}
+                >
+                  Real (ERP) ⓘ
                 </th>
                 <th className="text-center text-[11px] tracking-wider text-gray-500 uppercase px-4 py-3">
                   Mínimo
@@ -287,8 +294,11 @@ export default function EstoquePage() {
             </thead>
             <tbody>
               {filtered.map((item) => {
-                const isZero  = item.stock_qty === 0;
-                const isAlert = !isZero && item.stock_qty <= item.stock_min;
+                // admin/stock retorna valores BRUTOS (sem buffer)
+                const estoqueReal       = item.stock_qty;
+                const estoqueDisponivel = Math.max(0, item.stock_qty - STOCK_BUFFER);
+                const isZero  = estoqueDisponivel === 0;
+                const isAlert = !isZero && estoqueDisponivel <= item.stock_min;
                 return (
                   <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="px-4 py-3">
@@ -308,6 +318,8 @@ export default function EstoquePage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-xs font-mono text-gray-500">{item.sku}</td>
+
+                    {/* Disponível para a loja (com buffer) */}
                     <td className="px-4 py-3 text-center">
                       <span
                         className={cn(
@@ -315,7 +327,7 @@ export default function EstoquePage() {
                           isZero ? "text-red-600" : isAlert ? "text-amber-600" : "text-gray-800"
                         )}
                       >
-                        {item.stock_qty}
+                        {estoqueDisponivel}
                         {isZero && (
                           <span className="ml-1 text-[9px] bg-red-100 text-red-600 px-1 py-0.5 rounded uppercase tracking-wide">
                             Zero
@@ -326,6 +338,14 @@ export default function EstoquePage() {
                         )}
                       </span>
                     </td>
+
+                    {/* Estoque real no ERP (sem buffer) */}
+                    <td className="px-4 py-3 text-center">
+                      <span className="font-bold text-sm text-[#A0622A]">
+                        {estoqueReal}
+                      </span>
+                    </td>
+
                     <td className="px-4 py-3 text-center text-sm text-gray-400">{item.stock_min}</td>
                     <td className="px-4 py-3 text-center">
                       {isZero ? (

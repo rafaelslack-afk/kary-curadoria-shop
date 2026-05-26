@@ -5,6 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, Save, Package2, Layers, RefreshCw, Upload, X, Trash2, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn, slugify } from "@/lib/utils";
+import { STOCK_BUFFER } from "@/lib/constants";
 import type { Category, ProductVariant, Color, Size, ProductType } from "@/types/database";
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
@@ -857,9 +858,23 @@ export default function EditarProdutoPage() {
           <div className="bg-white rounded-lg border border-gray-200 p-6 mt-6 max-w-4xl">
             <div className="flex items-center justify-between mb-1">
               <h2 className="font-serif text-lg font-medium text-kc-dark">Variações Existentes</h2>
-              <span className="text-xs text-gray-400">
-                {variants.filter((v) => v.active).reduce((s, v) => s + v.stock_qty, 0)} un. em estoque
-              </span>
+              {/* variants já chegam com buffer aplicado — stock_qty = real - STOCK_BUFFER */}
+              {(() => {
+                const activeVariants   = variants.filter((v) => v.active);
+                const totalDisponivel  = activeVariants.reduce((s, v) => s + v.stock_qty, 0);
+                const totalReal        = activeVariants.reduce((s, v) => s + v.stock_qty + STOCK_BUFFER, 0);
+                return (
+                  <div className="flex items-center gap-3 text-sm">
+                    <span className="text-[#5C3317]">
+                      <strong>{totalDisponivel}</strong>{" "}un. disponíveis na loja
+                    </span>
+                    <span className="text-[#B89070]">|</span>
+                    <span className="text-[#A0622A]">
+                      <strong>{totalReal}</strong>{" "}un. real (ERP)
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
             <p className="text-xs text-gray-400 mb-4">Edite o estoque e salve individualmente. Desative variações sem estoque que não serão mais vendidas.</p>
 
@@ -909,23 +924,23 @@ export default function EditarProdutoPage() {
                             <td key={sizeName} className={cn("border border-gray-200 p-2", !v.active && "opacity-50 bg-gray-50")}>
                               <div className="space-y-1.5">
                                 <p className="text-[10px] font-mono text-gray-400 truncate">{v.sku}</p>
-                                <div className="flex gap-1">
-                                  <input type="number" min="0" value={v.stock_qty}
-                                    disabled={!v.active}
-                                    readOnly={erpIntegrado}
-                                    onChange={(e) => {
-                                      if (erpIntegrado) return;
-                                      setVariants((prev) => prev.map((x) => x.id === v.id ? { ...x, stock_qty: parseInt(e.target.value) || 0, _dirty: true } : x));
-                                    }}
-                                    title={erpIntegrado ? "Estoque gerenciado pelo ERP — altere no painel do ERP" : "Estoque"}
-                                    className={cn(
-                                      "w-1/2 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:border-kc disabled:bg-gray-100",
-                                      erpIntegrado && "opacity-60 cursor-not-allowed bg-gray-50"
-                                    )} />
+                                {/* variants já chegam bufferizados (real - STOCK_BUFFER) */}
+                                <div className="text-xs text-[#5C3317] space-y-0.5">
+                                  <div className="flex justify-between">
+                                    <span className="text-[#B89070]">Disponível loja:</span>
+                                    <span className="font-medium">{v.stock_qty} un.</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-[#B89070]">Real (ERP):</span>
+                                    <span className="font-medium text-[#A0622A]">{v.stock_qty + STOCK_BUFFER} un.</span>
+                                  </div>
+                                </div>
+                                <div className="flex gap-1 items-center">
+                                  <span className="text-[10px] text-gray-400">mín:</span>
                                   <input type="number" min="0" value={v.stock_min} disabled={!v.active}
                                     onChange={(e) => setVariants((prev) => prev.map((x) => x.id === v.id ? { ...x, stock_min: parseInt(e.target.value) || 0, _dirty: true } : x))}
-                                    title="Mínimo"
-                                    className="w-1/2 border border-gray-100 rounded px-2 py-1 text-xs bg-gray-50 focus:outline-none focus:border-kc disabled:bg-gray-100" />
+                                    title="Estoque mínimo"
+                                    className="w-16 border border-gray-100 rounded px-2 py-1 text-xs bg-gray-50 focus:outline-none focus:border-kc disabled:bg-gray-100" />
                                 </div>
                                 <div className="flex gap-1">
                                   {v._dirty && (
