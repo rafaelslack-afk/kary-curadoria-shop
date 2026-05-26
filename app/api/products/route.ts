@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
     };
 
     const result = withVariants
-      ? ((data ?? []) as ProductWithVariants[]).map((product) => ({
+      ? ((data ?? []) as unknown as ProductWithVariants[]).map((product) => ({
           ...product,
           product_variants: Array.isArray(product.product_variants)
             ? product.product_variants.map((v) => ({
