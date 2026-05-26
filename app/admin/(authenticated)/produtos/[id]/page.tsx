@@ -865,12 +865,12 @@ export default function EditarProdutoPage() {
                 const totalDisponivel = activeVariants.reduce((s, v) => s + Math.max(0, v.stock_qty - STOCK_BUFFER), 0);
                 return (
                   <div className="flex items-center gap-3 text-sm">
-                    <span className="text-[#5C3317]">
-                      <strong>{totalDisponivel}</strong>{" "}un. disponíveis na loja
-                    </span>
-                    <span className="text-[#B89070]">|</span>
                     <span className="text-[#A0622A]">
                       <strong>{totalReal}</strong>{" "}un. real (ERP)
+                    </span>
+                    <span className="text-[#B89070]">|</span>
+                    <span className="text-[#5C3317]">
+                      <strong>{totalDisponivel}</strong>{" "}un. disponíveis loja
                     </span>
                   </div>
                 );
@@ -903,72 +903,111 @@ export default function EditarProdutoPage() {
             {variants.length === 0 ? (
               <p className="text-sm text-gray-400">Nenhuma variação ainda. Use a grade abaixo para adicionar.</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm border-collapse">
-                  <thead>
-                    <tr className="bg-gray-50">
-                      <th className="border border-gray-200 px-3 py-2 text-left text-[11px] tracking-wider text-gray-500 uppercase">Cor</th>
-                      {sizeHeaders.map((s) => (
-                        <th key={s} className="border border-gray-200 px-3 py-2 text-center text-[11px] tracking-wider text-gray-500 uppercase min-w-[120px]">{s}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {colorGroups.map((colorName) => (
-                      <tr key={colorName}>
-                        <td className="border border-gray-200 px-3 py-2 font-medium text-gray-700 text-xs">{colorName}</td>
-                        {sizeHeaders.map((sizeName) => {
-                          const v = variants.find((x) => (x.color ?? "Sem cor") === colorName && x.size === sizeName);
-                          if (!v) return <td key={sizeName} className="border border-gray-100 bg-gray-50" />;
+              {(() => {
+                const colorHexMap = Object.fromEntries(
+                  allColors.map((c) => [c.name, c.hex_code ?? "#ccc"])
+                );
+                return (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm border-collapse">
+                      <thead>
+                        <tr className="bg-gray-50">
+                          <th className="border border-gray-200 px-3 py-2 text-left text-[11px] tracking-wider text-gray-500 uppercase">Cor</th>
+                          {sizeHeaders.map((s) => (
+                            <th key={s} className="border border-gray-200 px-3 py-2 text-center text-[11px] tracking-wider text-gray-500 uppercase min-w-[110px]">{s}</th>
+                          ))}
+                          <th className="border border-gray-200 px-3 py-2 text-center text-[11px] tracking-wider text-gray-500 uppercase">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {colorGroups.map((colorName) => {
+                          const rowTotal = sizeHeaders
+                            .flatMap((s) => {
+                              const v = variants.find((x) => (x.color ?? "Sem cor") === colorName && x.size === s);
+                              return v && v.active ? [v.stock_qty] : [];
+                            })
+                            .reduce((sum, qty) => sum + qty, 0);
+
                           return (
-                            <td key={sizeName} className={cn("border border-gray-200 p-2", !v.active && "opacity-50 bg-gray-50")}>
-                              <div className="space-y-1.5">
-                                <p className="text-[10px] font-mono text-gray-400 truncate">{v.sku}</p>
-                                <div className="text-xs text-[#5C3317] space-y-0.5">
-                                  <div className="flex justify-between">
-                                    <span className="text-[#B89070]">Disponível loja:</span>
-                                    <span className="font-medium">{Math.max(0, v.stock_qty - STOCK_BUFFER)} un.</span>
-                                  </div>
-                                  <div className="flex justify-between">
-                                    <span className="text-[#B89070]">Real (ERP):</span>
-                                    <span className="font-medium text-[#A0622A]">{v.stock_qty} un.</span>
-                                  </div>
-                                </div>
-                                <div className="flex gap-1 items-center">
-                                  <span className="text-[10px] text-gray-400">mín:</span>
-                                  <input type="number" min="0" value={v.stock_min} disabled={!v.active}
-                                    onChange={(e) => setVariants((prev) => prev.map((x) => x.id === v.id ? { ...x, stock_min: parseInt(e.target.value) || 0, _dirty: true } : x))}
-                                    title="Estoque mínimo"
-                                    className="w-16 border border-gray-100 rounded px-2 py-1 text-xs bg-gray-50 focus:outline-none focus:border-kc disabled:bg-gray-100" />
-                                </div>
-                                <div className="flex gap-1">
-                                  {v._dirty && (
-                                    <button type="button" onClick={() => saveVariantStock(v)} disabled={v._saving}
-                                      className="flex-1 text-[10px] bg-kc text-white rounded py-0.5 hover:bg-kc-dark transition-colors disabled:opacity-50">
-                                      {v._saving ? "..." : "Salvar"}
-                                    </button>
+                            <tr key={colorName}>
+                              {/* Cor com ponto colorido */}
+                              <td className="border border-gray-200 px-3 py-2 font-medium text-gray-700 text-xs">
+                                <div className="flex items-center gap-1.5">
+                                  {colorName !== "Sem cor" && (
+                                    <span
+                                      className="w-3 h-3 rounded-full border border-gray-200 shrink-0"
+                                      style={{ backgroundColor: colorHexMap[colorName] ?? "#ccc" }}
+                                    />
                                   )}
-                                  <button type="button" onClick={() => toggleVariantActive(v)}
-                                    className={cn("flex-1 text-[10px] rounded py-0.5 border transition-colors",
-                                      v.active ? "border-gray-200 text-gray-500 hover:border-red-300 hover:text-red-500" : "border-green-200 text-green-600 hover:bg-green-50"
-                                    )}>
-                                    {v.active ? "Desativar" : "Ativar"}
-                                  </button>
-                                  <button type="button" onClick={() => deleteVariant(v)}
-                                    title="Excluir variante"
-                                    className="p-0.5 text-gray-300 hover:text-red-500 transition-colors">
-                                    <Trash2 size={12} />
-                                  </button>
+                                  {colorName}
                                 </div>
-                              </div>
-                            </td>
+                              </td>
+
+                              {/* Células de tamanho */}
+                              {sizeHeaders.map((sizeName) => {
+                                const v = variants.find((x) => (x.color ?? "Sem cor") === colorName && x.size === sizeName);
+                                if (!v) return (
+                                  <td key={sizeName} className="border border-gray-100 bg-gray-50 text-center text-gray-300">—</td>
+                                );
+                                return (
+                                  <td key={sizeName} className={cn("border border-gray-200 p-2", !v.active && "opacity-50 bg-gray-50")}>
+                                    <div className="space-y-1.5">
+                                      {/* Estoque ERP em destaque + loja abaixo */}
+                                      <div className="text-center">
+                                        <span className="text-sm font-semibold text-gray-800">{v.stock_qty} un.</span>
+                                        <div className="text-[10px] text-[#B89070]">loja: {Math.max(0, v.stock_qty - STOCK_BUFFER)}</div>
+                                      </div>
+                                      {/* SKU */}
+                                      <p className="text-[9px] font-mono text-gray-300 truncate text-center">{v.sku}</p>
+                                      {/* Estoque mínimo */}
+                                      <div className="flex gap-1 items-center justify-center">
+                                        <span className="text-[9px] text-gray-400">mín:</span>
+                                        <input
+                                          type="number" min="0" value={v.stock_min} disabled={!v.active}
+                                          onChange={(e) => setVariants((prev) => prev.map((x) => x.id === v.id ? { ...x, stock_min: parseInt(e.target.value) || 0, _dirty: true } : x))}
+                                          title="Estoque mínimo"
+                                          className="w-14 border border-gray-100 rounded px-2 py-0.5 text-xs bg-gray-50 focus:outline-none focus:border-kc disabled:bg-gray-100"
+                                        />
+                                      </div>
+                                      {/* Ações */}
+                                      <div className="flex gap-1">
+                                        {v._dirty && (
+                                          <button type="button" onClick={() => saveVariantStock(v)} disabled={v._saving}
+                                            className="flex-1 text-[10px] bg-kc text-white rounded py-0.5 hover:bg-kc-dark transition-colors disabled:opacity-50">
+                                            {v._saving ? "..." : "Salvar"}
+                                          </button>
+                                        )}
+                                        <button type="button" onClick={() => toggleVariantActive(v)}
+                                          className={cn("flex-1 text-[10px] rounded py-0.5 border transition-colors",
+                                            v.active
+                                              ? "border-gray-200 text-gray-500 hover:border-red-300 hover:text-red-500"
+                                              : "border-green-200 text-green-600 hover:bg-green-50"
+                                          )}>
+                                          {v.active ? "Desativar" : "Ativar"}
+                                        </button>
+                                        <button type="button" onClick={() => deleteVariant(v)}
+                                          title="Excluir variante"
+                                          className="p-0.5 text-gray-300 hover:text-red-500 transition-colors">
+                                          <Trash2 size={12} />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </td>
+                                );
+                              })}
+
+                              {/* TOTAL por linha (estoque real, apenas variantes ativas) */}
+                              <td className="border border-gray-200 px-3 py-2 text-center">
+                                <span className="text-sm font-semibold text-gray-700">{rowTotal}</span>
+                              </td>
+                            </tr>
                           );
                         })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
             )}
           </div>
 
