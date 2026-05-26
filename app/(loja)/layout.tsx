@@ -5,7 +5,7 @@ import { FloatingCoupon } from "@/components/loja/floating-coupon";
 import { isStorePrelaunchActive } from "@/lib/store-launch";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
 
 interface NavLink {
   id: string;
