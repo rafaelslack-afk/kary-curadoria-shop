@@ -6,24 +6,119 @@ export const dynamic = "force-dynamic";
 
 // Mapeamento de cores Firestore/ERP → código SKU do KVO
 const COLOR_TO_SKU: Record<string, string> = {
-  "Azul Gelo": "AZUL",
-  "Crua":      "CRUA",
-  "Marrom":    "MARR",
-  "Cinza":     "CINZ",
-  "Preto":     "PRET",
-  "Branco":    "BRAN",
-  "Rosê":      "ROSE",
-  "Bege":      "BEGE",
-  "Verde":     "VERD",
-  "Vermelho":  "VERM",
-  "Azul":      "AZUL",
-  "Areia":     "AREI",
-  "Off-white": "OFFW",
+  // Amarelos
+  "Amarelo":         "AMARELO",
+  "Amarelo Manteiga": "MANTEI",
+
+  // Azuis
+  "Azul":            "AZUL",
+  "Azul Gelo":       "AZUL",
+  "Azul Bebê":       "AZULB",
+  "Azul Bebe":       "AZULB",
+  "Azul Marinho":    "MARINHO",
+
+  // Beges
+  "Bege":            "BEGE",
+  "Bege Areia":      "BEGE",
+  "Bege Escuro":     "BEGED",
+
+  // Brancos
+  "Branco":          "BRANCO",
+  "fundo branco":    "FBRAN",
+  "Fundo branco":    "FBRAN",
+
+  // Crus
+  "CRU":             "CRUA",
+  "Cru":             "CRUA",
+  "Crua":            "CRUA",
+
+  // Cafés
+  "Café":            "CAFE",
+  "Cafe":            "CAFE",
+
+  // Capuccinos
+  "Capuccino":       "CAPPUCCINO",
+  "Cappuccino":      "CAPPUCCINO",
+
+  // Outros
+  "Caqui":           "CAQUI",
+  "Caramelo":        "CARAMELO",
+  "Cinza":           "CINZA",
+  "Colorida":        "COLORIDA",
+
+  // Fundos
+  "Fundo preto":     "FPRET",
+  "fundo preto":     "FPRET",
+
+  // Lilás
+  "Lilas":           "LILAS",
+  "Lilás":           "LILAS",
+
+  // Mostarda
+  "MOSTARDA":        "MOSTARDA",
+  "Mostarda":        "MOSTARDA",
+
+  // Marrons
+  "Marrom":          "MARROM",
+
+  // Marsalas
+  "Marsala":         "MARSALLA",
+  "Marsalha":        "MARSALLA",
+  "Marsalla":        "MARSALLA",
+
+  // Nude
+  "Nude":            "NUDE",
+
+  // Off White
+  "Off White":       "OFFW",
+  "Off-White":       "OFFW",
+  "Off white":       "OFFW",
+  "Off-white":       "OFFW",
+
+  // Onça
+  "Onça":            "ONCA",
+  "Onca":            "ONCA",
+
+  // Pretos
+  "Preto":           "PRETO",
+
+  // Rosas
+  "Rosa":            "ROSA",
+  "Rose":            "ROSE",
+  "Rosê":            "ROSE",
+
+  // Tabaco
+  "Tabaco":          "TABACO",
+
+  // Terracota
+  "Terracota":       "TERRACOTA",
+
+  // Verdes
+  "Verde":           "VERDE",
+  "Verde Agua":      "VERDEA",
+  "Verde Água":      "VERDEA",
+  "Verde Folha":     "VERDEF",
+  "Verde Musgo":     "MUSGO",
+  "Verde Oliva":     "OLIVA",
+
+  // Vermelho
+  "Vermelho":        "VERMELHO",
+
+  // Vinho
+  "Vinho":           "VINHO",
 };
 
 function buildSku(code: string, color: string, size: string): string {
-  const colorCode = COLOR_TO_SKU[color] ?? color.substring(0, 4).toUpperCase();
-  return `${code}-${colorCode}-${size}`;
+  const colorCode = COLOR_TO_SKU[color];
+
+  if (!colorCode) {
+    console.warn(
+      `[ERP Sync] Cor não mapeada: "${color}"` +
+      ` — usando fallback: ${color.substring(0, 4).toUpperCase()}`
+    );
+  }
+
+  return `${code}-${colorCode ?? color.substring(0, 4).toUpperCase()}-${size}`;
 }
 
 // POST /api/stock/sync
