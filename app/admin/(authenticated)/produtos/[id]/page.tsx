@@ -115,10 +115,10 @@ export default function EditarProdutoPage() {
   useEffect(() => {
     Promise.all([
       fetch(`/api/products/${id}`).then((r) => r.json()),
-      // Busca variantes pelo endpoint dedicado — mais confiável que o nested
-      // product_variants(*) do Supabase, que pode omitir rows por paginação
-      // implícita do PostgREST ou não-determinismo de ordenação.
-      fetch(`/api/products/${id}/variants`).then((r) => r.json()),
+      // Busca variantes pelo endpoint dedicado com ?raw=1 para obter valores
+      // brutos do banco (sem buffer de segurança) — o admin precisa ver o
+      // estoque real do ERP, não o estoque reduzido exibido na loja.
+      fetch(`/api/products/${id}/variants?raw=1`).then((r) => r.json()),
       fetch("/api/categories?active=true").then((r) => r.json()),
       fetch("/api/admin/colors").then((r) => r.json()),
       fetch("/api/admin/sizes").then((r) => r.json()),
@@ -859,6 +859,7 @@ export default function EditarProdutoPage() {
             <div className="flex items-center justify-between mb-1">
               <h2 className="font-serif text-lg font-medium text-kc-dark">Variações Existentes</h2>
               {(() => {
+                // variants buscados com ?raw=1 → stock_qty = valor real do banco
                 const activeVariants  = variants.filter((v) => v.active === true);
                 const totalReal       = activeVariants.reduce((s, v) => s + v.stock_qty, 0);
                 const totalDisponivel = activeVariants.reduce((s, v) => s + Math.max(0, v.stock_qty - STOCK_BUFFER), 0);

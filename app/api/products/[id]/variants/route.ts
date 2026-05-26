@@ -7,7 +7,7 @@ import { STOCK_BUFFER } from "@/lib/constants";
 export const runtime = "nodejs";
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   const supabase = createAdminClient();
@@ -20,6 +20,13 @@ export async function GET(
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // ?raw=1 → retorna valores brutos do banco (uso exclusivo do admin).
+  // Sem o parâmetro, aplica o buffer de segurança (uso da loja pública).
+  const raw = new URL(request.url).searchParams.get("raw") === "1";
+  if (raw) {
+    return NextResponse.json(data ?? []);
   }
 
   // Aplica buffer: cliente vê stock_qty - STOCK_BUFFER (mín. 0)
