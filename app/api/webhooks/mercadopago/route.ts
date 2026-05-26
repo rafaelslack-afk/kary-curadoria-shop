@@ -14,6 +14,87 @@ import { sendPaymentConfirmedEmail, sendOrderCancelledEmail, sendLowStockAlertEm
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
+// ── Notificação ERP — nova venda online ───────────────────────────────────────
+// Fire-and-forget: chamada assíncrona que não bloqueia o fluxo do pedido.
+// Erros são logados mas nunca propagados.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function notifyErpNewSale(order: any) {
+  try {
+    const erpUrl    = process.env.ERP_BASE_URL;
+    const erpSecret = process.env.ERP_WEBHOOK_SECRET;
+
+    if (!erpUrl || !erpSecret) {
+      console.warn("[ERP Sale] ERP_BASE_URL ou ERP_WEBHOOK_SECRET não configurados — notificação ignorada.");
+      return;
+    }
+
+    // Buscar itens com dados completos de produto e variante
+    const admin = createAdminClient();
+    const { data: items } = await admin
+      .from("order_items")
+      .select(`
+        product_name,
+        size_snapshot,
+        sku_snapshot,
+        quantity,
+        unit_price,
+        products ( sku_base ),
+        product_variants ( color )
+      `)
+      .eq("order_id", order.id);
+
+    const payload = {
+      order_id:        order.id,
+      order_number:    order.order_number,
+      customer_name:   order.guest_name   ?? null,
+      customer_phone:  order.customer_phone ?? null,
+      customer_email:  order.guest_email  ?? null,
+      items: (items ?? []).map((item) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const prod    = item.products    as any;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const variant = item.product_variants as any;
+        return {
+          product_code: Array.isArray(prod) ? prod[0]?.sku_base    : prod?.sku_base,
+          product_name: item.product_name,
+          color:        Array.isArray(variant) ? variant[0]?.color : variant?.color,
+          size:         item.size_snapshot,
+          sku:          item.sku_snapshot,
+          quantity:     item.quantity,
+          unit_price:   item.unit_price,
+        };
+      }),
+      subtotal:         order.subtotal,
+      shipping_cost:    order.shipping_cost,
+      discount:         order.discount    ?? 0,
+      total:            order.total,
+      payment_method:   order.payment_method,
+      shipping_service: order.shipping_service,
+      origin:           "kvo_online",
+    };
+
+    const res = await fetch(`${erpUrl}/api/kvo/sale`, {
+      method:  "POST",
+      headers: {
+        "Content-Type":  "application/json",
+        "Authorization": `Bearer ${erpSecret}`,
+      },
+      body:   JSON.stringify(payload),
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "(sem corpo)");
+      console.error(`[ERP Sale] Resposta inesperada ${res.status}:`, text);
+    } else {
+      console.log(`[ERP Sale] Pedido #${order.order_number} notificado com sucesso.`);
+    }
+  } catch (err) {
+    // Fire-and-forget — logar mas não bloquear o fluxo do pedido
+    console.error("[ERP Sale] Falha ao notificar ERP:", err);
+  }
+}
+
 // ── Mercado Pago Webhook (IPN) ────────────────────────────────────────────────
 // MP envia POST com body: { "type": "payment", "data": { "id": "12345678" } }
 // Sempre retornar HTTP 200 para evitar reenvios.
@@ -64,7 +145,7 @@ export async function POST(request: Request) {
     const admin = createAdminClient();
     const { data: order } = await admin
       .from("orders")
-      .select("id, status, order_number, guest_name, guest_email, total, order_items(variant_id, product_name, size_snapshot, color_snapshot, quantity, unit_price)")
+      .select("id, status, order_number, guest_name, guest_email, customer_phone, subtotal, shipping_cost, discount, total, payment_method, shipping_service, order_items(variant_id, product_name, size_snapshot, color_snapshot, quantity, unit_price)")
       .eq("pagbank_charge_id", String(paymentId))
       .single();
 
@@ -162,6 +243,11 @@ export async function POST(request: Request) {
         }
       } catch (stockErr) {
         console.error("[Webhook MP] Falha ao verificar/enviar alerta de estoque:", stockErr);
+      }
+
+      // Notifica o ERP sobre a nova venda (fire-and-forget — não bloqueia)
+      if (!wasAlreadyPaid) {
+        notifyErpNewSale(order).catch(() => {});
       }
     } else if (payment.status === "rejected") {
       // ── Cartão recusado ──────────────────────────────────────────────────
