@@ -903,7 +903,7 @@ export default function EditarProdutoPage() {
             {variants.length === 0 ? (
               <p className="text-sm text-gray-400">Nenhuma variação ainda. Use a grade abaixo para adicionar.</p>
             ) : (
-              {(() => {
+              (() => {
                 const colorHexMap = Object.fromEntries(
                   allColors.map((c) => [c.name, c.hex_code ?? "#ccc"])
                 );
@@ -1007,7 +1007,7 @@ export default function EditarProdutoPage() {
                     </table>
                   </div>
                 );
-              })()}
+              })()
             )}
           </div>
 
