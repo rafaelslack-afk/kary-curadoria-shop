@@ -123,6 +123,7 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState<StatsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [hoursSinceSync, setHoursSinceSync] = useState<number>(999);
+  const [syncErrorCount, setSyncErrorCount] = useState<number>(0);
 
   const fetchStats = useCallback(async (p: Periodo) => {
     setLoading(true);
@@ -144,6 +145,14 @@ export default function AdminDashboard() {
       .catch(() => {});
   }, []);
 
+  // Contagem de erros de sync ERP não resolvidos
+  useEffect(() => {
+    fetch("/api/admin/erp-sync-errors/count")
+      .then((r) => r.json())
+      .then((d) => { if (typeof d.count === "number") setSyncErrorCount(d.count); })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     fetchStats(periodo);
   }, [periodo, fetchStats]);
@@ -156,7 +165,7 @@ export default function AdminDashboard() {
 
       {/* Alerta de sincronização ERP — aparece se > 4h sem sync */}
       {hoursSinceSync > 4 && (
-        <div className="flex items-center gap-3 bg-[#FFF3CD] border border-[#f59e0b] border-l-4 border-l-[#f59e0b] rounded-r-lg px-4 py-3 mb-6">
+        <div className="flex items-center gap-3 bg-[#FFF3CD] border border-[#f59e0b] border-l-4 border-l-[#f59e0b] rounded-r-lg px-4 py-3 mb-4">
           <AlertTriangle size={16} className="text-[#856404] shrink-0" />
           <div>
             <p className="text-sm font-semibold text-[#856404]">Estoque desatualizado</p>
@@ -164,6 +173,22 @@ export default function AdminDashboard() {
               Última sincronização com o ERP há{" "}
               {hoursSinceSync >= 999 ? "mais de 24" : Math.floor(hoursSinceSync)}h.
               Verifique a integração.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Alerta de erros de sync ERP — aparece se há erros não resolvidos */}
+      {syncErrorCount > 0 && (
+        <div className="flex items-center gap-3 bg-[#F8D7DA] border border-red-300 border-l-4 border-l-red-600 rounded-r-lg px-4 py-3 mb-6">
+          <AlertTriangle size={16} className="text-red-600 shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-red-800">
+              {syncErrorCount} erro{syncErrorCount > 1 ? "s" : ""} de sincronização ERP pendente{syncErrorCount > 1 ? "s" : ""}
+            </p>
+            <p className="text-xs text-red-700 mt-0.5">
+              Variantes não encontradas na última sincronização.{" "}
+              <a href="/admin/erp-sync" className="underline font-medium">Ver e corrigir agora</a>
             </p>
           </div>
         </div>

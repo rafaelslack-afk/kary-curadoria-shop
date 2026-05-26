@@ -19,6 +19,7 @@ import {
   Menu,
   Home,
   ShoppingBag,
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +37,7 @@ const menuItems = [
   { href: "/admin/cupons",     label: "Cupons",     icon: Tag },
   { href: "/admin/clientes",   label: "Clientes",   icon: Users },
   { href: "/admin/abandonos",  label: "Abandonos",  icon: ShoppingBag },
+  { href: "/admin/erp-sync",   label: "Sync ERP",   icon: RefreshCw },
   { href: "/admin/relatorios", label: "Relatórios", icon: BarChart3 },
 ];
 
@@ -50,12 +52,21 @@ interface AdminSidebarProps {
 export function AdminSidebar({ onClose }: AdminSidebarProps) {
   const pathname = usePathname();
   const [abandonosCount, setAbandonosCount] = useState<number | null>(null);
+  const [syncErrorCount, setSyncErrorCount] = useState<number | null>(null);
 
   // Contagem de abandonos não recuperados (últimos 7 dias)
   useEffect(() => {
     fetch("/api/admin/abandoned-checkouts?period=7d&status=abandoned")
       .then((r) => r.json())
       .then((data) => { if (Array.isArray(data)) setAbandonosCount(data.length); })
+      .catch(() => {});
+  }, []);
+
+  // Contagem de erros de sync ERP não resolvidos
+  useEffect(() => {
+    fetch("/api/admin/erp-sync-errors/count")
+      .then((r) => r.json())
+      .then((data) => { if (typeof data.count === "number") setSyncErrorCount(data.count); })
       .catch(() => {});
   }, []);
 
@@ -83,6 +94,7 @@ export function AdminSidebar({ onClose }: AdminSidebarProps) {
               ? pathname === "/admin"
               : pathname.startsWith(href);
           const isAbandonos = href === "/admin/abandonos";
+          const isSyncErp  = href === "/admin/erp-sync";
 
           return (
             <Link
@@ -102,6 +114,11 @@ export function AdminSidebar({ onClose }: AdminSidebarProps) {
               {isAbandonos && abandonosCount !== null && abandonosCount > 0 && (
                 <span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-none">
                   {abandonosCount > 99 ? "99+" : abandonosCount}
+                </span>
+              )}
+              {isSyncErp && syncErrorCount !== null && syncErrorCount > 0 && (
+                <span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-none">
+                  {syncErrorCount > 99 ? "99+" : syncErrorCount}
                 </span>
               )}
             </Link>

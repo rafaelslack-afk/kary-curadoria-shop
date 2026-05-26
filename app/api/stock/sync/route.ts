@@ -173,6 +173,22 @@ export async function POST(request: NextRequest) {
       if (variantError || !variant) {
         results.not_found.push(sku);
         console.warn(`[ERP Sync] SKU não encontrado: ${sku}`);
+
+        // Registrar erro para monitoramento no painel admin
+        try {
+          await admin.from("erp_sync_errors").insert({
+            product_code: body.product_code,
+            color_erp:    item.color,
+            size:         item.size,
+            sku_tentado:  sku,
+            quantity:     item.quantity,
+            error_type:   "not_found",
+            resolved:     false,
+          });
+        } catch (insertErr) {
+          console.error("[ERP Sync] Falha ao registrar erro:", insertErr);
+        }
+
         continue;
       }
 
