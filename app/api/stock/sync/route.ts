@@ -208,13 +208,17 @@ export async function POST(request: NextRequest) {
       }
 
       // Registrar movimentação no inventory_log
+      // IMPORTANTE: quantity = 0 porque o estoque já foi SUBSTITUÍDO (SET) pela linha acima.
+      // Se houver trigger em inventory_log que faça stock_qty += quantity, usar 0 evita
+      // que o valor seja acumulado em cima do SET correto.
+      // O delta real fica registrado no campo reason para auditoria.
       await admin.from("inventory_log").insert({
         variant_id:   variant.id,
         product_id:   variant.product_id,
         type:         "ajuste",
         sales_channel: "physical",
-        quantity:     newQty - oldQty,
-        reason:       `Sync ERP — estoque físico atualizado (${oldQty} → ${newQty})`,
+        quantity:     0,
+        reason:       `Sync ERP — estoque físico substituído: ${oldQty} → ${newQty} (ERP absoluto)`,
         created_by:   "erp_sync",
       });
 
