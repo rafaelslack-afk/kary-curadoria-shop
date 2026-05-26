@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { ChevronLeft, ChevronRight, Save, Package2, Layers, RefreshCw, Upload, X, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Save, Package2, Layers, RefreshCw, Upload, X, Trash2, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn, slugify } from "@/lib/utils";
 import type { Category, ProductVariant, Color, Size, ProductType } from "@/types/database";
@@ -59,6 +59,7 @@ export default function EditarProdutoPage() {
   const [fetching, setFetching]         = useState(true);
   const [loading, setLoading]           = useState(false);
   const [error, setError]               = useState("");
+  const [erpIntegrado, setErpIntegrado] = useState(false);
   const [success, setSuccess]           = useState("");
   const [categories, setCategories]     = useState<Category[]>([]);
   const [allColors, setAllColors]       = useState<Color[]>([]);
@@ -171,6 +172,14 @@ export default function EditarProdutoPage() {
       .catch(() => setError("Erro ao carregar produto."))
       .finally(() => setFetching(false));
   }, [id]);
+
+  // Verifica se o ERP já foi integrado (last_erp_sync existe em system_config)
+  useEffect(() => {
+    fetch("/api/admin/erp-sync-status")
+      .then((r) => r.json())
+      .then((d) => { if (d.lastSync) setErpIntegrado(true); })
+      .catch(() => {});
+  }, []);
 
   // Auto-fill slug quando nome muda (só se ainda não foi editado manualmente)
   useEffect(() => {
@@ -852,7 +861,29 @@ export default function EditarProdutoPage() {
                 {variants.filter((v) => v.active).reduce((s, v) => s + v.stock_qty, 0)} un. em estoque
               </span>
             </div>
-            <p className="text-xs text-gray-400 mb-5">Edite o estoque e salve individualmente. Desative variações sem estoque que não serão mais vendidas.</p>
+            <p className="text-xs text-gray-400 mb-4">Edite o estoque e salve individualmente. Desative variações sem estoque que não serão mais vendidas.</p>
+
+            {/* Aviso ERP — exibido quando a integração está ativa */}
+            {erpIntegrado && (
+              <div className="flex items-start gap-3 bg-[#EDE8DC] border border-[#D9C9B8] border-l-4 border-l-[#A0622A] rounded-r-lg px-4 py-3 mb-5">
+                <Info size={15} className="text-[#A0622A] mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-[#5C3317]">Estoque sincronizado com o ERP</p>
+                  <p className="text-xs text-[#5C3317] mt-0.5 leading-relaxed">
+                    Os campos de estoque estão em somente leitura. Qualquer alteração manual será sobrescrita na próxima sincronização.
+                    Para ajustar o estoque, use o{" "}
+                    <a
+                      href="https://erp.karycuradoria.com.br"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#A0622A] underline font-medium"
+                    >
+                      painel do ERP →
+                    </a>
+                  </p>
+                </div>
+              </div>
+            )}
 
             {variants.length === 0 ? (
               <p className="text-sm text-gray-400">Nenhuma variação ainda. Use a grade abaixo para adicionar.</p>
@@ -879,10 +910,18 @@ export default function EditarProdutoPage() {
                               <div className="space-y-1.5">
                                 <p className="text-[10px] font-mono text-gray-400 truncate">{v.sku}</p>
                                 <div className="flex gap-1">
-                                  <input type="number" min="0" value={v.stock_qty} disabled={!v.active}
-                                    onChange={(e) => setVariants((prev) => prev.map((x) => x.id === v.id ? { ...x, stock_qty: parseInt(e.target.value) || 0, _dirty: true } : x))}
-                                    title="Estoque"
-                                    className="w-1/2 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:border-kc disabled:bg-gray-100" />
+                                  <input type="number" min="0" value={v.stock_qty}
+                                    disabled={!v.active}
+                                    readOnly={erpIntegrado}
+                                    onChange={(e) => {
+                                      if (erpIntegrado) return;
+                                      setVariants((prev) => prev.map((x) => x.id === v.id ? { ...x, stock_qty: parseInt(e.target.value) || 0, _dirty: true } : x));
+                                    }}
+                                    title={erpIntegrado ? "Estoque gerenciado pelo ERP — altere no painel do ERP" : "Estoque"}
+                                    className={cn(
+                                      "w-1/2 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:border-kc disabled:bg-gray-100",
+                                      erpIntegrado && "opacity-60 cursor-not-allowed bg-gray-50"
+                                    )} />
                                   <input type="number" min="0" value={v.stock_min} disabled={!v.active}
                                     onChange={(e) => setVariants((prev) => prev.map((x) => x.id === v.id ? { ...x, stock_min: parseInt(e.target.value) || 0, _dirty: true } : x))}
                                     title="Mínimo"

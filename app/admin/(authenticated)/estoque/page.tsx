@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Warehouse, Search } from "lucide-react";
+import { AlertTriangle, Warehouse, Search, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface VariantStock {
@@ -75,6 +75,29 @@ export default function EstoquePage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-serif font-medium text-kc-dark">Estoque</h1>
+      </div>
+
+      {/* Aviso: estoque gerenciado pelo ERP */}
+      <div className="flex items-start gap-3 bg-[#EDE8DC] border border-[#D9C9B8] border-l-4 border-l-[#A0622A] rounded-r-lg px-4 py-3 mb-6">
+        <Info size={16} className="text-[#A0622A] mt-0.5 shrink-0" />
+        <div>
+          <p className="text-sm font-semibold text-[#5C3317]">
+            Estoque sincronizado com o ERP
+          </p>
+          <p className="text-xs text-[#5C3317] mt-0.5 leading-relaxed">
+            As quantidades exibidas são atualizadas automaticamente pelo ERP (Kary Curadoria — Controle de Estoque).{" "}
+            <strong>Não altere o estoque manualmente aqui</strong> — qualquer alteração será sobrescrita na próxima sincronização.
+            Para corrigir o estoque, acesse o{" "}
+            <a
+              href="https://erp.karycuradoria.com.br"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[#A0622A] underline ml-0.5 font-medium"
+            >
+              painel do ERP →
+            </a>
+          </p>
+        </div>
       </div>
 
       {/* Barra de busca e filtros */}
