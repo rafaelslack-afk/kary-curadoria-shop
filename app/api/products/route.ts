@@ -6,6 +6,10 @@ import type { ProductInsert } from "@/types/database";
 // GET /api/products — List products with optional filters
 export const runtime = "nodejs";
 
+// Buffer de segurança durante testes de integração ERP.
+// Remover (ou setar para 0) após 30 dias de integração estável.
+const STOCK_BUFFER = 1;
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = createAdminClient();
@@ -40,7 +44,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json(data ?? []);
+    // Aplica buffer de segurança nas variantes (ERP sync — remover após 30d estável)
+    const result = withVariants
+      ? (data ?? []).map((product) => ({
+          ...product,
+          product_variants: Array.isArray(product.product_variants)
+            ? product.product_variants.map((v: { stock_qty: number }) => ({
+                ...v,
+                stock_qty: Math.max(0, v.stock_qty - STOCK_BUFFER),
+              }))
+            : product.product_variants,
+        }))
+      : (data ?? []);
+
+    return NextResponse.json(result);
   } catch (err) {
     console.error("[products GET] Catch error:", err);
     return NextResponse.json({ error: String(err) }, { status: 500 });

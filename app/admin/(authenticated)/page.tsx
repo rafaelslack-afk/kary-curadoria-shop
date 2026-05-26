@@ -122,6 +122,7 @@ export default function AdminDashboard() {
   const [periodo, setPeriodo] = useState<Periodo>("30d");
   const [stats, setStats] = useState<StatsData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [hoursSinceSync, setHoursSinceSync] = useState<number>(999);
 
   const fetchStats = useCallback(async (p: Periodo) => {
     setLoading(true);
@@ -135,6 +136,14 @@ export default function AdminDashboard() {
     }
   }, []);
 
+  // Verifica última sincronização do ERP
+  useEffect(() => {
+    fetch("/api/admin/erp-sync-status")
+      .then((r) => r.json())
+      .then((d) => { if (d.hoursSince !== null) setHoursSinceSync(d.hoursSince); })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     fetchStats(periodo);
   }, [periodo, fetchStats]);
@@ -144,6 +153,21 @@ export default function AdminDashboard() {
   return (
     <div>
       <h1 className="text-2xl font-serif font-medium text-kc-dark mb-6">Dashboard</h1>
+
+      {/* Alerta de sincronização ERP — aparece se > 4h sem sync */}
+      {hoursSinceSync > 4 && (
+        <div className="flex items-center gap-3 bg-[#FFF3CD] border border-[#f59e0b] border-l-4 border-l-[#f59e0b] rounded-r-lg px-4 py-3 mb-6">
+          <AlertTriangle size={16} className="text-[#856404] shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-[#856404]">Estoque desatualizado</p>
+            <p className="text-xs text-[#856404] mt-0.5">
+              Última sincronização com o ERP há{" "}
+              {hoursSinceSync >= 999 ? "mais de 24" : Math.floor(hoursSinceSync)}h.
+              Verifique a integração.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

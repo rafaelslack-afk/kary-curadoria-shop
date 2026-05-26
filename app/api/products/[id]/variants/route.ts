@@ -5,6 +5,10 @@ import type { ProductVariantInsert, ProductVariantUpdate } from "@/types/databas
 // GET /api/products/[id]/variants — List variants for a product
 export const runtime = "nodejs";
 
+// Buffer de segurança durante testes de integração ERP.
+// Remover (ou setar para 0) após 30 dias de integração estável.
+const STOCK_BUFFER = 1;
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: { id: string } }
@@ -21,7 +25,13 @@ export async function GET(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json(data);
+  // Aplica buffer: cliente vê stock_qty - STOCK_BUFFER (mín. 0)
+  const buffered = (data ?? []).map((v) => ({
+    ...v,
+    stock_qty: Math.max(0, v.stock_qty - STOCK_BUFFER),
+  }));
+
+  return NextResponse.json(buffered);
 }
 
 // POST /api/products/[id]/variants — Add a variant to a product
