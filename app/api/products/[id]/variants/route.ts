@@ -26,9 +26,10 @@ export async function GET(
   }
 
   // Aplica buffer: cliente vê stock_qty - STOCK_BUFFER (mín. 0)
-  const buffered = (data ?? []).map((v) => ({
+  type VariantType = { stock_qty: number; [key: string]: unknown };
+  const buffered = (data ?? [] as VariantType[]).map((v) => ({
     ...v,
-    stock_qty: Math.max(0, v.stock_qty - STOCK_BUFFER),
+    stock_qty: Math.max(0, (v as VariantType).stock_qty - STOCK_BUFFER),
   }));
 
   return NextResponse.json(buffered);

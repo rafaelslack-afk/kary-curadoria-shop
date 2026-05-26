@@ -45,11 +45,15 @@ export async function GET(request: NextRequest) {
     }
 
     // Aplica buffer de segurança nas variantes (ERP sync — remover após 30d estável)
+    type ProductWithVariants = Record<string, unknown> & {
+      product_variants?: Array<{ stock_qty: number; [key: string]: unknown }>;
+    };
+
     const result = withVariants
-      ? (data ?? []).map((product) => ({
+      ? ((data ?? []) as ProductWithVariants[]).map((product) => ({
           ...product,
           product_variants: Array.isArray(product.product_variants)
-            ? product.product_variants.map((v: { stock_qty: number }) => ({
+            ? product.product_variants.map((v) => ({
                 ...v,
                 stock_qty: Math.max(0, v.stock_qty - STOCK_BUFFER),
               }))
