@@ -24,8 +24,10 @@ export async function GET(
 
   // ?raw=1 → retorna valores brutos do banco (uso exclusivo do admin).
   // Sem o parâmetro, aplica o buffer de segurança (uso da loja pública).
-  const raw = new URL(request.url).searchParams.get("raw") === "1";
+  const raw = request.nextUrl.searchParams.get("raw") === "1";
   if (raw) {
+    const total = (data ?? []).reduce((s: number, v: { stock_qty: number }) => s + v.stock_qty, 0);
+    console.log(`[variants raw] produto ${params.id}: ${(data ?? []).length} variantes, total stock_qty=${total}`);
     return NextResponse.json(data ?? []);
   }
 
