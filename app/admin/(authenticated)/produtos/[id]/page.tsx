@@ -858,11 +858,10 @@ export default function EditarProdutoPage() {
           <div className="bg-white rounded-lg border border-gray-200 p-6 mt-6 max-w-4xl">
             <div className="flex items-center justify-between mb-1">
               <h2 className="font-serif text-lg font-medium text-kc-dark">Variações Existentes</h2>
-              {/* variants já chegam com buffer aplicado — stock_qty = real - STOCK_BUFFER */}
               {(() => {
-                const activeVariants   = variants.filter((v) => v.active);
-                const totalDisponivel  = activeVariants.reduce((s, v) => s + v.stock_qty, 0);
-                const totalReal        = activeVariants.reduce((s, v) => s + v.stock_qty + STOCK_BUFFER, 0);
+                const activeVariants  = variants.filter((v) => v.active === true);
+                const totalReal       = activeVariants.reduce((s, v) => s + v.stock_qty, 0);
+                const totalDisponivel = activeVariants.reduce((s, v) => s + Math.max(0, v.stock_qty - STOCK_BUFFER), 0);
                 return (
                   <div className="flex items-center gap-3 text-sm">
                     <span className="text-[#5C3317]">
@@ -924,15 +923,14 @@ export default function EditarProdutoPage() {
                             <td key={sizeName} className={cn("border border-gray-200 p-2", !v.active && "opacity-50 bg-gray-50")}>
                               <div className="space-y-1.5">
                                 <p className="text-[10px] font-mono text-gray-400 truncate">{v.sku}</p>
-                                {/* variants já chegam bufferizados (real - STOCK_BUFFER) */}
                                 <div className="text-xs text-[#5C3317] space-y-0.5">
                                   <div className="flex justify-between">
                                     <span className="text-[#B89070]">Disponível loja:</span>
-                                    <span className="font-medium">{v.stock_qty} un.</span>
+                                    <span className="font-medium">{Math.max(0, v.stock_qty - STOCK_BUFFER)} un.</span>
                                   </div>
                                   <div className="flex justify-between">
                                     <span className="text-[#B89070]">Real (ERP):</span>
-                                    <span className="font-medium text-[#A0622A]">{v.stock_qty + STOCK_BUFFER} un.</span>
+                                    <span className="font-medium text-[#A0622A]">{v.stock_qty} un.</span>
                                   </div>
                                 </div>
                                 <div className="flex gap-1 items-center">
