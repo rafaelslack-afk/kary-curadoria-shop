@@ -14,6 +14,8 @@ import {
   Check,
   Printer,
   Phone,
+  Pencil,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, cn } from "@/lib/utils";
@@ -98,21 +100,30 @@ function SectionCard({
   title,
   icon,
   children,
+  headerAction,
 }: {
   title: string;
   icon: React.ReactNode;
   children: React.ReactNode;
+  headerAction?: React.ReactNode;
 }) {
   return (
     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
       <div className="flex items-center gap-2 px-5 py-3.5 border-b border-gray-100 bg-gray-50">
         <span className="text-kc-muted">{icon}</span>
-        <h2 className="font-medium text-sm text-kc-dark tracking-wide">{title}</h2>
+        <h2 className="font-medium text-sm text-kc-dark tracking-wide flex-1">{title}</h2>
+        {headerAction}
       </div>
       <div className="p-5">{children}</div>
     </div>
   );
 }
+
+function maskCep(v: string) {
+  return v.replace(/\D/g, "").slice(0, 8).replace(/(\d{5})(\d)/, "$1-$2");
+}
+
+const addrInputCls = "w-full border border-gray-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-kc";
 
 function formatPhone(phone: string): string {
   const d = phone.replace(/\D/g, "");
@@ -150,6 +161,14 @@ export default function PedidoDetailPage() {
   const [nfKey, setNfKey] = useState("");
   const [nfStatus, setNfStatus] = useState<NfStatus | "">("");
   const [notes, setNotes] = useState("");
+
+  // Edição de endereço
+  const [editingAddress, setEditingAddress] = useState(false);
+  const [addrForm, setAddrForm] = useState({
+    cep: "", logradouro: "", numero: "", complemento: "", bairro: "", cidade: "", estado: "",
+  });
+  const [addrSaving, setAddrSaving] = useState(false);
+  const [addrCepLoading, setAddrCepLoading] = useState(false);
 
   // Geração de etiqueta
   const [generatingLabel, setGeneratingLabel] = useState(false);
@@ -199,6 +218,62 @@ export default function PedidoDetailPage() {
       alert("Erro de rede. Tente novamente.");
     } finally {
       setSaving(null);
+    }
+  }
+
+  function initAddrForm() {
+    const a = order?.shipping_address_json;
+    setAddrForm({
+      cep:         a?.cep         ?? "",
+      logradouro:  a?.logradouro  ?? "",
+      numero:      a?.numero      ?? "",
+      complemento: a?.complemento ?? "",
+      bairro:      a?.bairro      ?? "",
+      cidade:      a?.cidade      ?? "",
+      estado:      a?.estado      ?? "",
+    });
+    setEditingAddress(true);
+  }
+
+  async function fetchAddrCep(cep: string) {
+    const digits = cep.replace(/\D/g, "");
+    if (digits.length !== 8) return;
+    setAddrCepLoading(true);
+    try {
+      const res = await fetch(`/api/cep?cep=${digits}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setAddrForm((f) => ({
+        ...f,
+        logradouro: data.logradouro || f.logradouro,
+        bairro:     data.bairro     || f.bairro,
+        cidade:     data.cidade     || f.cidade,
+        estado:     data.estado     || f.estado,
+      }));
+    } finally {
+      setAddrCepLoading(false);
+    }
+  }
+
+  async function saveAddress() {
+    setAddrSaving(true);
+    try {
+      const res = await fetch(`/api/admin/orders/${id}/address`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(addrForm),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(`Erro ao salvar endereço: ${data.error ?? "Tente novamente."}`);
+        return;
+      }
+      setOrder((o) => o ? { ...o, shipping_address_json: data.shipping_address_json } : o);
+      setEditingAddress(false);
+    } catch {
+      alert("Erro de rede. Tente novamente.");
+    } finally {
+      setAddrSaving(false);
     }
   }
 
@@ -355,17 +430,147 @@ export default function PedidoDetailPage() {
           </SectionCard>
 
           {/* Endereço de entrega */}
-          <SectionCard title="Endereço de Entrega" icon={<MapPin size={16} />}>
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Logradouro" value={`${addr?.logradouro}, ${addr?.numero}`} />
-              {addr?.complemento && <Field label="Complemento" value={addr.complemento} />}
-              <Field label="Bairro" value={addr?.bairro} />
-              <Field label="Cidade / UF" value={addr ? `${addr.cidade} / ${addr.estado}` : ""} />
-              <Field label="CEP" value={addr?.cep} />
-              {order.shipping_deadline && (
-                <Field label="Prazo estimado" value={`${order.shipping_deadline} dias úteis`} />
-              )}
-            </div>
+          <SectionCard
+            title="Endereço de Entrega"
+            icon={<MapPin size={16} />}
+            headerAction={
+              !editingAddress ? (
+                <button
+                  onClick={initAddrForm}
+                  className="flex items-center gap-1.5 text-xs text-kc hover:underline"
+                >
+                  <Pencil size={12} />
+                  Editar
+                </button>
+              ) : (
+                <button
+                  onClick={() => setEditingAddress(false)}
+                  className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600"
+                >
+                  <X size={12} />
+                  Cancelar
+                </button>
+              )
+            }
+          >
+            {!editingAddress ? (
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Logradouro" value={`${addr?.logradouro}, ${addr?.numero}`} />
+                {addr?.complemento && <Field label="Complemento" value={addr.complemento} />}
+                <Field label="Bairro" value={addr?.bairro} />
+                <Field label="Cidade / UF" value={addr ? `${addr.cidade} / ${addr.estado}` : ""} />
+                <Field label="CEP" value={addr?.cep} />
+                {order.shipping_deadline && (
+                  <Field label="Prazo estimado" value={`${order.shipping_deadline} dias úteis`} />
+                )}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {/* CEP */}
+                <div>
+                  <label className="block text-[11px] text-gray-400 uppercase tracking-wider mb-1">CEP</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={addrForm.cep}
+                      onChange={(e) => {
+                        const v = maskCep(e.target.value);
+                        setAddrForm((f) => ({ ...f, cep: v }));
+                        if (v.replace(/\D/g, "").length === 8) fetchAddrCep(v);
+                      }}
+                      placeholder="00000-000"
+                      inputMode="numeric"
+                      className="w-36 border border-gray-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-kc"
+                    />
+                    {addrCepLoading && <Loader2 size={14} className="animate-spin text-gray-400" />}
+                  </div>
+                </div>
+
+                {/* Logradouro + Número */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="col-span-2">
+                    <label className="block text-[11px] text-gray-400 uppercase tracking-wider mb-1">Logradouro</label>
+                    <input
+                      type="text"
+                      value={addrForm.logradouro}
+                      onChange={(e) => setAddrForm((f) => ({ ...f, logradouro: e.target.value }))}
+                      className={addrInputCls}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-gray-400 uppercase tracking-wider mb-1">Número</label>
+                    <input
+                      type="text"
+                      value={addrForm.numero}
+                      onChange={(e) => setAddrForm((f) => ({ ...f, numero: e.target.value }))}
+                      className={addrInputCls}
+                    />
+                  </div>
+                </div>
+
+                {/* Complemento + Bairro */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] text-gray-400 uppercase tracking-wider mb-1">Complemento</label>
+                    <input
+                      type="text"
+                      value={addrForm.complemento}
+                      onChange={(e) => setAddrForm((f) => ({ ...f, complemento: e.target.value }))}
+                      placeholder="Opcional"
+                      className={addrInputCls}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-gray-400 uppercase tracking-wider mb-1">Bairro</label>
+                    <input
+                      type="text"
+                      value={addrForm.bairro}
+                      onChange={(e) => setAddrForm((f) => ({ ...f, bairro: e.target.value }))}
+                      className={addrInputCls}
+                    />
+                  </div>
+                </div>
+
+                {/* Cidade + Estado */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="col-span-2">
+                    <label className="block text-[11px] text-gray-400 uppercase tracking-wider mb-1">Cidade</label>
+                    <input
+                      type="text"
+                      value={addrForm.cidade}
+                      onChange={(e) => setAddrForm((f) => ({ ...f, cidade: e.target.value }))}
+                      className={addrInputCls}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-gray-400 uppercase tracking-wider mb-1">Estado</label>
+                    <input
+                      type="text"
+                      value={addrForm.estado}
+                      onChange={(e) => setAddrForm((f) => ({ ...f, estado: e.target.value.toUpperCase().slice(0, 2) }))}
+                      placeholder="SP"
+                      className={addrInputCls}
+                    />
+                  </div>
+                </div>
+
+                {/* Ações */}
+                <div className="flex gap-2 pt-1">
+                  <Button size="sm" disabled={addrSaving} onClick={saveAddress}>
+                    {addrSaving
+                      ? <Loader2 size={13} className="animate-spin mr-1" />
+                      : <Check size={13} className="mr-1" />}
+                    {addrSaving ? "Salvando..." : "Salvar Endereço"}
+                  </Button>
+                  <button
+                    onClick={() => setEditingAddress(false)}
+                    className="text-xs text-gray-400 hover:text-gray-700 px-3 py-1.5 border border-gray-200 rounded transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
           </SectionCard>
 
           {/* Pagamento */}
