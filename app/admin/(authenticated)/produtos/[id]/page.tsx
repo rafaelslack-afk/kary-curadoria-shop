@@ -60,9 +60,11 @@ export default function EditarProdutoPage() {
   const [fetching, setFetching]         = useState(true);
   const [loading, setLoading]           = useState(false);
   const [error, setError]               = useState("");
-  const [erpIntegrado, setErpIntegrado]       = useState(false);
-  const [erpSyncEnabled, setErpSyncEnabled]   = useState(true);
-  const [togglingSync, setTogglingSync]       = useState(false);
+  const [erpIntegrado, setErpIntegrado]             = useState(false);
+  const [erpSyncEnabled, setErpSyncEnabled]         = useState(true);
+  const [togglingSync, setTogglingSync]             = useState(false);
+  const [notificaErpVenda, setNotificaErpVenda]     = useState(true);
+  const [togglingNotifica, setTogglingNotifica]     = useState(false);
   const [success, setSuccess]           = useState("");
   const [categories, setCategories]     = useState<Category[]>([]);
   const [allColors, setAllColors]       = useState<Color[]>([]);
@@ -138,7 +140,8 @@ export default function EditarProdutoPage() {
         setSkuBase(product.sku_base ?? "");
         setActive(product.active ?? true);
         setFeatured(product.featured ?? false);
-        setErpSyncEnabled(product.erp_sync_enabled !== false); // default true
+        setErpSyncEnabled(product.erp_sync_enabled !== false);       // default true
+        setNotificaErpVenda(product.notifica_erp_venda !== false);  // default true
         setImages(product.images ?? []);
         setWeightG(product.weight_g ? String(product.weight_g) : "");
         setLengthCm(product.length_cm ? String(product.length_cm) : "");
@@ -433,6 +436,33 @@ export default function EditarProdutoPage() {
       setError("Erro ao atualizar configuração de sync.");
     } finally {
       setTogglingSync(false);
+    }
+  }
+
+  // ── Toggle notificação ERP em vendas ─────────────────────────────────────
+
+  async function handleToggleNotificaErp(enabled: boolean) {
+    setTogglingNotifica(true);
+    try {
+      const res = await fetch(`/api/products/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notifica_erp_venda: enabled }),
+      });
+      if (res.ok) {
+        setNotificaErpVenda(enabled);
+        setSuccess(enabled
+          ? "Notificação ERP ativada — vendas online serão enviadas ao ERP."
+          : "Notificação ERP desabilitada — vendas não serão enviadas ao ERP.");
+        setTimeout(() => setSuccess(""), 4000);
+      } else {
+        const d = await res.json();
+        setError(d.error ?? "Erro ao atualizar configuração de notificação.");
+      }
+    } catch {
+      setError("Erro ao atualizar configuração de notificação.");
+    } finally {
+      setTogglingNotifica(false);
     }
   }
 
@@ -928,6 +958,36 @@ export default function EditarProdutoPage() {
                   <div className={`w-11 h-6 rounded-full transition-colors relative
                     ${erpSyncEnabled ? "bg-[#A0622A]" : "bg-gray-200"}
                     ${togglingSync ? "opacity-50 cursor-wait" : ""}
+                    after:content-[''] after:absolute after:top-[2px] after:left-[2px]
+                    after:bg-white after:rounded-full after:h-5 after:w-5
+                    after:transition-all peer-checked:after:translate-x-full`}
+                  />
+                </label>
+              </div>
+            )}
+
+            {/* Toggle — notificação de vendas ao ERP */}
+            {erpIntegrado && (
+              <div className="flex items-center justify-between p-4 bg-[#F5F1EA] border border-[#D9C9B8] rounded-xl mb-4">
+                <div>
+                  <p className="text-sm font-semibold text-[#5C3317]">Notificar ERP em vendas online</p>
+                  <p className="text-xs text-[#B89070] mt-0.5">
+                    {notificaErpVenda
+                      ? "Vendas no KVO aparecem no ERP para lançamento"
+                      : "Vendas no KVO não são enviadas ao ERP"}
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-4">
+                  <input
+                    type="checkbox"
+                    checked={notificaErpVenda}
+                    disabled={togglingNotifica}
+                    onChange={(e) => handleToggleNotificaErp(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className={`w-11 h-6 rounded-full transition-colors relative
+                    ${notificaErpVenda ? "bg-[#A0622A]" : "bg-gray-200"}
+                    ${togglingNotifica ? "opacity-50 cursor-wait" : ""}
                     after:content-[''] after:absolute after:top-[2px] after:left-[2px]
                     after:bg-white after:rounded-full after:h-5 after:w-5
                     after:transition-all peer-checked:after:translate-x-full`}

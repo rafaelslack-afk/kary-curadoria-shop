@@ -128,6 +128,7 @@ export interface Product {
   active: boolean;
   featured: boolean;
   erp_sync_enabled: boolean;         // false = fornecedor/consignado (estoque manual)
+  notifica_erp_venda: boolean;       // false = vendas online não notificam o ERP
   created_at: string;
   updated_at: string;
 }
@@ -150,6 +151,7 @@ export interface ProductInsert {
   active?: boolean;
   featured?: boolean;
   erp_sync_enabled?: boolean;
+  notifica_erp_venda?: boolean;
 }
 
 export interface ProductUpdate {
@@ -170,6 +172,7 @@ export interface ProductUpdate {
   active?: boolean;
   featured?: boolean;
   erp_sync_enabled?: boolean;
+  notifica_erp_venda?: boolean;
 }
 
 // ---- Itens do Conjunto (Bundle) ----
