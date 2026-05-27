@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, Pencil, Trash2, AlertTriangle, Package, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, AlertTriangle, Package, Search, Unlink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, cn } from "@/lib/utils";
 import type { Product, Category } from "@/types/database";
@@ -464,6 +464,15 @@ export default function ProdutosPage() {
                       {product.featured && (
                         <span className="ml-2 text-[9px] tracking-wider bg-kc/10 text-kc px-1.5 py-0.5 rounded uppercase">
                           Destaque
+                        </span>
+                      )}
+                      {product.erp_sync_enabled === false && (
+                        <span
+                          className="ml-2 inline-flex items-center gap-0.5 text-[9px] tracking-wider bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded uppercase"
+                          title="Estoque independente do ERP — gerenciado manualmente"
+                        >
+                          <Unlink size={9} />
+                          Fornecedor
                         </span>
                       )}
                       <p className="text-xs text-gray-400 mt-0.5">

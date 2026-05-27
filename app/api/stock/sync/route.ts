@@ -152,6 +152,25 @@ export async function POST(request: NextRequest) {
 
   const admin = createAdminClient();
 
+  // ── Verificar se o produto tem sync ERP habilitado ───────────────────────
+  const { data: product } = await admin
+    .from("products")
+    .select("id, erp_sync_enabled")
+    .eq("sku_base", body.product_code)
+    .maybeSingle();
+
+  if (product && product.erp_sync_enabled === false) {
+    console.log(`[ERP Sync] Produto ${body.product_code} com sync desabilitado — ignorando`);
+    return NextResponse.json({
+      success:   true,
+      synced:    0,
+      skipped:   [{ product_code: body.product_code, reason: "erp_sync_disabled" }],
+      not_found: [],
+      errors:    [],
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   const results = {
     synced:    [] as string[],
     not_found: [] as string[],

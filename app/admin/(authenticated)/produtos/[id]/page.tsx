@@ -60,7 +60,9 @@ export default function EditarProdutoPage() {
   const [fetching, setFetching]         = useState(true);
   const [loading, setLoading]           = useState(false);
   const [error, setError]               = useState("");
-  const [erpIntegrado, setErpIntegrado] = useState(false);
+  const [erpIntegrado, setErpIntegrado]       = useState(false);
+  const [erpSyncEnabled, setErpSyncEnabled]   = useState(true);
+  const [togglingSync, setTogglingSync]       = useState(false);
   const [success, setSuccess]           = useState("");
   const [categories, setCategories]     = useState<Category[]>([]);
   const [allColors, setAllColors]       = useState<Color[]>([]);
@@ -136,6 +138,7 @@ export default function EditarProdutoPage() {
         setSkuBase(product.sku_base ?? "");
         setActive(product.active ?? true);
         setFeatured(product.featured ?? false);
+        setErpSyncEnabled(product.erp_sync_enabled !== false); // default true
         setImages(product.images ?? []);
         setWeightG(product.weight_g ? String(product.weight_g) : "");
         setLengthCm(product.length_cm ? String(product.length_cm) : "");
@@ -406,6 +409,31 @@ export default function EditarProdutoPage() {
       body: JSON.stringify({ variant_id: variant.id, active: !variant.active }),
     });
     setVariants((prev) => prev.map((v) => (v.id === variant.id ? { ...v, active: !v.active } : v)));
+  }
+
+  // ── Toggle sync ERP do produto ───────────────────────────────────────────
+
+  async function handleToggleErpSync(enabled: boolean) {
+    setTogglingSync(true);
+    try {
+      const res = await fetch(`/api/products/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ erp_sync_enabled: enabled }),
+      });
+      if (res.ok) {
+        setErpSyncEnabled(enabled);
+        setSuccess(enabled ? "Sync ERP ativado — estoque será atualizado automaticamente." : "Sync ERP desabilitado — estoque independente.");
+        setTimeout(() => setSuccess(""), 4000);
+      } else {
+        const d = await res.json();
+        setError(d.error ?? "Erro ao atualizar configuração de sync.");
+      }
+    } catch {
+      setError("Erro ao atualizar configuração de sync.");
+    } finally {
+      setTogglingSync(false);
+    }
   }
 
   // ── Excluir variante ─────────────────────────────────────────────────────
@@ -878,8 +906,38 @@ export default function EditarProdutoPage() {
             </div>
             <p className="text-xs text-gray-400 mb-4">Edite o estoque e salve individualmente. Desative variações sem estoque que não serão mais vendidas.</p>
 
-            {/* Aviso ERP — exibido quando a integração está ativa */}
+            {/* Toggle de sync ERP — visível quando ERP integrado */}
             {erpIntegrado && (
+              <div className="flex items-center justify-between p-4 bg-[#F5F1EA] border border-[#D9C9B8] rounded-xl mb-4">
+                <div>
+                  <p className="text-sm font-semibold text-[#5C3317]">Sincronização de estoque com ERP</p>
+                  <p className="text-xs text-[#B89070] mt-0.5">
+                    {erpSyncEnabled
+                      ? "Estoque atualizado automaticamente pelo ERP"
+                      : "Estoque independente — produto de fornecedor/consignado"}
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-4">
+                  <input
+                    type="checkbox"
+                    checked={erpSyncEnabled}
+                    disabled={togglingSync}
+                    onChange={(e) => handleToggleErpSync(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className={`w-11 h-6 rounded-full transition-colors relative
+                    ${erpSyncEnabled ? "bg-[#A0622A]" : "bg-gray-200"}
+                    ${togglingSync ? "opacity-50 cursor-wait" : ""}
+                    after:content-[''] after:absolute after:top-[2px] after:left-[2px]
+                    after:bg-white after:rounded-full after:h-5 after:w-5
+                    after:transition-all peer-checked:after:translate-x-full`}
+                  />
+                </label>
+              </div>
+            )}
+
+            {/* Banner contextual — ERP ativo vs estoque independente */}
+            {erpIntegrado && erpSyncEnabled && (
               <div className="flex items-start gap-3 bg-[#EDE8DC] border border-[#D9C9B8] border-l-4 border-l-[#A0622A] rounded-r-lg px-4 py-3 mb-5">
                 <Info size={15} className="text-[#A0622A] mt-0.5 shrink-0" />
                 <div>
@@ -887,14 +945,22 @@ export default function EditarProdutoPage() {
                   <p className="text-xs text-[#5C3317] mt-0.5 leading-relaxed">
                     Os campos de estoque estão em somente leitura. Qualquer alteração manual será sobrescrita na próxima sincronização.
                     Para ajustar o estoque, use o{" "}
-                    <a
-                      href="https://erp.karycuradoria.com.br"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[#A0622A] underline font-medium"
-                    >
+                    <a href="https://erp.karycuradoria.com.br" target="_blank" rel="noopener noreferrer"
+                      className="text-[#A0622A] underline font-medium">
                       painel do ERP →
                     </a>
+                  </p>
+                </div>
+              </div>
+            )}
+            {erpIntegrado && !erpSyncEnabled && (
+              <div className="flex items-start gap-3 bg-[#E3F2FD] border border-blue-200 border-l-4 border-l-blue-500 rounded-r-lg px-4 py-3 mb-5">
+                <Info size={15} className="text-blue-600 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-blue-800">Estoque independente do ERP</p>
+                  <p className="text-xs text-blue-700 mt-0.5 leading-relaxed">
+                    Este produto trabalha com estoque do fornecedor. Atualizações do ERP não afetam o estoque aqui.
+                    Gerencie o estoque manualmente pelos campos abaixo.
                   </p>
                 </div>
               </div>
@@ -953,10 +1019,22 @@ export default function EditarProdutoPage() {
                                   <td key={sizeName} className={cn("border border-gray-200 p-2", !v.active && "opacity-50 bg-gray-50")}>
                                     <div className="space-y-1.5">
                                       {/* Estoque ERP em destaque + loja abaixo */}
-                                      <div className="text-center">
-                                        <span className="text-sm font-semibold text-gray-800">{v.stock_qty} un.</span>
-                                        <div className="text-[10px] text-[#B89070]">loja: {Math.max(0, v.stock_qty - STOCK_BUFFER)}</div>
-                                      </div>
+                                      {erpSyncEnabled ? (
+                                        <div className="text-center">
+                                          <span className="text-sm font-semibold text-gray-800">{v.stock_qty} un.</span>
+                                          <div className="text-[10px] text-[#B89070]">loja: {Math.max(0, v.stock_qty - STOCK_BUFFER)}</div>
+                                        </div>
+                                      ) : (
+                                        <div className="flex gap-1 items-center justify-center">
+                                          <input
+                                            type="number" min="0" value={v.stock_qty}
+                                            onChange={(e) => setVariants((prev) => prev.map((x) => x.id === v.id ? { ...x, stock_qty: parseInt(e.target.value) || 0, _dirty: true } : x))}
+                                            title="Estoque"
+                                            className="w-16 border border-blue-200 rounded px-2 py-1 text-xs text-center focus:outline-none focus:border-blue-400"
+                                          />
+                                          <span className="text-[10px] text-gray-400">un.</span>
+                                        </div>
+                                      )}
                                       {/* SKU */}
                                       <p className="text-[9px] font-mono text-gray-300 truncate text-center">{v.sku}</p>
                                       {/* Estoque mínimo */}

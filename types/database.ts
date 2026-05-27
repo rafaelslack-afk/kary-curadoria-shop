@@ -127,6 +127,7 @@ export interface Product {
   sku_base: string | null;           // Somente para individual
   active: boolean;
   featured: boolean;
+  erp_sync_enabled: boolean;         // false = fornecedor/consignado (estoque manual)
   created_at: string;
   updated_at: string;
 }
@@ -148,6 +149,7 @@ export interface ProductInsert {
   sku_base?: string | null;
   active?: boolean;
   featured?: boolean;
+  erp_sync_enabled?: boolean;
 }
 
 export interface ProductUpdate {
@@ -167,6 +169,7 @@ export interface ProductUpdate {
   sku_base?: string | null;
   active?: boolean;
   featured?: boolean;
+  erp_sync_enabled?: boolean;
 }
 
 // ---- Itens do Conjunto (Bundle) ----
