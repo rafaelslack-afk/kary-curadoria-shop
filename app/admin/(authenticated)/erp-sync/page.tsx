@@ -374,6 +374,24 @@ export default function ErpSyncPage() {
   const [lastSync, setLastSync]           = useState<string | null>(null);
   const [hoursSince, setHoursSince]       = useState<number | null>(null);
 
+  // Mapeamentos de cor salvos
+  interface ColorMappingRow {
+    id: string;
+    erp_color: string;
+    sku_code: string;
+    product_code: string | null;
+    created_by: string | null;
+    created_at: string;
+  }
+  const [colorMappings, setColorMappings] = useState<ColorMappingRow[]>([]);
+
+  useEffect(() => {
+    fetch("/api/admin/erp-sync/mapping")
+      .then((r) => r.json())
+      .then((d) => setColorMappings(Array.isArray(d) ? d : []))
+      .catch(() => {});
+  }, []);
+
   // ── Busca de dados ────────────────────────────────────────────────────────────
 
   const fetchErrors = useCallback(async () => {
@@ -757,9 +775,75 @@ export default function ErpSyncPage() {
           <li>Informe o código de cor KVO correto (ex: OLIVA) — o sistema validará a variante antes de salvar.</li>
           <li>Se a variante não existir, cadastre-a no painel de produtos e tente novamente.</li>
           <li>Após salvar, o mapeamento é aplicado automaticamente nas próximas sincronizações do ERP.</li>
-          <li>Para mapeamentos permanentes, adicione também em <code className="bg-blue-100 px-1 rounded">COLOR_TO_SKU</code> no código.</li>
+          <li>Mapeamentos por produto têm <strong>prioridade</strong> sobre mapeamentos globais.</li>
         </ol>
       </div>
+
+      {/* ── Mapeamentos de cor salvos ────────────────────────────────────────── */}
+      {colorMappings.length > 0 && (
+        <div className="mt-6 bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-kc-dark">Mapeamentos de Cor Salvos</h2>
+              <p className="text-xs text-gray-400 mt-0.5">
+                {colorMappings.length} mapeamento{colorMappings.length !== 1 ? "s" : ""} —
+                {" "}mapeamentos por produto têm prioridade sobre globais
+              </p>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2.5 text-left text-[11px] text-gray-500 uppercase tracking-wide">Cor ERP</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] text-gray-500 uppercase tracking-wide">Código KVO</th>
+                  <th
+                    className="px-4 py-2.5 text-left text-[11px] text-gray-500 uppercase tracking-wide cursor-help"
+                    title="Mapeamentos por produto têm prioridade sobre mapeamentos globais"
+                  >
+                    Escopo ⓘ
+                  </th>
+                  <th className="px-4 py-2.5 text-left text-[11px] text-gray-500 uppercase tracking-wide">Criado por</th>
+                  <th className="px-4 py-2.5 text-left text-[11px] text-gray-500 uppercase tracking-wide">Data</th>
+                </tr>
+              </thead>
+              <tbody>
+                {colorMappings.map((m) => (
+                  <tr key={m.id} className="border-t border-gray-50 hover:bg-gray-50/60">
+                    <td className="px-4 py-2.5 text-xs text-gray-700">{m.erp_color}</td>
+                    <td className="px-4 py-2.5">
+                      <span className="font-mono text-[11px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                        {m.sku_code}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      {m.product_code ? (
+                        <span
+                          className="text-[10px] tracking-wide uppercase bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-mono"
+                          title={`Aplicado apenas para o produto ${m.product_code}`}
+                        >
+                          {m.product_code}
+                        </span>
+                      ) : (
+                        <span
+                          className="text-[10px] tracking-wide uppercase bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full"
+                          title="Aplicado a todos os produtos (fallback global)"
+                        >
+                          Global
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5 text-xs text-gray-400">{m.created_by ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-xs text-gray-400 whitespace-nowrap">
+                      {formatDate(m.created_at)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

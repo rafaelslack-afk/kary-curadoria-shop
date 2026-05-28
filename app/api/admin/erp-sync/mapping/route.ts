@@ -4,6 +4,22 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// ── GET /api/admin/erp-sync/mapping — Lista todos os mapeamentos ──────────────
+export async function GET() {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("erp_color_mapping")
+    .select("id, erp_color, sku_code, product_code, created_by, created_at")
+    .order("product_code", { ascending: true, nullsFirst: false })
+    .order("erp_color", { ascending: true });
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json(data ?? []);
+}
+
 // ── POST /api/admin/erp-sync/mapping ─────────────────────────────────────────
 //
 // Valida a existência da variante no KVO antes de salvar o mapeamento de cor.
@@ -97,16 +113,29 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // ── 3. Salvar o mapeamento ────────────────────────────────────────────────────
-  const { error: insertError } = await admin
+  // ── 3. Salvar mapeamento específico por produto ───────────────────────────────
+  // Usa fetch-then-update-or-insert para respeitar os partial unique indexes
+  // (product_code IS NOT NULL vs NULL não pode ser resolvido com upsert simples)
+  const { data: existingMapping } = await admin
     .from("erp_color_mapping")
-    .upsert(
-      { erp_color, sku_code, created_by: resolvedBy },
-      { onConflict: "erp_color" }
-    );
+    .select("id")
+    .eq("erp_color", erp_color)
+    .eq("product_code", product_code)
+    .maybeSingle();
 
-  if (insertError) {
-    console.error("[ERP Mapping] Erro ao salvar mapeamento:", insertError.message);
+  const mappingError = existingMapping
+    ? (await admin
+        .from("erp_color_mapping")
+        .update({ sku_code })
+        .eq("id", existingMapping.id)
+      ).error
+    : (await admin
+        .from("erp_color_mapping")
+        .insert({ erp_color, sku_code, product_code, created_by: resolvedBy })
+      ).error;
+
+  if (mappingError) {
+    console.error("[ERP Mapping] Erro ao salvar mapeamento:", mappingError.message);
     return NextResponse.json(
       { error: "mapping_save_failed", message: "Erro ao salvar mapeamento." },
       { status: 500 }

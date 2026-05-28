@@ -108,17 +108,49 @@ const COLOR_TO_SKU: Record<string, string> = {
   "Vinho":           "VINHO",
 };
 
-function buildSku(code: string, color: string, size: string): string {
-  const colorCode = COLOR_TO_SKU[color];
+// ── Resolução de código de cor ────────────────────────────────────────────────
+// Prioridade: (1) mapeamento DB por produto → (2) mapeamento DB global
+//             → (3) tabela hardcoded → (4) primeiros 4 chars
 
-  if (!colorCode) {
-    console.warn(
-      `[ERP Sync] Cor não mapeada: "${color}"` +
-      ` — usando fallback: ${color.substring(0, 4).toUpperCase()}`
-    );
-  }
+interface ColorMapping {
+  erp_color:    string;
+  sku_code:     string;
+  product_code: string | null;
+}
 
-  return `${code}-${colorCode ?? color.substring(0, 4).toUpperCase()}-${size}`;
+function getSkuColorCode(
+  erp_color:    string,
+  product_code: string,
+  mappings:     ColorMapping[]
+): string {
+  // 1. Mapeamento específico para este produto
+  const specific = mappings.find(
+    (m) => m.erp_color === erp_color && m.product_code === product_code
+  );
+  if (specific) return specific.sku_code;
+
+  // 2. Mapeamento global (product_code = null)
+  const global = mappings.find(
+    (m) => m.erp_color === erp_color && m.product_code === null
+  );
+  if (global) return global.sku_code;
+
+  // 3. Tabela hardcoded (legado)
+  const hardcoded = COLOR_TO_SKU[erp_color];
+  if (hardcoded) return hardcoded;
+
+  // 4. Fallback: primeiros 4 chars em maiúsculas
+  console.warn(`[ERP Sync] Cor não mapeada: "${erp_color}" — fallback: ${erp_color.substring(0, 4).toUpperCase()}`);
+  return erp_color.substring(0, 4).toUpperCase();
+}
+
+function buildSku(
+  code:     string,
+  color:    string,
+  size:     string,
+  mappings: ColorMapping[]
+): string {
+  return `${code}-${getSkuColorCode(color, code, mappings)}-${size}`;
 }
 
 // POST /api/stock/sync
@@ -171,6 +203,13 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  // ── Carregar mapeamentos de cor do banco (específicos + globais) ─────────
+  const { data: dbMappings } = await admin
+    .from("erp_color_mapping")
+    .select("erp_color, sku_code, product_code");
+
+  const mappings: ColorMapping[] = dbMappings ?? [];
+
   const results = {
     synced:    [] as string[],
     not_found: [] as string[],
@@ -179,7 +218,7 @@ export async function POST(request: NextRequest) {
 
   // ── Processar cada item ───────────────────────────────────────────────────
   for (const item of body.items) {
-    const sku = buildSku(body.product_code, item.color, item.size);
+    const sku = buildSku(body.product_code, item.color, item.size, mappings);
 
     try {
       // Buscar variante pelo SKU
