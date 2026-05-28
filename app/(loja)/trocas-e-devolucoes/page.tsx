@@ -54,12 +54,12 @@ const cards = [
 
 const tableRows = [
   {
-    situacao: "Arrependimento (CDC)",
+    situacao: "Arrependimento (CDC) *",
     prazo: "7 dias corridos do recebimento",
-    freteEnvio: "Cliente paga",
-    freteReenvio: "Cliente paga",
+    freteEnvio: "Kary paga",
+    freteReenvio: "—",
     regiao: "Todas",
-    resolucao: "Reembolso integral do produto",
+    resolucao: "Reembolso integral do produto + frete original + frete de devolução",
   },
   {
     situacao: "Defeito de fabricação",
@@ -248,6 +248,13 @@ export default function TrocasEDevolucoesPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Nota legal — arrependimento CDC */}
+        <p className="mt-4 text-xs text-[#5C3317]/60 leading-relaxed">
+          * No direito de arrependimento (Art. 49 do CDC), o consumidor tem direito à devolução de
+          todos os valores pagos, incluindo o frete original e as despesas postais de devolução,
+          conforme entendimento do STJ (REsp 1.340.604).
+        </p>
       </section>
 
       {/* ── PASSO A PASSO ── */}
