@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+
+export const revalidate = 60;
 import { ProductCard } from "@/components/loja/product-card";
 import { BannerCarousel } from "@/components/loja/banner-carousel";
 import { BenefitsBar } from "@/components/loja/BenefitsBar";
@@ -121,7 +122,7 @@ async function getActiveBanners(): Promise<Banner[]> {
 
 async function getFeaturedProducts() {
   try {
-    const supabase = createClient();
+    const supabase = createAdminClient();
     const { data } = await supabase
       .from("products")
       .select("*, product_variants(stock_qty)")

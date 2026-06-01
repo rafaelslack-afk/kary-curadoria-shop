@@ -5,6 +5,7 @@ import type { CategoryInsert } from "@/types/database";
 
 // GET /api/categories — List all categories
 export const runtime = "nodejs";
+export const revalidate = 300;
 
 export async function GET(request: NextRequest) {
   try {

@@ -6,6 +6,7 @@ import { STOCK_BUFFER } from "@/lib/constants";
 
 // GET /api/products — List products with optional filters
 export const runtime = "nodejs";
+export const revalidate = 60;
 
 export async function GET(request: NextRequest) {
   try {

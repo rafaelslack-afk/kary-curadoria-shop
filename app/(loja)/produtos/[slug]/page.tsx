@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+
+export const revalidate = 30;
 import type { Product, ProductVariant, Category } from "@/types/database";
 import { ProductClient } from "./product-client";
 import { RelatedProducts } from "@/components/loja/RelatedProducts";
@@ -11,7 +12,7 @@ interface Props {
 }
 
 async function getProduct(slug: string) {
-  const supabase = createClient();
+  const supabase = createAdminClient();
   const { data } = await supabase
     .from("products")
     .select(`
@@ -90,7 +91,7 @@ export default async function ProductPage({ params }: Props) {
 
   if (!product) notFound();
 
-  const SIZE_ORDER = ["PP", "P", "M", "G", "GG", "XG", "EG", "Único"];
+  const SIZE_ORDER = ["PP", "P", "M", "G", "GG", "G1", "G2", "G3", "GGG", "XG", "EG", "Único"];
 
   const variants = (product.product_variants as ProductVariant[])
     .filter((v) => v.active)

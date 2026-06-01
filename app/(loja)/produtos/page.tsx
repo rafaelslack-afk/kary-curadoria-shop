@@ -1,13 +1,13 @@
 import { Suspense } from "react";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { CatalogClient } from "./catalog-client";
 import type { Category, Product } from "@/types/database";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 60;
 
 async function getProductsAndCategories() {
   try {
-    const supabase = createClient();
+    const supabase = createAdminClient();
 
     const [productsRes, categoriesRes] = await Promise.all([
       supabase
