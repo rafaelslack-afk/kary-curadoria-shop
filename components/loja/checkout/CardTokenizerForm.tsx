@@ -66,6 +66,8 @@ export function CardTokenizerForm({
   const [mpPayerCosts, setMpPayerCosts] = useState<MpPayerCost[] | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [tokenizing, setTokenizing] = useState(false);
+  // true durante as chamadas assíncronas do BIN detection — desabilita o botão pagar
+  const [isBinDetecting, setIsBinDetecting] = useState(false);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mpRef = useRef<any>(null);
@@ -79,6 +81,7 @@ export function CardTokenizerForm({
   const emailRef = useRef(email);
   const onFormSubmitRef = useRef(onFormSubmit);
   const amountRef = useRef(amount);
+  const isBinDetectingRef = useRef(false);
 
   // Sincroniza refs a cada render (sem re-montar campos)
   useEffect(() => { cardholderNameRef.current = cardholderName; }, [cardholderName]);
@@ -89,6 +92,7 @@ export function CardTokenizerForm({
   useEffect(() => { emailRef.current = email; }, [email]);
   useEffect(() => { amountRef.current = amount; }, [amount]);
   useEffect(() => { onFormSubmitRef.current = onFormSubmit; });
+  useEffect(() => { isBinDetectingRef.current = isBinDetecting; }, [isBinDetecting]);
 
   // ── Inicialização dos campos seguros ─────────────────────────────────────────
   useEffect(() => {
@@ -144,28 +148,45 @@ export function CardTokenizerForm({
             setPaymentMethodId("");
             setIssuerId("");
             setMpPayerCosts(null);
+            setIsBinDetecting(false);
             return;
           }
+
+          setIsBinDetecting(true);
           try {
-            // 1. Identifica a bandeira do cartão
-            const { results } = await mp.getPaymentMethods({ bin });
-            if (!results?.length || cancelled) return;
-            const method = results[0];
+            // 1. Identifica a bandeira com retry automático (até 3 tentativas)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            let methods: any = null;
+            for (let attempt = 1; attempt <= 3; attempt++) {
+              try {
+                methods = await mp.getPaymentMethods({ bin });
+                break;
+              } catch (err) {
+                console.warn(`[BIN] Tentativa ${attempt} falhou:`, err);
+                if (attempt < 3) await new Promise((r) => setTimeout(r, attempt * 500));
+              }
+            }
+
+            if (!methods?.results?.length || cancelled) return;
+            const method = methods.results[0];
             setPaymentMethodId(method.id);
 
-            // 2. Identifica o emissor (banco)
-            const issuers = await mp.getIssuers({ paymentMethodId: method.id, bin });
-            if (!cancelled && issuers?.length) {
+            // 2 + 3. Busca emissor e parcelas em paralelo para mais velocidade
+            const [issuers, installmentsData] = await Promise.all([
+              mp.getIssuers({ paymentMethodId: method.id, bin }).catch(() => null),
+              mp.getInstallments({
+                amount: String(amountRef.current.toFixed(2)),
+                bin,
+                paymentTypeId: "credit_card",
+              }).catch(() => null),
+            ]);
+
+            if (cancelled) return;
+
+            if (issuers?.length) {
               setIssuerId(String(issuers[0].id));
             }
 
-            // 3. Busca as parcelas reais para este cartão e valor — substitui estimativa
-            const installmentsData = await mp.getInstallments({
-              amount: String(amountRef.current.toFixed(2)),
-              bin,
-              paymentTypeId: "credit_card",
-            });
-            if (cancelled) return;
             const payerCosts: MpPayerCost[] = (
               installmentsData?.[0]?.payer_costs ?? []
             ).map(
@@ -184,8 +205,11 @@ export function CardTokenizerForm({
                 payerCosts.some((c) => c.installments === prev) ? prev : 1
               );
             }
-          } catch {
+          } catch (err) {
+            console.error("[BIN Detection] Erro:", err);
             /* falha silenciosa — mantém estimativa local */
+          } finally {
+            if (!cancelled) setIsBinDetecting(false);
           }
         });
 
@@ -214,7 +238,7 @@ export function CardTokenizerForm({
       return;
     }
     if (!paymentMethodIdRef.current) {
-      setFormError("Aguarde a detecção do cartão — verifique o número digitado.");
+      setFormError("Verifique o número do cartão — certifique-se de digitá-lo completamente antes de pagar.");
       return;
     }
 
@@ -254,6 +278,7 @@ export function CardTokenizerForm({
 
   const errorToShow = paymentError ?? formError;
   const isSubmitting = submitting || tokenizing;
+  const isDisabled = isSubmitting || isBinDetecting;
 
   return (
     <div className="space-y-5">
@@ -285,6 +310,12 @@ export function CardTokenizerForm({
               className="w-full border border-kc-line bg-white overflow-hidden"
               style={{ height: "44px" }}
             />
+            {isBinDetecting && (
+              <div className="flex items-center gap-1.5 mt-1">
+                <div className="w-3 h-3 border-2 border-[#A0622A] border-t-transparent rounded-full animate-spin" />
+                <span className="text-xs text-[#B89070]">Detectando cartão…</span>
+              </div>
+            )}
           </div>
 
           {/* Nome no cartão — campo normal (não é dado sensível) */}
@@ -357,13 +388,18 @@ export function CardTokenizerForm({
         <button
           type="button"
           onClick={handlePay}
-          disabled={isSubmitting}
-          className="mt-5 w-full flex items-center justify-center gap-2 bg-kc text-white text-[11px] tracking-[0.18em] uppercase py-4 hover:bg-kc-dark transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          disabled={isDisabled}
+          className="mt-5 w-full flex items-center justify-center gap-2 bg-kc text-white text-[11px] tracking-[0.18em] uppercase py-4 hover:bg-kc-dark transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
         >
           {isSubmitting ? (
             <>
               <Loader2 size={13} className="animate-spin" />
               Processando…
+            </>
+          ) : isBinDetecting ? (
+            <>
+              <Loader2 size={13} className="animate-spin" />
+              Detectando cartão…
             </>
           ) : (
             <>
