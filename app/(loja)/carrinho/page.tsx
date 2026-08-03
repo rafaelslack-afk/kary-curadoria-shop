@@ -3,10 +3,20 @@
 import { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Minus, Plus, Trash2, ShoppingBag, Tag, ChevronRight, AlertTriangle, CreditCard } from "lucide-react";
+import { Minus, Plus, Trash2, ShoppingBag, Tag, ChevronRight, AlertTriangle, CreditCard, Package, Loader2 } from "lucide-react";
 import { useCartStore } from "@/lib/store/cart";
 import { formatCurrency } from "@/lib/utils";
 import { useCoupon } from "@/lib/hooks/useCoupon";
+import { useShipping, type ShippingOption } from "@/lib/hooks/useShipping";
+
+// Mesma chave de sessionStorage usada na simulação de frete da página de
+// produto e no pré-fill do checkout — reaproveitada aqui para persistir
+// CEP + opção de frete escolhidos no carrinho.
+const CEP_STORAGE_KEY = "kary_cep_simulado";
+
+function maskCep(v: string) {
+  return v.replace(/\D/g, "").slice(0, 8).replace(/(\d{5})(\d)/, "$1-$2");
+}
 
 export default function CarrinhoPage() {
   const {
@@ -24,6 +34,86 @@ export default function CarrinhoPage() {
     couponError, couponLoading,
     applyCoupon, removeCoupon,
   } = useCoupon(sub, { productIds: items.map((i) => i.productId) });
+
+  // ── Frete (Melhor Envio via hook compartilhado com o checkout) ────────────
+  const shipping = useShipping(items);
+  const [cepInput, setCepInput] = useState("");
+  const [cepConfirmado, setCepConfirmado] = useState("");
+  const [cepMessage, setCepMessage] = useState("");
+
+  const cartFreteErro =
+    cepMessage ||
+    (shipping.erro
+      ? "Não conseguimos calcular o frete para este CEP. Você pode continuar e calcular novamente no checkout."
+      : "");
+
+  async function handleCalcularFrete(cepValor?: string) {
+    const raw = cepValor ?? cepInput;
+    const digits = raw.replace(/\D/g, "");
+    setCepMessage("");
+
+    if (digits.length !== 8) {
+      setCepMessage("CEP inválido, verifique e tente novamente");
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/cep?cep=${digits}`);
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setCepMessage("Não conseguimos calcular o frete para este CEP. Você pode continuar e calcular novamente no checkout.");
+        return;
+      }
+      try {
+        sessionStorage.setItem(CEP_STORAGE_KEY, JSON.stringify({
+          cep: digits,
+          logradouro: data.logradouro ?? "",
+          bairro: data.bairro ?? "",
+          cidade: data.cidade ?? "",
+          estado: data.estado ?? "",
+        }));
+      } catch { /* sessionStorage pode estar bloqueado em alguns navegadores */ }
+      setCepConfirmado(maskCep(digits));
+    } catch {
+      setCepMessage("Não conseguimos calcular o frete para este CEP. Você pode continuar e calcular novamente no checkout.");
+      return;
+    }
+
+    await shipping.calcularFrete(digits);
+  }
+
+  function handleAlterarCepCarrinho() {
+    setCepConfirmado("");
+    setCepInput("");
+    setCepMessage("");
+    shipping.limparFrete();
+    try { sessionStorage.removeItem(CEP_STORAGE_KEY); } catch { /* ignore */ }
+  }
+
+  function handleSelecionarOpcao(opt: ShippingOption) {
+    shipping.selecionarOpcao(opt);
+    // Persiste a escolha para o checkout já carregar pré-selecionado
+    try {
+      const raw = sessionStorage.getItem(CEP_STORAGE_KEY);
+      const base = raw ? JSON.parse(raw) : {};
+      sessionStorage.setItem(CEP_STORAGE_KEY, JSON.stringify({ ...base, shippingOptionId: opt.id }));
+    } catch { /* sessionStorage pode estar bloqueado em alguns navegadores */ }
+  }
+
+  // CEP salvo de uma simulação anterior (página de produto ou carrinho) —
+  // pré-preenche e calcula automaticamente ao carregar o carrinho.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(CEP_STORAGE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as { cep?: string };
+      if (saved.cep) {
+        setCepInput(maskCep(saved.cep));
+        handleCalcularFrete(saved.cep);
+      }
+    } catch { /* sessionStorage indisponível */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Estoque em tempo real
   const [stockMap, setStockMap] = useState<Record<string, number>>({});
@@ -53,7 +143,8 @@ export default function CarrinhoPage() {
   const hasOutOfStock = outOfStockItems.length > 0;
 
   const discountAmount = appliedCoupon?.discount ?? 0;
-  const total = sub - discountAmount;
+  const freteSelecionado = shipping.opcaoSelecionada?.preco ?? 0;
+  const total = sub - discountAmount + freteSelecionado;
 
   if (items.length === 0) {
     return (
@@ -251,6 +342,94 @@ export default function CarrinhoPage() {
 
             <div className="h-px bg-kc-line" />
 
+            {/* Frete */}
+            <div>
+              <p className="text-[10px] tracking-[0.16em] text-kc-muted uppercase mb-2 flex items-center gap-1.5">
+                <Package size={10} />
+                Calcular frete
+              </p>
+
+              {!cepConfirmado ? (
+                <>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={cepInput}
+                      onChange={(e) => { setCepInput(maskCep(e.target.value)); setCepMessage(""); }}
+                      onKeyDown={(e) => e.key === "Enter" && handleCalcularFrete()}
+                      placeholder="00000-000"
+                      inputMode="numeric"
+                      className="flex-1 border border-kc-line bg-white px-3 py-2 text-xs text-kc-dark placeholder-kc-muted/60 focus:outline-none focus:border-kc"
+                    />
+                    <button
+                      onClick={() => handleCalcularFrete()}
+                      disabled={shipping.calculando}
+                      className="border border-kc text-kc text-[10px] tracking-[0.1em] px-3 py-2 hover:bg-kc hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+                    >
+                      {shipping.calculando ? <Loader2 size={12} className="animate-spin" /> : "Calcular"}
+                    </button>
+                  </div>
+                  {cartFreteErro && (
+                    <p className="text-[10px] text-red-500 mt-1">{cartFreteErro}</p>
+                  )}
+                </>
+              ) : (
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-kc-dark">Frete para {cepConfirmado}</span>
+                    <button
+                      onClick={handleAlterarCepCarrinho}
+                      className="text-[10px] text-kc-muted hover:text-kc transition-colors underline underline-offset-2 whitespace-nowrap"
+                    >
+                      Alterar CEP
+                    </button>
+                  </div>
+
+                  {shipping.calculando && (
+                    <div className="space-y-2">
+                      {[0, 1].map((i) => (
+                        <div key={i} className="border border-kc-line p-3 h-10 animate-pulse" />
+                      ))}
+                    </div>
+                  )}
+
+                  {!shipping.calculando && shipping.opcoes.length > 0 && (
+                    <div className="space-y-2">
+                      {shipping.opcoes.map((opt) => {
+                        const selected = shipping.opcaoSelecionada?.id === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            onClick={() => handleSelecionarOpcao(opt)}
+                            className={`w-full flex items-center justify-between p-3 border text-left transition-colors ${selected ? "border-kc bg-kc/5" : "border-kc-line hover:border-kc-muted"}`}
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <div className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center shrink-0 ${selected ? "border-kc" : "border-kc-line"}`}>
+                                {selected && <div className="w-1.5 h-1.5 rounded-full bg-kc" />}
+                              </div>
+                              <div>
+                                <p className="text-xs font-medium text-kc-dark">{opt.name}</p>
+                                <p className="text-[9px] text-kc-muted">
+                                  até {opt.prazo} dia{opt.prazo !== 1 ? "s" : ""} útil{opt.prazo !== 1 ? "s" : ""}
+                                </p>
+                              </div>
+                            </div>
+                            <span className="text-xs font-medium text-kc">{formatCurrency(opt.preco)}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {!shipping.calculando && cartFreteErro && (
+                    <p className="text-[10px] text-red-500">{cartFreteErro}</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="h-px bg-kc-line" />
+
             {/* Totals */}
             <div className="space-y-2.5">
               <div className="flex justify-between text-xs text-kc-muted">
@@ -265,10 +444,17 @@ export default function CarrinhoPage() {
                 </div>
               )}
 
-              <div className="flex justify-between text-xs text-kc-muted">
-                <span>Frete</span>
-                <span className="text-kc-dark">Calculado no checkout</span>
-              </div>
+              {shipping.opcaoSelecionada ? (
+                <div className="flex justify-between text-xs text-kc-muted">
+                  <span>Frete ({shipping.opcaoSelecionada.name})</span>
+                  <span className="text-kc-dark">{formatCurrency(shipping.opcaoSelecionada.preco)}</span>
+                </div>
+              ) : (
+                <div className="flex justify-between text-xs text-kc-muted">
+                  <span>Frete</span>
+                  <span className="text-kc-dark">Frete calculado no próximo passo</span>
+                </div>
+              )}
             </div>
 
             <div className="h-px bg-kc-line" />
@@ -277,7 +463,9 @@ export default function CarrinhoPage() {
               <span className="text-xs text-kc-dark font-medium">Total</span>
               <div className="text-right">
                 <span className="text-xl font-medium text-kc">{formatCurrency(total)}</span>
-                <p className="text-[9px] text-kc-muted">+ frete</p>
+                {!shipping.opcaoSelecionada && (
+                  <p className="text-[9px] text-kc-muted">+ frete</p>
+                )}
               </div>
             </div>
 

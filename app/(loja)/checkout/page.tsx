@@ -7,6 +7,7 @@ import { Check, ChevronRight, Loader2, Info, X, Tag, AlertTriangle } from "lucid
 import { useCartStore } from "@/lib/store/cart";
 import { formatCurrency } from "@/lib/utils";
 import { useCoupon } from "@/lib/hooks/useCoupon";
+import { useShipping, type ShippingOption } from "@/lib/hooks/useShipping";
 import { trackEvent } from "@/lib/analytics";
 import { pixelEvent } from "@/lib/pixel";
 import { CardTokenizerForm } from "@/components/loja/checkout/CardTokenizerForm";
@@ -39,14 +40,6 @@ function getRejectionMessage(statusDetail?: string | null): string {
 }
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
-
-interface ShippingOption {
-  id: number;
-  name: string;
-  company: string;
-  preco: number;
-  prazo: number;
-}
 
 interface FormData {
   // Step 0 — Identificação
@@ -190,9 +183,11 @@ export default function CheckoutPage() {
   } = useCoupon(subtotal(), {
     productIds: items.map((i) => i.productId),
   });
-  const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([]);
-  const [shippingLoading, setShippingLoading] = useState(false);
-  const [shippingError, setShippingError] = useState("");
+  const shipping = useShipping(items);
+  // Opção de frete pré-selecionada no carrinho (sessionStorage) — aplicada
+  // assim que as opções frescas chegarem do Melhor Envio. Não trava a escolha:
+  // é consumida uma única vez e o cliente pode trocar livremente depois.
+  const [pendingShippingOptionId, setPendingShippingOptionId] = useState<number | null>(null);
   const [cepLoading, setCepLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
@@ -244,6 +239,7 @@ export default function CheckoutPage() {
       if (!raw) return;
       const saved = JSON.parse(raw) as {
         cep: string; logradouro: string; bairro: string; cidade: string; estado: string;
+        shippingOptionId?: number;
       };
       // Pré-preencher sem sobrescrever caso o usuário já digitou algo
       setForm((f) => ({
@@ -255,11 +251,28 @@ export default function CheckoutPage() {
         estado: f.estado || saved.estado,
       }));
       setCepFromSession(true);
+      // Opção de frete escolhida no carrinho — aplicada quando as opções frescas chegarem
+      if (typeof saved.shippingOptionId === "number") {
+        setPendingShippingOptionId(saved.shippingOptionId);
+      }
       // Foco no campo número após um tick (DOM já renderizado)
       setTimeout(() => numeroRef.current?.focus(), 50);
     } catch { /* sessionStorage indisponível */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
+
+  // Consome a opção de frete pré-selecionada no carrinho assim que as opções
+  // reais (com preço atualizado) chegarem do Melhor Envio. Não sobrescreve
+  // escolhas futuras do cliente — é aplicada uma única vez.
+  useEffect(() => {
+    if (pendingShippingOptionId === null) return;
+    const match = shipping.opcoes.find((o) => o.id === pendingShippingOptionId);
+    if (match) {
+      set("shippingOption", match);
+      setPendingShippingOptionId(null);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shipping.opcoes, pendingShippingOptionId]);
 
   function set(field: keyof FormData, value: string | ShippingOption | null) {
     setForm((f) => ({ ...f, [field]: value }));
@@ -379,8 +392,7 @@ export default function CheckoutPage() {
     const digits = cep.replace(/\D/g, "");
     if (digits.length !== 8) return;
     setCepLoading(true);
-    setShippingOptions([]);
-    setShippingError("");
+    shipping.limparFrete();
     set("shippingOption", null);
     try {
       const res = await fetch(`/api/cep?cep=${digits}`);
@@ -393,53 +405,17 @@ export default function CheckoutPage() {
     } finally {
       setCepLoading(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // ── Cálculo de frete ──
-  const fetchShipping = useCallback(
-    async (cep: string) => {
-      const digits = cep.replace(/\D/g, "");
-      if (digits.length !== 8) return;
-
-      const produtos = items.map((item) => ({
-        peso_g: item.weight_g ?? 400,
-        comprimento_cm: item.length_cm ?? 30,
-        largura_cm: item.width_cm ?? 20,
-        altura_cm: item.height_cm ?? 10,
-        quantity: item.quantity,
-      }));
-
-      setShippingLoading(true);
-      setShippingError("");
-
-      try {
-        const res = await fetch("/api/shipping/melhorenvio", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ cepDestino: digits, produtos }),
-        });
-        const data = await res.json();
-        if (!res.ok || data.error) {
-          setShippingError(data.error ?? "Erro ao calcular frete.");
-        } else {
-          setShippingOptions(data.opcoes ?? []);
-        }
-      } catch {
-        setShippingError("Falha ao calcular opções de frete.");
-      } finally {
-        setShippingLoading(false);
-      }
-    },
-    [items]
-  );
 
   // Dispara cálculo de frete ao ter CEP + cidade (digitação manual ou pré-preenchimento)
   useEffect(() => {
     const digits = form.cep.replace(/\D/g, "");
     if (digits.length === 8 && form.cidade) {
-      fetchShipping(digits);
+      shipping.calcularFrete(digits);
     }
-  }, [form.cep, form.cidade, fetchShipping]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.cep, form.cidade, shipping.calcularFrete]);
 
   // ── Validação por etapa ──
   function canProceed(): boolean {
@@ -607,8 +583,7 @@ export default function CheckoutPage() {
   function handleAlterarCep() {
     setCepFromSession(false);
     setForm((f) => ({ ...f, cep: "", logradouro: "", bairro: "", cidade: "", estado: "", numero: "", shippingOption: null }));
-    setShippingOptions([]);
-    setShippingError("");
+    shipping.limparFrete();
     try { sessionStorage.removeItem("kary_cep_simulado"); } catch { /* ignore */ }
   }
 
@@ -758,7 +733,7 @@ export default function CheckoutPage() {
                 <p className="text-[10px] tracking-[0.18em] text-kc-muted uppercase mb-3">Escolha o envio</p>
 
                 {/* Skeleton enquanto calcula */}
-                {shippingLoading && (
+                {shipping.calculando && (
                   <div className="space-y-3">
                     {[0, 1].map((i) => (
                       <div key={i} className="border border-kc-line p-4 animate-pulse">
@@ -778,12 +753,12 @@ export default function CheckoutPage() {
                 )}
 
                 {/* Erro */}
-                {shippingError && !shippingLoading && (
+                {shipping.erro && !shipping.calculando && (
                   <div className="border border-red-200 bg-red-50 p-4 text-xs text-red-600">
                     <p className="font-medium mb-1">Não foi possível calcular o frete</p>
-                    <p>{shippingError}</p>
+                    <p>{shipping.erro}</p>
                     <button
-                      onClick={() => fetchShipping(form.cep)}
+                      onClick={() => shipping.calcularFrete(form.cep)}
                       className="mt-2 underline underline-offset-2 hover:text-red-800"
                     >
                       Tentar novamente
@@ -792,9 +767,9 @@ export default function CheckoutPage() {
                 )}
 
                 {/* Opções */}
-                {!shippingLoading && shippingOptions.length > 0 && (
+                {!shipping.calculando && shipping.opcoes.length > 0 && (
                   <div className="space-y-3">
-                    {shippingOptions.map((opt) => {
+                    {shipping.opcoes.map((opt) => {
                       const selected = form.shippingOption?.id === opt.id;
                       return (
                         <button
@@ -826,12 +801,12 @@ export default function CheckoutPage() {
                 )}
 
                 {/* Estado inicial — CEP ainda não preenchido */}
-                {!shippingLoading && !shippingError && shippingOptions.length === 0 && form.cep.replace(/\D/g, "").length < 8 && (
+                {!shipping.calculando && !shipping.erro && shipping.opcoes.length === 0 && form.cep.replace(/\D/g, "").length < 8 && (
                   <p className="text-xs text-kc-muted py-2">Preencha o CEP para ver as opções de entrega.</p>
                 )}
 
                 {/* CEP preenchido mas aguardando cidade para disparar */}
-                {!shippingLoading && !shippingError && shippingOptions.length === 0 && form.cep.replace(/\D/g, "").length === 8 && !form.cidade && (
+                {!shipping.calculando && !shipping.erro && shipping.opcoes.length === 0 && form.cep.replace(/\D/g, "").length === 8 && !form.cidade && (
                   <p className="text-xs text-kc-muted py-2">Aguardando dados do endereço…</p>
                 )}
               </div>
