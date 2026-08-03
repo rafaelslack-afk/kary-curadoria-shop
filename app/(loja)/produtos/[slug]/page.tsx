@@ -55,7 +55,10 @@ export async function generateMetadata({ params }: Props) {
   // quality=75 e format=webp reduzem drasticamente o tamanho
   const rawImage = product.images?.[0];
   const ogImageUrl = rawImage
-    ? `${rawImage}?width=1200&height=1200&quality=75&format=webp`
+    ? `${rawImage.replace(
+        "/object/public/",
+        "/render/image/public/"
+      )}?width=1200&height=1200&quality=75&format=webp&resize=fill`
     : "/opengraph-image";
 
   const ogImage = rawImage
