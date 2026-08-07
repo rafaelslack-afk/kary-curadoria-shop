@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { normalizeSize } from "@/lib/erp-sync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -150,7 +151,9 @@ function buildSku(
   size:     string,
   mappings: ColorMapping[]
 ): string {
-  return `${code}-${getSkuColorCode(color, code, mappings)}-${size}`;
+  const colorCode = getSkuColorCode(color, code, mappings);
+  const sizeCode   = normalizeSize(size);
+  return `${code}-${colorCode}-${sizeCode}`;
 }
 
 // POST /api/stock/sync

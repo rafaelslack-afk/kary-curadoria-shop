@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { normalizeSize } from "@/lib/erp-sync";
 
 // ── Tipos ──────────────────────────────────────────────────────────────────────
 
@@ -76,10 +77,12 @@ function MappingModal({ errorItem, onClose, onSuccess }: MappingModalProps) {
 
   // Pré-preencher com o fragmento de cor do SKU tentado, se disponível
   // ex: "CON-0006-OLIVA-M" → "OLIVA"
+  // sku_tentado é montado com o size já normalizado (sem acento) — usar a
+  // mesma normalização aqui para o suffix bater corretamente.
   useEffect(() => {
     if (errorItem.sku_tentado && errorItem.product_code && errorItem.size) {
       const prefix = `${errorItem.product_code}-`;
-      const suffix = `-${errorItem.size}`;
+      const suffix = `-${normalizeSize(errorItem.size)}`;
       const raw    = errorItem.sku_tentado;
       if (raw.startsWith(prefix) && raw.endsWith(suffix)) {
         setSkuCode(raw.slice(prefix.length, raw.length - suffix.length));
@@ -225,7 +228,7 @@ function MappingModal({ errorItem, onClose, onSuccess }: MappingModalProps) {
               <p className="text-[11px] text-gray-400 mt-1">
                 SKU que será verificado:{" "}
                 <span className="font-mono text-gray-600">
-                  {errorItem.product_code}-{skuCode}-{errorItem.size}
+                  {errorItem.product_code}-{skuCode}-{normalizeSize(errorItem.size)}
                 </span>
               </p>
             )}

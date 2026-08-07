@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { normalizeSize } from "@/lib/erp-sync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -71,7 +72,9 @@ export async function POST(request: NextRequest) {
   }
 
   const admin       = createAdminClient();
-  const skuToCheck  = `${product_code}-${sku_code}-${size}`;
+  // size vem bruto do ERP (pode ter acento, ex: "ÚNICO") — normalizar antes
+  // de montar o SKU, mesma regra aplicada em app/api/stock/sync/route.ts.
+  const skuToCheck  = `${product_code}-${sku_code}-${normalizeSize(size)}`;
   const resolvedBy  = admin_email ?? "admin";
 
   // ── 1. Verificar se a variante existe ─────────────────────────────────────────
