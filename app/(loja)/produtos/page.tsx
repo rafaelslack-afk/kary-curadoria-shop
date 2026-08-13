@@ -1,9 +1,14 @@
 import { Suspense } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CatalogClient } from "./catalog-client";
+import { getCatalogSeo } from "@/lib/catalog-seo";
 import type { Category, Product } from "@/types/database";
 
 export const revalidate = 60;
+
+interface Props {
+  searchParams: { categoria?: string };
+}
 
 async function getProductsAndCategories() {
   try {
@@ -36,10 +41,35 @@ async function getProductsAndCategories() {
   }
 }
 
-export const metadata = {
-  title: "Coleções",
-  description: "Explore conjuntos de linho e alfaiataria casual da Kary Curadoria.",
-};
+export async function generateMetadata({ searchParams }: Props) {
+  const seo = getCatalogSeo(searchParams.categoria);
+  const url = searchParams.categoria
+    ? `https://karycuradoria.com.br/produtos?categoria=${searchParams.categoria}`
+    : "https://karycuradoria.com.br/produtos";
+
+  return {
+    // title.absolute — o mapa de SEO já inclui "| Kary Curadoria" no fim;
+    // sem isso, o template do layout raiz ("%s | Kary Curadoria") duplicaria
+    // o sufixo no <title> renderizado.
+    title: { absolute: seo.title },
+    description: seo.description,
+    openGraph: {
+      title: seo.title,
+      description: seo.description,
+      url,
+      siteName: "Kary Curadoria",
+      locale: "pt_BR",
+      type: "website",
+      images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "Kary Curadoria" }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: seo.title,
+      description: seo.description,
+      images: ["/opengraph-image"],
+    },
+  };
+}
 
 export default async function ProdutosPage() {
   const { products, categories } = await getProductsAndCategories();

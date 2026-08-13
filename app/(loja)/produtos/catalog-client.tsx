@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { Search, SlidersHorizontal, X } from "lucide-react";
 import { ProductCard } from "@/components/loja/product-card";
+import { getCatalogSeo } from "@/lib/catalog-seo";
 import type { Category, Product } from "@/types/database";
 
 const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
@@ -76,9 +77,7 @@ export function CatalogClient({ products, categories }: Props) {
         <div>
           <p className="text-[10px] tracking-[0.26em] text-kc-muted mb-1 uppercase">Loja</p>
           <h1 className="font-serif text-2xl font-medium text-kc-dark">
-            {selectedCategory
-              ? (categories.find((c) => c.slug === selectedCategory)?.name ?? "Coleções")
-              : "Todas as Coleções"}
+            {getCatalogSeo(selectedCategory).h1}
           </h1>
           <p className="text-xs text-kc-muted mt-1">
             {filtered.length} {filtered.length === 1 ? "produto" : "produtos"}
