@@ -69,7 +69,7 @@ export default function PoliticaDePrivacidadePage() {
           Política de Privacidade
         </h1>
         <p className="text-xs text-[#A0622A]/80 tracking-wide mb-6" style={jost}>
-          Última atualização: abril de 2026
+          Última atualização: agosto de 2026
         </p>
         <p className="text-sm text-[#5C3317]/65 leading-relaxed max-w-xl mx-auto" style={jost}>
           A Kary Curadoria está comprometida com a privacidade e a proteção dos seus dados pessoais.
@@ -198,8 +198,39 @@ export default function PoliticaDePrivacidadePage() {
           </p>
         </Prose>
 
-        {/* 6. Armazenamento e Segurança */}
-        <SectionTitle n="6">Armazenamento e Segurança</SectionTitle>
+        {/* 6. Programa de Avaliações do Google */}
+        <SectionTitle n="6">Programa de Avaliações do Google</SectionTitle>
+        <Prose>
+          <p>
+            A Kary Curadoria participa do programa Google Customer Reviews (Avaliações do
+            Consumidor), que permite que você avalie sua experiência de compra após finalizar um
+            pedido em nossa loja.
+          </p>
+          <p>Ao utilizar nosso site, você está ciente de que:</p>
+        </Prose>
+        <BulletList items={[
+          "O Google e seus parceiros podem utilizar cookies ou tecnologias semelhantes (como web beacons) para coletar informações relacionadas a este programa de avaliações",
+          "Você pode gerenciar suas preferências de cookies a qualquer momento nas configurações do seu navegador, bloqueando ou excluindo cookies conforme sua preferência — isso pode afetar algumas funcionalidades do site",
+          "O Google pode receber informações sobre as compras realizadas em nosso site — como e-mail, produtos adquiridos e valor do pedido — exclusivamente para o envio do convite de avaliação da sua experiência de compra",
+        ]} />
+        <Prose>
+          <p className="mt-3">
+            Essas informações são tratadas de acordo com a Política de Privacidade do Google,
+            disponível em{" "}
+            <a
+              href="https://policies.google.com/privacy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[#A0622A] hover:underline"
+            >
+              policies.google.com/privacy
+            </a>
+            .
+          </p>
+        </Prose>
+
+        {/* 7. Armazenamento e Segurança */}
+        <SectionTitle n="7">Armazenamento e Segurança</SectionTitle>
         <Prose>
           <p>
             Seus dados são armazenados em servidores seguros com criptografia em trânsito (SSL/TLS)
@@ -212,8 +243,8 @@ export default function PoliticaDePrivacidadePage() {
           </p>
         </Prose>
 
-        {/* 7. Seus Direitos */}
-        <SectionTitle n="7">Seus Direitos como Titular dos Dados</SectionTitle>
+        {/* 8. Seus Direitos */}
+        <SectionTitle n="8">Seus Direitos como Titular dos Dados</SectionTitle>
         <Prose>
           <p>Conforme a LGPD, você tem direito a:</p>
         </Prose>
@@ -237,8 +268,8 @@ export default function PoliticaDePrivacidadePage() {
           </p>
         </Prose>
 
-        {/* 8. Menores de Idade */}
-        <SectionTitle n="8">Menores de Idade</SectionTitle>
+        {/* 9. Menores de Idade */}
+        <SectionTitle n="9">Menores de Idade</SectionTitle>
         <Prose>
           <p>
             Nossos serviços não são direcionados a menores de 18 anos. Não coletamos
@@ -247,8 +278,8 @@ export default function PoliticaDePrivacidadePage() {
           </p>
         </Prose>
 
-        {/* 9. Alterações */}
-        <SectionTitle n="9">Alterações nesta Política</SectionTitle>
+        {/* 10. Alterações */}
+        <SectionTitle n="10">Alterações nesta Política</SectionTitle>
         <Prose>
           <p>
             Podemos atualizar esta política periodicamente. Alterações significativas serão
@@ -258,8 +289,8 @@ export default function PoliticaDePrivacidadePage() {
           </p>
         </Prose>
 
-        {/* 10. Contato */}
-        <SectionTitle n="10">Fale Conosco</SectionTitle>
+        {/* 11. Contato */}
+        <SectionTitle n="11">Fale Conosco</SectionTitle>
         <Prose>
           <p>
             Dúvidas sobre esta política ou sobre seus dados pessoais? Entre em contato:
