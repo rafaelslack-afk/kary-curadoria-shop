@@ -57,7 +57,7 @@ export async function GET(
 
   const { data: order, error } = await admin
     .from("orders")
-    .select("id, order_number, status, pagbank_status, total, shipping_deadline, payment_method")
+    .select("id, order_number, status, pagbank_status, total, shipping_deadline, payment_method, updated_at")
     .eq("id", id)
     .single();
 
@@ -78,6 +78,9 @@ export async function GET(
       total: order.total,
       prazo: order.shipping_deadline,
       paymentMethod: order.payment_method,
+      // updatedAt — usado como proxy de data de confirmação de pagamento
+      // (não há coluna dedicada paid_at/confirmed_at na tabela orders).
+      updatedAt: order.updated_at,
       qr_code: null,
       qr_code_base64: null,
     },

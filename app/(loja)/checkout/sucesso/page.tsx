@@ -6,6 +6,12 @@ import { Check, Package, ExternalLink } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
 import { pixelEvent } from "@/lib/pixel";
+import { GoogleCustomerReviewsOptIn } from "@/components/loja/GoogleCustomerReviewsOptIn";
+import { calcularDataEntregaEstimada } from "@/lib/google-customer-reviews";
+
+// Status que indicam pagamento confirmado (paid ou etapas posteriores do
+// fluxo) — nunca 'pending', 'cancelled' ou qualquer outro.
+const PAID_OR_LATER_STATUSES = ["paid", "preparing", "shipped", "delivered"];
 
 interface OrderData {
   orderId: string;
@@ -25,6 +31,14 @@ export default function SucessoPage() {
   const [boletoLine, setBoletoLine] = useState("");
   const [boletoPdf, setBoletoPdf] = useState("");
   const [copied, setCopied] = useState(false);
+
+  // Dados reais do pedido, buscados no banco — o snapshot do sessionStorage
+  // (acima) é escrito no momento da CRIAÇÃO do pedido e não tem `status`
+  // nem `updated_at`, então não é confiável para decidir se o pedido foi
+  // de fato pago. Usado exclusivamente para o opt-in do Google Customer
+  // Reviews (não altera nenhuma outra parte desta página).
+  const [orderStatus, setOrderStatus] = useState<string | null>(null);
+  const [orderUpdatedAt, setOrderUpdatedAt] = useState<string | null>(null);
 
   useEffect(() => {
     // Try boleto first
@@ -70,6 +84,25 @@ export default function SucessoPage() {
       }
     }
   }, []);
+
+  // Busca status + updated_at reais do pedido no banco, exclusivamente
+  // para decidir se o opt-in do Google Customer Reviews deve renderizar.
+  // Não interfere em nenhum outro estado/comportamento desta página.
+  useEffect(() => {
+    if (!order?.orderId) return;
+    let cancelled = false;
+
+    fetch(`/api/orders/${order.orderId}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { status?: string; updatedAt?: string } | null) => {
+        if (cancelled || !data) return;
+        setOrderStatus(data.status ?? null);
+        setOrderUpdatedAt(data.updatedAt ?? null);
+      })
+      .catch(() => { /* silencioso — o snippet simplesmente não renderiza */ });
+
+    return () => { cancelled = true; };
+  }, [order?.orderId]);
 
   function handleCopyBoleto() {
     navigator.clipboard.writeText(boletoLine).then(() => {
@@ -226,6 +259,26 @@ export default function SucessoPage() {
           </a>
         </div>
       </div>
+
+      {/* Google Customer Reviews — opt-in renderizado somente quando o
+          pedido está confirmadamente pago, com prazo e data de confirmação
+          reais disponíveis. Nunca para pending/cancelled, nunca com data
+          inventada. */}
+      {order &&
+        orderStatus &&
+        PAID_OR_LATER_STATUSES.includes(orderStatus) &&
+        order.prazo &&
+        orderUpdatedAt &&
+        order.customerEmail && (
+          <GoogleCustomerReviewsOptIn
+            orderId={String(order.orderNumber)}
+            email={order.customerEmail}
+            estimatedDeliveryDate={calcularDataEntregaEstimada(
+              new Date(orderUpdatedAt),
+              order.prazo
+            )}
+          />
+        )}
     </div>
   );
 }
