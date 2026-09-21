@@ -20,6 +20,7 @@ import {
   Home,
   ShoppingBag,
   RefreshCw,
+  Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +35,7 @@ const menuItems = [
   { href: "/admin/menus",      label: "Menus",      icon: Menu },
   { href: "/admin/home",       label: "Home",       icon: Home },
   { href: "/admin/tamanhos",   label: "Tamanhos",   icon: Ruler },
+  { href: "/admin/configuracoes/plus-size", label: "Plus Size", icon: Settings },
   { href: "/admin/cupons",     label: "Cupons",     icon: Tag },
   { href: "/admin/clientes",   label: "Clientes",   icon: Users },
   { href: "/admin/abandonos",  label: "Abandonos",  icon: ShoppingBag },

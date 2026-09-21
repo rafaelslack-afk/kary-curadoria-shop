@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft, ShoppingBag, Check, Zap, ZoomIn, Truck, CreditCard } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { getBestInstallment } from "@/lib/installments";
+import { calcularPrecoComPlusSize } from "@/lib/pricing";
 import { useCartStore } from "@/lib/store/cart";
 import { buildWhatsAppUrl } from "@/lib/site";
 import { trackEvent } from "@/lib/analytics";
@@ -92,6 +93,22 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
   const addItem = useCartStore((s) => s.addItem);
   const router = useRouter();
 
+  // ── Acréscimo de plus size (G1/G2/G3), configurável pelo admin ───────────
+  const [plusSizeMarkups, setPlusSizeMarkups] = useState<Record<string, number>>({});
+  useEffect(() => {
+    fetch("/api/config/plus-size-markup")
+      .then((r) => r.json())
+      .then((data) => { if (data.markups) setPlusSizeMarkups(data.markups); })
+      .catch(() => { /* falha silenciosa — sem markup aplicado, preço base normal */ });
+  }, []);
+
+  // Preço exibido: reage ao tamanho selecionado. Para tamanhos que não têm
+  // markup configurado (todos exceto G1/G2/G3, por padrão), é sempre o preço
+  // base — calcularPrecoComPlusSize retorna precoBase + 0 nesses casos.
+  const displayPrice = selectedVariant
+    ? calcularPrecoComPlusSize(product.price, selectedVariant.size, plusSizeMarkups)
+    : product.price;
+
   // ── GA4: view_item ────────────────────────────────────────────────────────
   useEffect(() => {
     trackEvent("view_item", {
@@ -162,6 +179,9 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
 
   function handleAddToCart() {
     if (!selectedVariant || outOfStock) return;
+    // Preço com acréscimo de plus size calculado AGORA — gravado no item do
+    // carrinho já ajustado, não recalculado depois (ver lib/pricing.ts).
+    const finalPrice = calcularPrecoComPlusSize(product.price, selectedVariant.size, plusSizeMarkups);
     addItem({
       variantId: selectedVariant.id,
       productId: product.id,
@@ -170,7 +190,7 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
       size: selectedVariant.size,
       color: selectedVariant.color ?? null,
       sku: selectedVariant.sku,
-      price: product.price,
+      price: finalPrice,
       image: product.images?.[0] ?? null,
       weight_g: product.weight_g,
       length_cm: product.length_cm,
@@ -179,7 +199,7 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
     });
     trackEvent("add_to_cart", {
       currency: "BRL",
-      value: product.price,
+      value: finalPrice,
       items: [
         {
           item_id: selectedVariant.sku,
@@ -188,7 +208,7 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
           item_variant: [selectedVariant.color, selectedVariant.size]
             .filter(Boolean)
             .join(" / "),
-          price: product.price,
+          price: finalPrice,
           quantity: 1,
         },
       ],
@@ -197,7 +217,7 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
       content_name: product.name,
       content_ids: [selectedVariant.sku],
       content_type: "product",
-      value: Number(product.price),
+      value: Number(finalPrice),
       currency: "BRL",
     });
     setAdded(true);
@@ -206,6 +226,7 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
 
   function handleBuyNow() {
     if (!selectedVariant || outOfStock) return;
+    const finalPrice = calcularPrecoComPlusSize(product.price, selectedVariant.size, plusSizeMarkups);
     addItem({
       variantId: selectedVariant.id,
       productId: product.id,
@@ -214,7 +235,7 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
       size: selectedVariant.size,
       color: selectedVariant.color ?? null,
       sku: selectedVariant.sku,
-      price: product.price,
+      price: finalPrice,
       image: product.images?.[0] ?? null,
       weight_g: product.weight_g,
       length_cm: product.length_cm,
@@ -510,12 +531,12 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
               </span>
             )}
             <span className="text-2xl font-medium text-kc">
-              {formatCurrency(product.price)}
+              {formatCurrency(displayPrice)}
             </span>
           </div>
 
           {(() => {
-            const inst = getBestInstallment(product.price);
+            const inst = getBestInstallment(displayPrice);
             return inst ? (
               <div className="-mt-2">
                 <p className="text-sm text-[#A0622A] font-medium flex items-center gap-1.5">

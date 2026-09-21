@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getMPPayment, MERCADOPAGO_ENV, type MPPaymentResponse } from "@/lib/mercadopago";
 import { sendOrderCreatedEmail, sendPaymentConfirmedEmail } from "@/lib/email/send";
+import { calcularPrecoComPlusSize } from "@/lib/pricing";
+import { getPlusSizeMarkups } from "@/lib/pricing-server";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -187,6 +189,47 @@ export async function POST(request: NextRequest) {
       }
 
       validatedCoupon = coupon;
+    }
+
+    // ── 1.6. Validar preço de cada item contra o banco ───────────────────────
+    // NUNCA confia cegamente no preço enviado pelo frontend. Recalcula o
+    // preço esperado (preço base do produto + acréscimo de plus size, se
+    // aplicável — ver lib/pricing.ts) e rejeita a criação do pedido se
+    // divergir. Roda antes de reservar estoque para falhar rápido, sem
+    // precisar de rollback.
+    const productIds = Array.from(new Set(items.map((i) => i.productId)));
+    const { data: dbProducts, error: productsErr } = await admin
+      .from("products")
+      .select("id, price")
+      .in("id", productIds);
+
+    if (productsErr || !dbProducts) {
+      return NextResponse.json({ error: "Erro ao validar preços dos produtos." }, { status: 500 });
+    }
+
+    const plusSizeMarkups = await getPlusSizeMarkups();
+
+    for (const item of items) {
+      const dbProduct = dbProducts.find((p) => p.id === item.productId);
+      if (!dbProduct) {
+        return NextResponse.json(
+          { error: `Produto não encontrado: ${item.productName}.`, code: "PRODUTO_NAO_ENCONTRADO" },
+          { status: 400 }
+        );
+      }
+
+      const precoEsperado = calcularPrecoComPlusSize(dbProduct.price, item.size, plusSizeMarkups);
+
+      // Tolerância de 1 centavo para diferenças de arredondamento de ponto flutuante
+      if (Math.abs(precoEsperado - item.price) > 0.01) {
+        return NextResponse.json(
+          {
+            error: `O preço de "${item.productName}" foi atualizado. Atualize a página e tente novamente.`,
+            code: "preco_desatualizado",
+          },
+          { status: 409 }
+        );
+      }
     }
 
     // ── 2. Validar estoque (leitura atômica via adminClient) ─────────────────
