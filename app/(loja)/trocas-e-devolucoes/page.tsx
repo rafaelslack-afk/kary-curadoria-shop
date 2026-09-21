@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   Check,
   Info,
+  Package,
 } from "lucide-react";
 
 // ── Metadata ──────────────────────────────────────────────────────────────────
@@ -391,6 +392,70 @@ export default function TrocasEDevolucoesPage() {
               </li>
             ))}
           </ul>
+        </div>
+      </section>
+
+      {/* ── VENDAS EM ATACADO ── */}
+      <section className="max-w-5xl mx-auto px-6 pb-16">
+        <h2
+          className="font-serif text-2xl md:text-3xl font-medium text-[#5C3317] mb-8"
+          style={{ fontFamily: "Cormorant Garamond, Georgia, serif" }}
+        >
+          Vendas em Atacado
+        </h2>
+
+        <div className="bg-white/70 border border-[#A0622A]/15 rounded-xl p-7">
+          <div className="flex gap-4">
+            <div className="w-10 h-10 rounded-full bg-[#A0622A]/10 flex items-center justify-center shrink-0">
+              <Package size={18} strokeWidth={1.5} className="text-[#A0622A]" />
+            </div>
+            <div className="space-y-4">
+              <p className="text-sm text-[#5C3317]/75 leading-relaxed">
+                Esta política de trocas e devoluções se aplica exclusivamente às compras
+                realizadas no varejo, como consumidor final, através da nossa loja virtual.
+              </p>
+              <p className="text-sm text-[#5C3317]/75 leading-relaxed">
+                Compras em atacado, destinadas à revenda, são negociadas diretamente com nossa
+                equipe e regidas pelo Código Civil, não pelo Código de Defesa do Consumidor —
+                já que, nesse caso, o comprador não se enquadra como consumidor final.
+              </p>
+              <p className="text-sm text-[#5C3317]/75 leading-relaxed">
+                Isso significa que não há direito de arrependimento, troca por tamanho ou por
+                não adequação ao gosto nas compras em atacado. Trocas são aceitas
+                exclusivamente em caso de defeito de fabricação, conforme os artigos 441 a 446
+                do Código Civil, mediante comunicação em até 30 dias corridos do recebimento.
+              </p>
+              <p className="text-sm text-[#5C3317]/75 leading-relaxed">
+                Para solicitar a troca por defeito, é necessário enviar um vídeo mostrando
+                claramente o defeito da peça no momento da abertura da embalagem. A
+                comprovação em vídeo é obrigatória para análise e aprovação da troca.
+              </p>
+              <p className="text-sm text-[#5C3317]/75 leading-relaxed">
+                Para dúvidas sobre pedidos de atacado ou para solicitar uma troca, entre em
+                contato pelo{" "}
+                <a
+                  href="https://wa.me/5511913187730"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#A0622A] underline hover:text-[#5C3317] transition-colors"
+                >
+                  WhatsApp
+                </a>
+                .
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3 mt-6 pt-6 border-t border-[#A0622A]/10">
+            <span className="shrink-0 w-5 h-5 rounded-full bg-[#A0622A]/10 flex items-center justify-center mt-0.5">
+              <Check size={11} strokeWidth={2.5} className="text-[#A0622A]" />
+            </span>
+            <span className="text-sm text-[#5C3317]/75 leading-relaxed">
+              <strong className="text-[#5C3317]">Vídeo obrigatório:</strong> grave o momento de
+              abertura da embalagem mostrando o defeito da peça antes de qualquer manuseio.
+              Envie o vídeo junto com a solicitação pelo WhatsApp.
+            </span>
+          </div>
         </div>
       </section>
 

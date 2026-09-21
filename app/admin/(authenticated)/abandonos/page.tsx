@@ -44,12 +44,15 @@ function formatDate(iso: string): string {
   });
 }
 
-function buildWhatsApp(phone: string | null, name: string | null): string {
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://karycuradoria.com.br";
+
+function buildWhatsApp(phone: string | null, name: string | null, id: string): string {
   const digits = formatPhone(phone);
   if (!digits) return "";
   const numero = digits.startsWith("55") ? digits : `55${digits}`;
+  const link = `${SITE_URL}/retomar/${id}`;
   const msg = encodeURIComponent(
-    `Olá ${name ?? ""}, vi que você se interessou por peças da Kary Curadoria e não finalizou o pedido. Posso te ajudar?`
+    `Olá ${name ?? ""}, vi que você se interessou por peças da Kary Curadoria e não finalizou o pedido. Preparei seu carrinho de volta, é só continuar por aqui: ${link}`
   );
   return `https://wa.me/${numero}?text=${msg}`;
 }
@@ -226,7 +229,7 @@ export default function AbandonosPage() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filtered.map((r) => {
-                const whatsapp = buildWhatsApp(r.phone, r.name);
+                const whatsapp = buildWhatsApp(r.phone, r.name, r.id);
 
                 return (
                   <tr key={r.id} className="hover:bg-gray-50 transition-colors">
