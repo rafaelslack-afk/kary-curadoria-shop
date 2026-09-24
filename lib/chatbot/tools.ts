@@ -34,7 +34,8 @@ export const CHAT_TOOLS: Anthropic.Tool[] = [
     description:
       "Busca peças ativas e com estoque disponível na loja. Use para qualquer pedido de sugestão de peça. " +
       "Use `termo` para tecido, estilo ou tipo de peça (ex: 'linho', 'pantalona', 'colete'), e `categoria` " +
-      "somente com um dos slugs de categoria listados no prompt. Retorna no máximo 6 peças.",
+      "somente com um dos slugs de categoria listados no prompt. Retorna no máximo 6 peças. Quando " +
+      "`termo_no_nome` é false, o termo aparece só na descrição: não afirme que a peça é daquele tecido.",
     input_schema: {
       type: "object",
       properties: {
@@ -239,6 +240,26 @@ function uniq(values: string[]): string[] {
   return Array.from(new Set(values));
 }
 
+// O modelo às vezes chama as ferramentas por slug com a referência ("con-0002")
+// ou só com o início do slug, sem passar por buscar_produtos. Resolve, em
+// ordem: slug exato → referência (sufixo "-ref-xxx-0000") → prefixo único.
+function resolveProduct(catalog: ProductRow[], raw: string): ProductRow | undefined {
+  const key = norm(raw).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  if (!key) return undefined;
+  const exact = catalog.find((p) => p.slug === key);
+  if (exact) return exact;
+  const ref = key.match(/[a-z]{3}-\d{4}$/)?.[0];
+  if (ref) {
+    const byRef = catalog.filter((p) => p.slug.endsWith(`-${ref}`));
+    if (byRef.length === 1) return byRef[0];
+  }
+  const byPrefix = catalog.filter((p) => p.slug.startsWith(key));
+  return byPrefix.length === 1 ? byPrefix[0] : undefined;
+}
+
+const NOT_FOUND_HINT =
+  "Peça não encontrada por este slug. Use buscar_produtos com o nome ou a referência para obter o slug correto.";
+
 // Executor com cache por requisição (catálogo e markups carregados uma vez
 // mesmo que o modelo chame várias ferramentas na mesma mensagem).
 export function createToolExecutor(conversationId: string) {
@@ -317,16 +338,31 @@ export function createToolExecutor(conversationId: string) {
       return true;
     });
 
-    const selected = sortProducts(matches).slice(0, limite);
+    // Termo no nome vale mais que termo só na descrição (ex.: uma descrição
+    // que sugere "camisa de linho" para compor o look não faz a peça ser de linho).
+    const inName = (p: ProductRow) => words.every((w) => norm(p.name).includes(w));
+    const nameMatches = sortProducts(matches.filter(inName));
+    const descMatches = sortProducts(matches.filter((p) => !inName(p)));
+    const selected = [...nameMatches, ...descMatches].slice(0, limite);
+
+    const onlyInDescription = words.length > 0 && selected.length > 0 && nameMatches.length === 0;
 
     return {
       result: {
         total_encontrado: matches.length,
+        ...(onlyInDescription
+          ? {
+              observacao:
+                `Nenhuma peça tem "${termo}" no nome; o termo aparece só na descrição (pode ser sugestão de look ` +
+                "ou parte da composição). Não afirme que as peças são desse tecido; apresente como opções relacionadas.",
+            }
+          : {}),
         produtos: selected.map((p) => {
           const inStock = p.product_variants.filter((v) => available(v) > 0);
           return {
             slug: p.slug,
             nome: p.name,
+            ...(words.length > 0 ? { termo_no_nome: inName(p) } : {}),
             categoria: p.categories?.slug ?? null,
             preco_base: Number(p.price),
             cores_disponiveis: uniq(inStock.map((v) => v.color).filter((c): c is string => !!c)),
@@ -341,8 +377,8 @@ export function createToolExecutor(conversationId: string) {
   async function detalhesProduto(input: Record<string, unknown>): Promise<ToolOutcome> {
     const slug = str(input.slug, 300);
     const catalog = await loadCatalog();
-    const p = catalog.find((x) => x.slug === slug);
-    if (!p) return { result: { encontrado: false, slug } };
+    const p = resolveProduct(catalog, slug);
+    if (!p) return { result: { encontrado: false, slug, observacao: NOT_FOUND_HINT } };
 
     const markups = await loadMarkups();
     const byColor = new Map<string, VariantRow[]>();
@@ -376,10 +412,11 @@ export function createToolExecutor(conversationId: string) {
     const slugBase = str(input.slug_base, 300);
     const limite = clampInt(input.limite, 4, 1, 4);
     const catalog = await loadCatalog();
-    const base = catalog.find((x) => x.slug === slugBase);
-    if (!base) return { result: { encontrado: false, slug_base: slugBase } };
+    const base = resolveProduct(catalog, slugBase);
+    if (!base) return { result: { encontrado: false, slug_base: slugBase, observacao: NOT_FOUND_HINT } };
 
     const baseCat = base.categories?.slug ?? "";
+    const baseDisponivel = base.product_variants.some((v) => available(v) > 0);
     const complementares = CATEGORIAS_COMPLEMENTARES[baseCat] ?? [];
     if (complementares.length === 0) {
       return { result: { encontrado: true, sugestoes: [], observacao: "Sem categorias complementares para esta peça." } };
@@ -406,7 +443,15 @@ export function createToolExecutor(conversationId: string) {
     return {
       result: {
         encontrado: true,
-        peca_base: { slug: base.slug, nome: base.name, categoria: baseCat },
+        peca_base: {
+          slug: base.slug,
+          nome: base.name,
+          categoria: baseCat,
+          disponivel: baseDisponivel,
+        },
+        ...(baseDisponivel
+          ? {}
+          : { observacao: "A peça base está esgotada. Avise a cliente antes de sugerir as combinações." }),
         sugestoes: selected.map((p) => ({
           slug: p.slug,
           nome: p.name,
