@@ -11,6 +11,7 @@ interface ProductCard {
   name: string;
   price: number;
   image: string | null;
+  soldOut?: boolean;
 }
 
 interface ChatMessage {
@@ -270,10 +271,20 @@ export function ChatWidget() {
                   <div className="grid grid-cols-2 gap-2">
                     {m.products.map((p) => (
                       <div key={p.slug} className="bg-white border border-[#D9C9B8] rounded-lg overflow-hidden flex flex-col">
-                        <div className="aspect-[3/4] bg-[#EDE8DC]">
+                        <div className="relative aspect-[3/4] bg-[#EDE8DC]">
                           {p.image && (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={p.image} alt={p.name} className="w-full h-full object-cover" loading="lazy" />
+                            <img
+                              src={p.image}
+                              alt={p.name}
+                              className={`w-full h-full object-cover ${p.soldOut ? "opacity-60" : ""}`}
+                              loading="lazy"
+                            />
+                          )}
+                          {p.soldOut && (
+                            <span className="absolute top-1.5 left-1.5 bg-[#5C3317] text-white text-[9px] tracking-[0.12em] uppercase px-1.5 py-0.5 rounded">
+                              Esgotado
+                            </span>
                           )}
                         </div>
                         <div className="p-2 flex flex-col gap-1 flex-1">
