@@ -77,6 +77,25 @@ function sanitizeReply(text: string): string {
     .trim();
 }
 
+// Resumo seguro de uma falha: ex. "AuthenticationError status=401
+// type=authentication_error request_id=req_...". Sem mensagem de erro livre,
+// que pode ecoar trechos da requisição.
+function describeError(err: unknown): string {
+  // Rótulos fixos (constructor.name pode vir minificado no build)
+  if (err instanceof Anthropic.APIConnectionTimeoutError) return "anthropic_timeout";
+  if (err instanceof Anthropic.APIConnectionError) return "anthropic_connection_error";
+  if (err instanceof Anthropic.APIError) {
+    const body = err.error as { error?: { type?: unknown } } | undefined;
+    const type = typeof body?.error?.type === "string" ? body.error.type : "unknown";
+    return `anthropic_api_error status=${err.status ?? "none"} type=${type} request_id=${err.requestID ?? "none"}`;
+  }
+  if (err instanceof Anthropic.AnthropicError) {
+    // Ex.: chave ausente no ambiente (lançado antes de qualquer chamada)
+    return `anthropic_client_error missing_api_key=${!process.env.ANTHROPIC_API_KEY}`;
+  }
+  return `non_anthropic_error ${err instanceof Error ? err.name : typeof err}`;
+}
+
 interface TurnUsage {
   input_tokens: number;
   output_tokens: number;
@@ -256,9 +275,9 @@ export async function POST(request: NextRequest) {
   try {
     outcome = await runAssistant(history, message, conversation.id);
   } catch (err) {
-    // Nunca expor detalhe técnico ao client nem logar a chave
-    const detail = err instanceof Anthropic.APIError ? `status ${err.status}` : (err as Error)?.name;
-    console.error("[chat] falha ao gerar resposta:", detail);
+    // Nunca expor detalhe técnico ao client nem logar a chave ou o conteúdo
+    // das mensagens: só classe, status HTTP e tipo de erro da Anthropic.
+    console.error("[chat] falha ao gerar resposta:", describeError(err));
   }
 
   const reply = outcome?.reply ?? MSG.error;
