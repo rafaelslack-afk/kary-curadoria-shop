@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { ColorInsert, ColorUpdate } from "@/types/database";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // GET /api/admin/colors
 export async function GET() {
+  const unauthorized = await requireAdmin();
+  if (unauthorized) return unauthorized;
+
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("colors")
@@ -19,6 +23,9 @@ export async function GET() {
 
 // POST /api/admin/colors
 export async function POST(request: NextRequest) {
+  const unauthorized = await requireAdmin();
+  if (unauthorized) return unauthorized;
+
   const admin = createAdminClient();
   const body: ColorInsert = await request.json();
 
@@ -38,6 +45,9 @@ export async function POST(request: NextRequest) {
 
 // PUT /api/admin/colors — { id, ...fields }
 export async function PUT(request: NextRequest) {
+  const unauthorized = await requireAdmin();
+  if (unauthorized) return unauthorized;
+
   const admin = createAdminClient();
   const body: ColorUpdate & { id: string } = await request.json();
 

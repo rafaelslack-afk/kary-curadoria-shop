@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,6 +10,9 @@ export const dynamic = "force-dynamic";
 // Requer ao menos um parâmetro de busca (ex: ?searched=1), caso contrário retorna [].
 
 export async function GET(request: NextRequest) {
+  const unauthorized = await requireAdmin();
+  if (unauthorized) return unauthorized;
+
   const { searchParams } = new URL(request.url);
   if (searchParams.size === 0) {
     return NextResponse.json([]);

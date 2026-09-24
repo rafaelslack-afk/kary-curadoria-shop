@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { SizeInsert, SizeUpdate } from "@/types/database";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // GET /api/admin/sizes
 export async function GET() {
+  const unauthorized = await requireAdmin();
+  if (unauthorized) return unauthorized;
+
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("sizes")
@@ -19,6 +23,9 @@ export async function GET() {
 
 // POST /api/admin/sizes
 export async function POST(request: NextRequest) {
+  const unauthorized = await requireAdmin();
+  if (unauthorized) return unauthorized;
+
   const admin = createAdminClient();
   const body: SizeInsert = await request.json();
 
@@ -42,6 +49,9 @@ export async function POST(request: NextRequest) {
 
 // PUT /api/admin/sizes — { id, ...fields }
 export async function PUT(request: NextRequest) {
+  const unauthorized = await requireAdmin();
+  if (unauthorized) return unauthorized;
+
   const admin = createAdminClient();
   const body: SizeUpdate & { id: string } = await request.json();
 

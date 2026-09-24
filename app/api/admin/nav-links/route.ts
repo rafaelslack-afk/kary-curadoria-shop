@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // GET /api/admin/nav-links — todos os links (ativos e inativos)
 export async function GET() {
+  const unauthorized = await requireAdmin();
+  if (unauthorized) return unauthorized;
+
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("nav_links")
@@ -21,6 +25,9 @@ export async function GET() {
 
 // POST /api/admin/nav-links — criar novo link
 export async function POST(request: NextRequest) {
+  const unauthorized = await requireAdmin();
+  if (unauthorized) return unauthorized;
+
   let body: { label?: string; href?: string; order_index?: number; active?: boolean };
   try {
     body = await request.json();

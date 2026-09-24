@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // GET /api/admin/erp-sync-errors?status=pending|resolved|all&search=xxx&limit=50&offset=0
 export async function GET(request: NextRequest) {
+  const unauthorized = await requireAdmin();
+  if (unauthorized) return unauthorized;
+
   try {
     const { searchParams } = new URL(request.url);
     const status  = searchParams.get("status") ?? "pending";
@@ -47,6 +51,9 @@ export async function GET(request: NextRequest) {
 // Body: { ids: string[], resolved_by?: string, notes?: string }
 // Marca os erros selecionados como resolvidos.
 export async function PATCH(request: NextRequest) {
+  const unauthorized = await requireAdmin();
+  if (unauthorized) return unauthorized;
+
   try {
     const body = await request.json() as {
       ids: string[];

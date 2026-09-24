@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -7,6 +8,9 @@ export const dynamic = "force-dynamic";
 // GET /api/admin/erp-sync-errors/count
 // Retorna a contagem de erros de sync ERP não resolvidos.
 export async function GET() {
+  const unauthorized = await requireAdmin();
+  if (unauthorized) return unauthorized;
+
   try {
     const admin = createAdminClient();
     const { count, error } = await admin

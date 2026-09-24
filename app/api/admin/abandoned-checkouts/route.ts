@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -7,6 +8,9 @@ export const dynamic = "force-dynamic";
 // GET /api/admin/abandoned-checkouts
 // Parâmetros: period (7d | 30d | all), status (all | abandoned | recovered)
 export async function GET(request: NextRequest) {
+  const unauthorized = await requireAdmin();
+  if (unauthorized) return unauthorized;
+
   const { searchParams } = new URL(request.url);
   const period = searchParams.get("period") ?? "7d";
   const status = searchParams.get("status") ?? "all";
