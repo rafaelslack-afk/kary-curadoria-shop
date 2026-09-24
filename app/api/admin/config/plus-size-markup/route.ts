@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getPlusSizeMarkups } from "@/lib/pricing-server";
+import { requireAdmin } from "@/lib/admin-auth";
 
 const CONFIG_KEY = "plus_size_markup";
 
@@ -9,12 +10,18 @@ export const dynamic = "force-dynamic";
 
 // GET /api/admin/config/plus-size-markup — markups atuais (tela admin)
 export async function GET() {
+  const unauthorized = await requireAdmin();
+  if (unauthorized) return unauthorized;
+
   const markups = await getPlusSizeMarkups();
   return NextResponse.json({ markups });
 }
 
 // PUT /api/admin/config/plus-size-markup — body: { markups: { G1, G2, G3 } }
 export async function PUT(request: NextRequest) {
+  const unauthorized = await requireAdmin();
+  if (unauthorized) return unauthorized;
+
   let body: { markups?: Record<string, unknown> };
   try {
     body = await request.json();
