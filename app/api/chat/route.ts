@@ -13,7 +13,7 @@ export const maxDuration = 60;
 
 const MODEL = "claude-haiku-4-5";
 const MAX_TOKENS = 1024;
-const MAX_TOOL_ROUNDS = 5;
+const MAX_TOOL_ROUNDS = 6;
 const MAX_CARDS = 6;
 const HISTORY_LIMIT = 40;
 
@@ -117,7 +117,8 @@ async function runAssistant(
   const messages: Anthropic.MessageParam[] = [...history, { role: "user", content: userMessage }];
 
   const toolsUsed: { name: string; input: unknown }[] = [];
-  const cards = new Map<string, ChatProductCard>();
+  // Cards vêm só de mostrar_produtos (a última chamada da rodada vale)
+  let cards: ChatProductCard[] = [];
   let whatsappUrl: string | undefined;
   const usage: TurnUsage = {
     input_tokens: 0,
@@ -144,42 +145,51 @@ async function runAssistant(
     usage.cache_read_input_tokens += response.usage.cache_read_input_tokens ?? 0;
     usage.cache_creation_input_tokens += response.usage.cache_creation_input_tokens ?? 0;
 
+    const responseText = response.content
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join("\n");
+
     if (response.stop_reason === "tool_use" && !forceText) {
       messages.push({ role: "assistant", content: response.content });
 
       const toolUses = response.content.filter(
         (b): b is Anthropic.ToolUseBlock => b.type === "tool_use"
       );
-      const results: Anthropic.ToolResultBlockParam[] = await Promise.all(
-        toolUses.map(async (tu) => {
-          toolsUsed.push({ name: tu.name, input: tu.input });
-          const outcome = await runTool(tu.name, tu.input);
-          for (const card of outcome.cards ?? []) cards.set(card.slug, card);
-          if (outcome.whatsappUrl) whatsappUrl = outcome.whatsappUrl;
-          return {
-            type: "tool_result" as const,
-            tool_use_id: tu.id,
-            content: JSON.stringify(outcome.result),
-            ...(outcome.isError ? { is_error: true } : {}),
-          };
-        })
-      );
+      // Em sequência, na ordem pedida: mostrar_produtos depende do que as
+      // buscas anteriores da mesma mensagem retornaram.
+      const results: Anthropic.ToolResultBlockParam[] = [];
+      for (const tu of toolUses) {
+        toolsUsed.push({ name: tu.name, input: tu.input });
+        const outcome = await runTool(tu.name, tu.input);
+        if (outcome.cards) cards = outcome.cards;
+        if (outcome.whatsappUrl) whatsappUrl = outcome.whatsappUrl;
+        results.push({
+          type: "tool_result" as const,
+          tool_use_id: tu.id,
+          content: JSON.stringify(outcome.result),
+          ...(outcome.isError ? { is_error: true } : {}),
+        });
+      }
+
+      // Resposta já escrita e só faltava exibir os cards: encerra sem outra
+      // chamada ao modelo.
+      const reply = sanitizeReply(responseText);
+      if (reply && toolUses.every((tu) => tu.name === "mostrar_produtos")) {
+        return { reply, products: cards.slice(0, MAX_CARDS), whatsappUrl, toolsUsed, usage };
+      }
+
       // Todos os tool_result em uma única mensagem de usuário
       messages.push({ role: "user", content: results });
       continue;
     }
 
-    const text = response.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("\n");
     const reply =
-      response.stop_reason === "refusal" ? MSG.empty : sanitizeReply(text) || MSG.empty;
+      response.stop_reason === "refusal" ? MSG.empty : sanitizeReply(responseText) || MSG.empty;
 
     return {
       reply,
-      // Cards mais recentes primeiro, deduplicados por slug
-      products: Array.from(cards.values()).reverse().slice(0, MAX_CARDS),
+      products: cards.slice(0, MAX_CARDS),
       whatsappUrl,
       toolsUsed,
       usage,

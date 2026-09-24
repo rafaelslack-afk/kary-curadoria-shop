@@ -4,7 +4,9 @@
 // Regra de segurança: o modelo NUNCA recebe URLs (imagem, produto, WhatsApp).
 // Cards de produto e o link de WhatsApp enviados ao client são montados pelo
 // servidor a partir de `cards` / `whatsappUrl` dos resultados — assim nenhum
-// link ou preço inventado pelo modelo chega à cliente.
+// link ou preço inventado pelo modelo chega à cliente. Cards só saem de
+// mostrar_produtos, e só para peças que as ferramentas de catálogo retornaram
+// nesta mesma rodada.
 import type Anthropic from "@anthropic-ai/sdk";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { productAvailability, variantAvailability, isVariantOutOfStock, type Disponibilidade } from "@/lib/stock-availability";
@@ -35,8 +37,10 @@ export const CHAT_TOOLS: Anthropic.Tool[] = [
     description:
       "Busca peças ativas da loja, com ou sem estoque. Use para qualquer pedido de sugestão de peça. " +
       "Use `termo` para o que a cliente descreveu (tipo de peça, tecido, estilo, ou uma referência como " +
-      "'CON-0063'); cada palavra é buscada no nome, descrição, categoria e referência, e as peças que casam " +
-      "com mais palavras vêm primeiro. Use `categoria` somente com um dos slugs listados no prompt. Só passe " +
+      "'CON-0063'). Retorna só peças que têm TODAS as palavras (com sinônimos: blazer/casaqueto/terno, " +
+      "calça/pantalona) e `correspondencia: \"completa\"`; se nenhuma tiver, retorna as que têm parte das " +
+      "palavras com `correspondencia: \"parcial\"` (opções parecidas, não exatamente o pedido). " +
+      "Use `categoria` somente com um dos slugs listados no prompt. Só passe " +
       "`cor`, `tamanho` ou `preco_max` se a cliente pediu isso nesta conversa. Cada peça traz `disponibilidade` " +
       "('disponível', 'últimas unidades' ou 'esgotado'). Quando `termo_no_nome` é false, o termo aparece só na " +
       "descrição: não afirme que a peça é daquele tecido. Retorna no máximo 6 peças.",
@@ -77,6 +81,26 @@ export const CHAT_TOOLS: Anthropic.Tool[] = [
         limite: { type: "number", description: "Quantidade máxima de sugestões (1 a 4)." },
       },
       required: ["slug_base"],
+    },
+  },
+  {
+    name: "mostrar_produtos",
+    description:
+      "Exibe para a cliente os cards (foto, preço e botão) das peças que você está recomendando. Chame ao " +
+      "recomendar peças, com exatamente as peças citadas na sua resposta, na mesma ordem. Só aceita peças " +
+      "retornadas por buscar_produtos, detalhes_produto ou sugerir_combinacoes nesta mesma resposta. Sem esta " +
+      "chamada, nenhum card é exibido.",
+    input_schema: {
+      type: "object",
+      properties: {
+        refs: {
+          type: "array",
+          items: { type: "string" },
+          maxItems: 6,
+          description: "Slugs ou referências (ex: 'CON-0063') das peças, na ordem em que aparecem no texto. Máx. 6.",
+        },
+      },
+      required: ["refs"],
     },
   },
   {
@@ -217,6 +241,26 @@ const STOPWORDS = new Set([
   "o", "a", "os", "as", "no", "na", "nos", "nas", "ou", "que",
 ]);
 
+// Grupos de sinônimos (em forma normalizada/singular): uma palavra do termo
+// casa com qualquer palavra do mesmo grupo.
+const SINONIMOS: string[][] = [
+  ["blazer", "casaqueto", "terno"],
+  ["calca", "pantalona"],
+];
+const SYNONYM_OF = new Map<string, string[]>();
+for (const group of SINONIMOS) for (const w of group) SYNONYM_OF.set(w, group);
+
+function tokens(text: string): string[] {
+  return norm(text).split(/[^a-z0-9]+/).filter(Boolean);
+}
+
+// Casa por início de palavra ("blazer" ↔ "blazers"), nunca no meio
+// ("terno" não casa com "interno").
+function hasWord(hay: string[], word: string): boolean {
+  const group = SYNONYM_OF.get(word) ?? [word];
+  return hay.some((t) => group.some((g) => t.startsWith(g)));
+}
+
 function searchWords(termo: string): string[] {
   return uniq(
     norm(termo)
@@ -335,6 +379,13 @@ const NOT_FOUND_HINT =
 export function createToolExecutor(conversationId: string) {
   let catalogPromise: Promise<ProductRow[]> | null = null;
   let markupsPromise: Promise<Record<string, number>> | null = null;
+  // Peças retornadas pelas ferramentas de catálogo nesta rodada: as únicas
+  // que mostrar_produtos pode exibir.
+  const returned = new Map<string, ProductRow>();
+
+  function remember(p: ProductRow) {
+    returned.set(p.slug, p);
+  }
 
   function loadCatalog(): Promise<ProductRow[]> {
     if (!catalogPromise) {
@@ -405,7 +456,6 @@ export function createToolExecutor(conversationId: string) {
           busca_por_referencia: true,
           produtos: selected.map((p) => productSummary(p, pdpVariants(p))),
         },
-        cards: selected.map(toCard),
       };
     }
 
@@ -413,7 +463,8 @@ export function createToolExecutor(conversationId: string) {
 
     // Variantes consideradas: as que a PDP exibe, restritas à cor/tamanho
     // pedidos. Produtos sem estoque NÃO são descartados.
-    const scored: { p: ProductRow; variants: VariantRow[]; score: number; inName: boolean; disp: Disponibilidade }[] = [];
+    type Hit = { p: ProductRow; variants: VariantRow[]; tier: number; score: number; disp: Disponibilidade };
+    const hits: Hit[] = [];
     for (const p of catalog) {
       if (categoria) {
         const cs = p.categories ? `${norm(p.categories.slug)} ${norm(p.categories.name)}` : "";
@@ -430,67 +481,68 @@ export function createToolExecutor(conversationId: string) {
         if (variants.length === 0) continue;
       }
 
+      // tier 0: todas as palavras no nome/categoria/referência;
+      // tier 1: todas as palavras, contando a descrição;
+      // tier 2: só parte das palavras (resultado parcial).
+      let tier = 0;
       let score = 0;
       if (words.length > 0) {
-        const hay = norm(`${p.name} ${p.description ?? ""} ${p.categories?.name ?? ""} ${p.sku_base ?? ""}`);
-        score = words.filter((w) => hay.includes(w)).length;
+        const main = tokens(`${p.name} ${p.categories?.name ?? ""} ${p.sku_base ?? ""}`);
+        const all = [...main, ...tokens(p.description ?? "")];
+        score = words.filter((w) => hasWord(all, w)).length;
         if (score === 0) continue;
+        tier = words.every((w) => hasWord(main, w)) ? 0 : score === words.length ? 1 : 2;
       }
 
-      const name = norm(p.name);
-      scored.push({
-        p,
-        variants,
-        score,
-        inName: words.length > 0 && words.every((w) => name.includes(w)),
-        disp: productAvailability(variants),
-      });
+      hits.push({ p, variants, tier, score, disp: productAvailability(variants) });
     }
 
-    // Mais palavras casadas → todas no nome → disponíveis antes de esgotadas
-    // → destaque → mais recentes
-    const recency = new Map(sortProducts(scored.map((s) => s.p)).map((p, i) => [p.id, i]));
-    scored.sort(
+    // Só o melhor nível que tiver resultado: peças com todas as palavras no
+    // nome; senão com todas as palavras em qualquer campo; senão parciais.
+    const bestTier = Math.min(...hits.map((h) => h.tier));
+    const pool = hits.filter((h) => h.tier === bestTier);
+    const correspondencia =
+      words.length === 0 || hits.length === 0 ? undefined : bestTier === 2 ? "parcial" : "completa";
+
+    // Mais palavras casadas → disponíveis antes de esgotadas → destaque → mais recentes
+    const recency = new Map(sortProducts(pool.map((h) => h.p)).map((p, i) => [p.id, i]));
+    pool.sort(
       (a, b) =>
         b.score - a.score ||
-        Number(b.inName) - Number(a.inName) ||
         DISPONIBILIDADE_ORDEM[a.disp] - DISPONIBILIDADE_ORDEM[b.disp] ||
         (recency.get(a.p.id) ?? 0) - (recency.get(b.p.id) ?? 0)
     );
-    const selected = scored.slice(0, limite);
-
-    const anyInName = scored.some((s) => s.inName);
-    const onlyInDescription = words.length > 0 && selected.length > 0 && !anyInName;
+    const selected = pool.slice(0, limite);
+    for (const h of selected) remember(h.p);
 
     return {
       result: {
-        total_encontrado: scored.length,
-        ...(words.length > 1
-          ? {
-              palavras_buscadas: words,
-              total_com_todas_as_palavras: scored.filter((s) => s.score === words.length).length,
-            }
-          : {}),
+        total_encontrado: pool.length,
+        ...(correspondencia ? { correspondencia } : {}),
         ...(selected.length === 0
           ? {
               observacao:
                 "Nada encontrado. Tente de novo com menos palavras ou sinônimos (ex.: blazer/casaqueto/terno, " +
                 "calça/pantalona) antes de dizer que não encontrou.",
             }
-          : onlyInDescription
+          : correspondencia === "parcial"
           ? {
               observacao:
-                `Nenhuma peça tem "${termo}" no nome; o termo aparece só na descrição (pode ser sugestão de look ` +
-                "ou parte da composição). Não afirme que as peças são desse tecido; apresente como opções relacionadas.",
+                `Nenhuma peça tem todas as palavras de "${termo}". Estas são opções parecidas: deixe claro para a ` +
+                "cliente que não é exatamente o que ela pediu.",
+            }
+          : bestTier === 1
+          ? {
+              observacao:
+                `Nenhuma peça tem "${termo}" no nome; o termo aparece na descrição (pode ser sugestão de look ` +
+                "ou parte da composição). Não afirme que as peças são desse tecido ou tipo; apresente como opções relacionadas.",
             }
           : {}),
-        produtos: selected.map((s) => ({
-          ...productSummary(s.p, s.variants),
-          ...(words.length > 1 ? { palavras_casadas: `${s.score}/${words.length}` } : {}),
-          ...(words.length > 0 ? { termo_no_nome: s.inName } : {}),
+        produtos: selected.map((h) => ({
+          ...productSummary(h.p, h.variants),
+          ...(correspondencia === "parcial" ? { palavras_casadas: `${h.score}/${words.length}` } : {}),
         })),
       },
-      cards: selected.map((s) => toCard(s.p)),
     };
   }
 
@@ -499,6 +551,7 @@ export function createToolExecutor(conversationId: string) {
     const catalog = await loadCatalog();
     const p = resolveProduct(catalog, slug);
     if (!p) return { result: { encontrado: false, busca: slug, observacao: NOT_FOUND_HINT } };
+    remember(p);
 
     const markups = await loadMarkups();
     const variants = pdpVariants(p);
@@ -527,7 +580,6 @@ export function createToolExecutor(conversationId: string) {
           })),
         })),
       },
-      cards: [toCard(p)],
     };
   }
 
@@ -538,6 +590,7 @@ export function createToolExecutor(conversationId: string) {
     const base = resolveProduct(catalog, slugBase);
     if (!base) return { result: { encontrado: false, slug_base: slugBase, observacao: NOT_FOUND_HINT } };
 
+    remember(base);
     const baseCat = base.categories?.slug ?? "";
     const baseDisponivel = pdpVariants(base).some(isBuyable);
     const complementares = CATEGORIAS_COMPLEMENTARES[baseCat] ?? [];
@@ -562,6 +615,7 @@ export function createToolExecutor(conversationId: string) {
         if (pool[i] && selected.length < limite) selected.push(pool[i]);
       }
     }
+    for (const p of selected) remember(p);
 
     return {
       result: {
@@ -578,11 +632,47 @@ export function createToolExecutor(conversationId: string) {
         sugestoes: selected.map((p) => ({
           slug: p.slug,
           nome: p.name,
+          referencia: p.sku_base,
           categoria: p.categories?.slug ?? null,
           preco_base: Number(p.price),
         })),
       },
-      cards: selected.map(toCard),
+    };
+  }
+
+  function mostrarProdutos(input: Record<string, unknown>): ToolOutcome {
+    const refs = (Array.isArray(input.refs) ? input.refs : [])
+      .map((r) => str(r, 300))
+      .filter(Boolean)
+      .slice(0, 6);
+    const allowed = Array.from(returned.values());
+    const shown: ProductRow[] = [];
+    const descartadas: string[] = [];
+    for (const ref of refs) {
+      const p = resolveProduct(allowed, ref);
+      if (!p) {
+        descartadas.push(ref);
+        continue;
+      }
+      if (!shown.includes(p)) shown.push(p);
+    }
+    if (descartadas.length > 0) {
+      console.warn(
+        `[chat] mostrar_produtos descartou refs não retornadas nesta rodada: ${JSON.stringify(descartadas)}`
+      );
+    }
+    return {
+      result: {
+        exibidos: shown.map((p) => p.sku_base ?? p.slug),
+        ...(descartadas.length > 0
+          ? {
+              descartados: descartadas,
+              observacao:
+                "Estas peças não foram exibidas porque não vieram de uma ferramenta nesta resposta. Não as cite.",
+            }
+          : {}),
+      },
+      cards: shown.map(toCard),
     };
   }
 
@@ -619,6 +709,8 @@ export function createToolExecutor(conversationId: string) {
           return await detalhesProduto(input);
         case "sugerir_combinacoes":
           return await sugerirCombinacoes(input);
+        case "mostrar_produtos":
+          return mostrarProdutos(input);
         case "informacoes_loja":
           return informacoesLoja(input);
         case "encaminhar_whatsapp":
