@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeSize } from "@/lib/erp-sync";
+import { requireAdmin } from "@/lib/admin-auth";
+import { hasValidServiceSecret } from "@/lib/service-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // ── GET /api/admin/erp-sync/mapping — Lista todos os mapeamentos ──────────────
 export async function GET() {
+  const unauthorized = await requireAdmin();
+  if (unauthorized) return unauthorized;
+
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("erp_color_mapping")
@@ -51,6 +56,12 @@ interface MappingBody {
 }
 
 export async function POST(request: NextRequest) {
+  // Integração ERP (servidor-para-servidor) autentica por secret; o painel, por sessão.
+  if (!hasValidServiceSecret(request)) {
+    const unauthorized = await requireAdmin();
+    if (unauthorized) return unauthorized;
+  }
+
   // ── Parse ────────────────────────────────────────────────────────────────────
   let body: MappingBody;
   try {

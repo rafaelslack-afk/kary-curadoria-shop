@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -7,6 +8,9 @@ export const dynamic = "force-dynamic";
 // GET /api/admin/sku/next?prefix=LIN
 // Retorna o próximo código base sequencial para o prefixo da categoria
 export async function GET(request: NextRequest) {
+  const unauthorized = await requireAdmin();
+  if (unauthorized) return unauthorized;
+
   const prefix = request.nextUrl.searchParams.get("prefix")?.trim().toUpperCase();
 
   if (!prefix) {

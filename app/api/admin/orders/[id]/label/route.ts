@@ -9,11 +9,15 @@ import {
   printMELabel,
   getMETracking,
 } from '@/lib/melhorenvio-shipping'
+import { requireAdmin } from "@/lib/admin-auth";
 
 export async function POST(
   _request: Request,
   { params }: { params: { id: string } }
 ) {
+  const unauthorized = await requireAdmin();
+  if (unauthorized) return unauthorized;
+
   const admin = createAdminClient()
 
   try {

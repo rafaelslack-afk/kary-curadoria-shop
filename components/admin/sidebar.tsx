@@ -21,6 +21,7 @@ import {
   ShoppingBag,
   RefreshCw,
   Settings,
+  Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -40,6 +41,7 @@ const menuItems = [
   { href: "/admin/clientes",   label: "Clientes",   icon: Users },
   { href: "/admin/abandonos",  label: "Abandonos",  icon: ShoppingBag },
   { href: "/admin/erp-sync",   label: "Sync ERP",   icon: RefreshCw },
+  { href: "/admin/chatbot",    label: "Assistente Virtual", icon: Bot },
   { href: "/admin/relatorios", label: "Relatórios", icon: BarChart3 },
 ];
 
