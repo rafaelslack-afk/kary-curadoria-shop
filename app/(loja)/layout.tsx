@@ -2,6 +2,7 @@ import { Navbar } from "@/components/loja/navbar";
 import { Footer } from "@/components/loja/footer";
 import { WhatsAppFloat } from "@/components/loja/whatsapp-float";
 import { FloatingCoupon } from "@/components/loja/floating-coupon";
+import { ChatWidget } from "@/components/loja/ChatWidget";
 import { isStorePrelaunchActive } from "@/lib/store-launch";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -54,6 +55,7 @@ export default async function LojaLayout({
       <Footer />
       <WhatsAppFloat />
       <FloatingCoupon />
+      <ChatWidget />
     </div>
   );
 }

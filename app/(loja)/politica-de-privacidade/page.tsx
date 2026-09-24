@@ -69,7 +69,7 @@ export default function PoliticaDePrivacidadePage() {
           Política de Privacidade
         </h1>
         <p className="text-xs text-[#A0622A]/80 tracking-wide mb-6" style={jost}>
-          Última atualização: agosto de 2026
+          Última atualização: setembro de 2026
         </p>
         <p className="text-sm text-[#5C3317]/65 leading-relaxed max-w-xl mx-auto" style={jost}>
           A Kary Curadoria está comprometida com a privacidade e a proteção dos seus dados pessoais.
@@ -172,6 +172,7 @@ export default function PoliticaDePrivacidadePage() {
           "Supabase: infraestrutura de banco de dados (servidores seguros)",
           "Google Analytics: análise de navegação de forma anonimizada",
           "Resend: envio de e-mails transacionais",
+          "Anthropic: processamento das mensagens enviadas ao assistente virtual",
         ]} />
         <Prose>
           <p className="mt-3">
@@ -229,8 +230,19 @@ export default function PoliticaDePrivacidadePage() {
           </p>
         </Prose>
 
-        {/* 7. Armazenamento e Segurança */}
-        <SectionTitle n="7">Armazenamento e Segurança</SectionTitle>
+        {/* 7. Assistente Virtual */}
+        <SectionTitle n="7">Assistente Virtual</SectionTitle>
+        <Prose>
+          <p>
+            Nosso site oferece um assistente virtual baseado em inteligência artificial, fornecido
+            pela Anthropic. As mensagens enviadas ao assistente são processadas por esse fornecedor
+            para gerar as respostas e ficam armazenadas por nós para melhoria do atendimento. Não
+            envie dados pessoais sensíveis (como CPF ou dados de cartão) pelo assistente.
+          </p>
+        </Prose>
+
+        {/* 8. Armazenamento e Segurança */}
+        <SectionTitle n="8">Armazenamento e Segurança</SectionTitle>
         <Prose>
           <p>
             Seus dados são armazenados em servidores seguros com criptografia em trânsito (SSL/TLS)
@@ -243,8 +255,8 @@ export default function PoliticaDePrivacidadePage() {
           </p>
         </Prose>
 
-        {/* 8. Seus Direitos */}
-        <SectionTitle n="8">Seus Direitos como Titular dos Dados</SectionTitle>
+        {/* 9. Seus Direitos */}
+        <SectionTitle n="9">Seus Direitos como Titular dos Dados</SectionTitle>
         <Prose>
           <p>Conforme a LGPD, você tem direito a:</p>
         </Prose>
@@ -268,8 +280,8 @@ export default function PoliticaDePrivacidadePage() {
           </p>
         </Prose>
 
-        {/* 9. Menores de Idade */}
-        <SectionTitle n="9">Menores de Idade</SectionTitle>
+        {/* 10. Menores de Idade */}
+        <SectionTitle n="10">Menores de Idade</SectionTitle>
         <Prose>
           <p>
             Nossos serviços não são direcionados a menores de 18 anos. Não coletamos
@@ -278,8 +290,8 @@ export default function PoliticaDePrivacidadePage() {
           </p>
         </Prose>
 
-        {/* 10. Alterações */}
-        <SectionTitle n="10">Alterações nesta Política</SectionTitle>
+        {/* 11. Alterações */}
+        <SectionTitle n="11">Alterações nesta Política</SectionTitle>
         <Prose>
           <p>
             Podemos atualizar esta política periodicamente. Alterações significativas serão
@@ -289,8 +301,8 @@ export default function PoliticaDePrivacidadePage() {
           </p>
         </Prose>
 
-        {/* 11. Contato */}
-        <SectionTitle n="11">Fale Conosco</SectionTitle>
+        {/* 12. Contato */}
+        <SectionTitle n="12">Fale Conosco</SectionTitle>
         <Prose>
           <p>
             Dúvidas sobre esta política ou sobre seus dados pessoais? Entre em contato:
