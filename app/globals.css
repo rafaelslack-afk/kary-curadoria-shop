@@ -57,3 +57,25 @@ body {
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+/* Assistente virtual: anel que expande e some, 3 vezes após o carregamento */
+@keyframes kvo-chat-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(160, 98, 42, 0.55); }
+  100% { box-shadow: 0 0 0 16px rgba(160, 98, 42, 0); }
+}
+.kvo-chat-pulse {
+  animation: kvo-chat-pulse 1.8s ease-out 1s 3;
+}
+@keyframes kvo-chat-invite-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.kvo-chat-invite {
+  animation: kvo-chat-invite-in 0.3s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kvo-chat-pulse,
+  .kvo-chat-invite {
+    animation: none;
+  }
+}
