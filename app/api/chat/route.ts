@@ -110,10 +110,11 @@ interface TurnUsage {
 async function runAssistant(
   history: Anthropic.MessageParam[],
   userMessage: string,
-  conversationId: string
+  conversationId: string,
+  priorSlugs: string[]
 ) {
   const client = getAnthropic();
-  const runTool = createToolExecutor(conversationId);
+  const runTool = createToolExecutor(conversationId, priorSlugs);
   const messages: Anthropic.MessageParam[] = [...history, { role: "user", content: userMessage }];
 
   const toolsUsed: { name: string; input: unknown }[] = [];
@@ -176,7 +177,7 @@ async function runAssistant(
       // chamada ao modelo.
       const reply = sanitizeReply(responseText);
       if (reply && toolUses.every((tu) => tu.name === "mostrar_produtos")) {
-        return { reply, products: cards.slice(0, MAX_CARDS), whatsappUrl, toolsUsed, usage };
+        return finish(reply);
       }
 
       // Todos os tool_result em uma única mensagem de usuário
@@ -184,15 +185,24 @@ async function runAssistant(
       continue;
     }
 
-    const reply =
-      response.stop_reason === "refusal" ? MSG.empty : sanitizeReply(responseText) || MSG.empty;
+    return finish(
+      response.stop_reason === "refusal" ? MSG.empty : sanitizeReply(responseText) || MSG.empty
+    );
+  }
 
+  function finish(reply: string) {
+    const products = cards.slice(0, MAX_CARDS);
     return {
       reply,
-      products: cards.slice(0, MAX_CARDS),
+      products,
       whatsappUrl,
       toolsUsed,
       usage,
+      // Gravados em tools_used: base do link "Falar com a consultora" e da
+      // validação de peças nas próximas mensagens
+      returned: runTool.returnedSlugs(),
+      shown: products.map((p) => p.slug),
+      interesse: runTool.interesseSlugs(),
     };
   }
 }
@@ -276,10 +286,18 @@ export async function POST(request: NextRequest) {
   // Histórico vem do banco — nunca do client
   const { data: historyRows } = await admin
     .from("chat_messages")
-    .select("role, content")
+    .select("role, content, tools_used")
     .eq("conversation_id", conversation.id)
     .order("created_at", { ascending: true })
     .limit(HISTORY_LIMIT);
+  const priorSlugs = Array.from(
+    new Set(
+      (historyRows ?? []).flatMap((m) => {
+        const returned = (m.tools_used as { returned?: unknown } | null)?.returned;
+        return Array.isArray(returned) ? returned.filter((s): s is string => typeof s === "string") : [];
+      })
+    )
+  );
   const history: Anthropic.MessageParam[] = (historyRows ?? [])
     .filter((m) => m.role === "user" || m.role === "assistant")
     .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
@@ -287,7 +305,7 @@ export async function POST(request: NextRequest) {
   // 5/6. Modelo + loop de ferramentas
   let outcome: Awaited<ReturnType<typeof runAssistant>> | null = null;
   try {
-    outcome = await runAssistant(history, message, conversation.id);
+    outcome = await runAssistant(history, message, conversation.id, priorSlugs);
   } catch (err) {
     // Nunca expor detalhe técnico ao client nem logar a chave ou o conteúdo
     // das mensagens: só classe, status HTTP e tipo de erro da Anthropic.
@@ -305,7 +323,13 @@ export async function POST(request: NextRequest) {
       role: "assistant",
       content: reply,
       tools_used: outcome
-        ? { tools: outcome.toolsUsed, usage: outcome.usage }
+        ? {
+            tools: outcome.toolsUsed,
+            usage: outcome.usage,
+            returned: outcome.returned,
+            shown: outcome.shown,
+            interesse: outcome.interesse,
+          }
         : { error: true },
     },
   ]);

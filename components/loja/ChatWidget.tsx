@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { MessageCircle, Send, X } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { buildWhatsAppUrl } from "@/lib/site";
 
 interface ProductCard {
   slug: string;
@@ -76,9 +77,26 @@ export function ChatWidget() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
+  // Link "Falar com a consultora": resumo da conversa montado no servidor
+  const [consultoraUrl, setConsultoraUrl] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const hidden = HIDDEN_PREFIXES.some((p) => pathname.startsWith(p));
+
+  function refreshConsultoraUrl() {
+    const conversationId = readStorage(CONVERSATION_KEY);
+    if (!conversationId) return;
+    fetch("/api/chat/whatsapp-link", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ conversation_id: conversationId, session_id: getSessionId() }),
+    })
+      .then((r) => r.json())
+      .then((d) => typeof d.url === "string" && setConsultoraUrl(d.url))
+      .catch(() => {
+        /* mantém o link anterior (ou o genérico) */
+      });
+  }
 
   useEffect(() => {
     fetch("/api/chat/status", { cache: "no-store" })
@@ -97,6 +115,7 @@ export function ChatWidget() {
         /* ignora histórico local corrompido */
       }
     }
+    refreshConsultoraUrl();
   }, []);
 
   useEffect(() => {
@@ -168,6 +187,7 @@ export function ChatWidget() {
           whatsappUrl: data.whatsapp_url ?? undefined,
         },
       ]);
+      refreshConsultoraUrl();
     } catch {
       pushMessages([
         ...withUser,
@@ -337,6 +357,16 @@ export function ChatWidget() {
             }}
             className="shrink-0 border-t border-[#D9C9B8] bg-white px-3 pt-3 pb-2"
           >
+            {messages.some((m) => m.role === "user") && (
+              <a
+                href={consultoraUrl ?? buildWhatsAppUrl("Olá! Vim pelo assistente do site.")}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block text-center text-[11px] text-[#A0622A] underline underline-offset-2 hover:text-[#5C3317] mb-2"
+              >
+                Falar com a consultora
+              </a>
+            )}
             <div className="flex items-end gap-2">
               <textarea
                 value={input}
