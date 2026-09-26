@@ -8,3 +8,7 @@ export function buildWhatsAppUrl(message?: string): string {
 
   return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
 }
+
+// Domínio público da loja (links enviados por WhatsApp apontam sempre para cá,
+// inclusive quando gerados em preview).
+export const SITE_URL = "https://karycuradoria.com.br";

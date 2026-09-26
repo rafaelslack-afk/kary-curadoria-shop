@@ -13,7 +13,7 @@ export const maxDuration = 60;
 
 const MODEL = "claude-haiku-4-5";
 const MAX_TOKENS = 1024;
-const MAX_TOOL_ROUNDS = 5;
+const MAX_TOOL_ROUNDS = 6;
 const MAX_CARDS = 6;
 const HISTORY_LIMIT = 40;
 
@@ -110,14 +110,16 @@ interface TurnUsage {
 async function runAssistant(
   history: Anthropic.MessageParam[],
   userMessage: string,
-  conversationId: string
+  conversationId: string,
+  priorSlugs: string[]
 ) {
   const client = getAnthropic();
-  const runTool = createToolExecutor(conversationId);
+  const runTool = createToolExecutor(conversationId, priorSlugs);
   const messages: Anthropic.MessageParam[] = [...history, { role: "user", content: userMessage }];
 
   const toolsUsed: { name: string; input: unknown }[] = [];
-  const cards = new Map<string, ChatProductCard>();
+  // Cards vêm só de mostrar_produtos (a última chamada da rodada vale)
+  let cards: ChatProductCard[] = [];
   let whatsappUrl: string | undefined;
   const usage: TurnUsage = {
     input_tokens: 0,
@@ -144,45 +146,63 @@ async function runAssistant(
     usage.cache_read_input_tokens += response.usage.cache_read_input_tokens ?? 0;
     usage.cache_creation_input_tokens += response.usage.cache_creation_input_tokens ?? 0;
 
+    const responseText = response.content
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join("\n");
+
     if (response.stop_reason === "tool_use" && !forceText) {
       messages.push({ role: "assistant", content: response.content });
 
       const toolUses = response.content.filter(
         (b): b is Anthropic.ToolUseBlock => b.type === "tool_use"
       );
-      const results: Anthropic.ToolResultBlockParam[] = await Promise.all(
-        toolUses.map(async (tu) => {
-          toolsUsed.push({ name: tu.name, input: tu.input });
-          const outcome = await runTool(tu.name, tu.input);
-          for (const card of outcome.cards ?? []) cards.set(card.slug, card);
-          if (outcome.whatsappUrl) whatsappUrl = outcome.whatsappUrl;
-          return {
-            type: "tool_result" as const,
-            tool_use_id: tu.id,
-            content: JSON.stringify(outcome.result),
-            ...(outcome.isError ? { is_error: true } : {}),
-          };
-        })
-      );
+      // Em sequência, na ordem pedida: mostrar_produtos depende do que as
+      // buscas anteriores da mesma mensagem retornaram.
+      const results: Anthropic.ToolResultBlockParam[] = [];
+      for (const tu of toolUses) {
+        toolsUsed.push({ name: tu.name, input: tu.input });
+        const outcome = await runTool(tu.name, tu.input);
+        if (outcome.cards) cards = outcome.cards;
+        if (outcome.whatsappUrl) whatsappUrl = outcome.whatsappUrl;
+        results.push({
+          type: "tool_result" as const,
+          tool_use_id: tu.id,
+          content: JSON.stringify(outcome.result),
+          ...(outcome.isError ? { is_error: true } : {}),
+        });
+      }
+
+      // Resposta já escrita e só faltava exibir os cards: encerra sem outra
+      // chamada ao modelo.
+      const reply = sanitizeReply(responseText);
+      if (reply && toolUses.every((tu) => tu.name === "mostrar_produtos")) {
+        return finish(reply);
+      }
+
       // Todos os tool_result em uma única mensagem de usuário
       messages.push({ role: "user", content: results });
       continue;
     }
 
-    const text = response.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("\n");
-    const reply =
-      response.stop_reason === "refusal" ? MSG.empty : sanitizeReply(text) || MSG.empty;
+    return finish(
+      response.stop_reason === "refusal" ? MSG.empty : sanitizeReply(responseText) || MSG.empty
+    );
+  }
 
+  function finish(reply: string) {
+    const products = cards.slice(0, MAX_CARDS);
     return {
       reply,
-      // Cards mais recentes primeiro, deduplicados por slug
-      products: Array.from(cards.values()).reverse().slice(0, MAX_CARDS),
+      products,
       whatsappUrl,
       toolsUsed,
       usage,
+      // Gravados em tools_used: base do link "Falar com a consultora" e da
+      // validação de peças nas próximas mensagens
+      returned: runTool.returnedSlugs(),
+      shown: products.map((p) => p.slug),
+      interesse: runTool.interesseSlugs(),
     };
   }
 }
@@ -266,10 +286,18 @@ export async function POST(request: NextRequest) {
   // Histórico vem do banco — nunca do client
   const { data: historyRows } = await admin
     .from("chat_messages")
-    .select("role, content")
+    .select("role, content, tools_used")
     .eq("conversation_id", conversation.id)
     .order("created_at", { ascending: true })
     .limit(HISTORY_LIMIT);
+  const priorSlugs = Array.from(
+    new Set(
+      (historyRows ?? []).flatMap((m) => {
+        const returned = (m.tools_used as { returned?: unknown } | null)?.returned;
+        return Array.isArray(returned) ? returned.filter((s): s is string => typeof s === "string") : [];
+      })
+    )
+  );
   const history: Anthropic.MessageParam[] = (historyRows ?? [])
     .filter((m) => m.role === "user" || m.role === "assistant")
     .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
@@ -277,7 +305,7 @@ export async function POST(request: NextRequest) {
   // 5/6. Modelo + loop de ferramentas
   let outcome: Awaited<ReturnType<typeof runAssistant>> | null = null;
   try {
-    outcome = await runAssistant(history, message, conversation.id);
+    outcome = await runAssistant(history, message, conversation.id, priorSlugs);
   } catch (err) {
     // Nunca expor detalhe técnico ao client nem logar a chave ou o conteúdo
     // das mensagens: só classe, status HTTP e tipo de erro da Anthropic.
@@ -295,7 +323,13 @@ export async function POST(request: NextRequest) {
       role: "assistant",
       content: reply,
       tools_used: outcome
-        ? { tools: outcome.toolsUsed, usage: outcome.usage }
+        ? {
+            tools: outcome.toolsUsed,
+            usage: outcome.usage,
+            returned: outcome.returned,
+            shown: outcome.shown,
+            interesse: outcome.interesse,
+          }
         : { error: true },
     },
   ]);
