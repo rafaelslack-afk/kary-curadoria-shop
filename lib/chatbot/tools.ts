@@ -21,9 +21,10 @@ export interface ChatProductCard {
   price: number;
   image: string | null;
   soldOut?: boolean;
-  // Preço dos tamanhos plus size (G1/G2/G3), quando a peça tem esses tamanhos
-  // ativos. `from`: acréscimos diferentes entre G1, G2 e G3 → "a partir de".
-  plusSize?: { price: number; from: boolean };
+  // Preço dos tamanhos plus size (G1/G2/G3) que a peça tem ativos. `label`:
+  // esses tamanhos ("G1", "G1 e G2", "G1 a G3"); `from`: preços diferentes
+  // entre eles → "a partir de".
+  plusSize?: { label: string; price: number; from: boolean };
 }
 
 // Motivos de encaminhamento que significam "a loja não tem a peça"
@@ -363,17 +364,22 @@ const PLUS_SIZES = ["G1", "G2", "G3"];
 // Mesma fonte da página do produto: preço base + acréscimo configurado.
 function plusSizePrice(p: ProductRow, markups: Record<string, number>): ChatProductCard["plusSize"] {
   const base = Number(p.price);
-  const sizes = uniq(
-    pdpVariants(p)
-      .map((v) => v.size.trim().toUpperCase())
-      .filter((s) => PLUS_SIZES.includes(s))
-  );
+  // Só variantes ativas (pdpVariants), na ordem G1, G2, G3
+  const active = new Set(pdpVariants(p).map((v) => v.size.trim().toUpperCase()));
+  const sizes = PLUS_SIZES.filter((s) => active.has(s));
   if (sizes.length === 0) return undefined;
-  const price = Math.min(...sizes.map((s) => calcularPrecoComPlusSize(base, s, markups)));
-  const from = new Set(PLUS_SIZES.map((s) => markups[s] || 0)).size > 1;
+  const prices = sizes.map((s) => calcularPrecoComPlusSize(base, s, markups));
+  const price = Math.min(...prices);
+  const from = new Set(prices).size > 1;
   // Sem acréscimo configurado, a linha repetiria o preço base
   if (price === base && !from) return undefined;
-  return { price, from };
+  return { label: plusSizeLabel(sizes), price, from };
+}
+
+// "G1" · "G1 e G2" · "G1 a G3" (só os tamanhos que a peça tem)
+function plusSizeLabel(sizes: string[]): string {
+  if (sizes.length === PLUS_SIZES.length) return `${sizes[0]} a ${sizes[sizes.length - 1]}`;
+  return sizes.join(" e ");
 }
 
 function toCard(p: ProductRow, markups: Record<string, number>): ChatProductCard {

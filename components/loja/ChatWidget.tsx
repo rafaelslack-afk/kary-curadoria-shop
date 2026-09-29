@@ -14,7 +14,7 @@ interface ProductCard {
   image: string | null;
   soldOut?: boolean;
   // Preço de G1/G2/G3 calculado no servidor (mesma fonte da página do produto)
-  plusSize?: { price: number; from: boolean };
+  plusSize?: { label?: string; price: number; from: boolean };
 }
 
 interface ChatMessage {
@@ -314,7 +314,8 @@ export function ChatWidget() {
                           <p className="text-xs font-medium text-[#A0622A]">{formatCurrency(p.price)}</p>
                           {p.plusSize && (
                             <p className="text-[10px] leading-tight text-[#8B6B4E] -mt-0.5">
-                              G1 a G3: {p.plusSize.from ? "a partir de " : ""}
+                              {/* label ausente: card salvo na sessão antes deste ajuste */}
+                              {p.plusSize.label ?? "G1 a G3"}: {p.plusSize.from ? "a partir de " : ""}
                               {formatCurrency(p.plusSize.price)}
                             </p>
                           )}
