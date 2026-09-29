@@ -2,6 +2,9 @@
 // Server-only (usa service role).
 import { createNoStoreAdminClient } from "@/lib/supabase/admin-no-store";
 
+// Modelo usado nas respostas e na chamada de teste do desligamento automático
+export const CHAT_MODEL = "claude-haiku-4-5";
+
 // Limites pensados para CGNAT: muitas clientes de operadora móvel dividem o
 // mesmo IP, então o limite "de uso normal" é por sessão (session_id do
 // navegador) e os limites por IP são tetos contra abuso em massa/scripts.

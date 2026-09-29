@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getChatbotConfig } from "@/lib/chatbot/config";
 import { requireAdmin } from "@/lib/admin-auth";
+import { getCircuitStatus } from "@/lib/chatbot/circuit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,6 +35,7 @@ export async function GET() {
 
   const admin = createAdminClient();
   const { enabled } = await getChatbotConfig();
+  const circuit = await getCircuitStatus();
 
   const today = spStartOfDay(0);
   const d7 = spStartOfDay(6);
@@ -78,6 +80,7 @@ export async function GET() {
   return NextResponse.json(
     {
       enabled,
+      circuit,
       stats: {
         today: inRange(today).length,
         last7: inRange(d7).length,

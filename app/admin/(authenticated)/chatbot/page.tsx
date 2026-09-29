@@ -14,6 +14,22 @@ interface Stats {
   monthCostUsd: number;
 }
 
+interface CircuitStatus {
+  phase: "closed" | "open" | "half_open";
+  opened_at: string | null;
+  open_until: string | null;
+  reason: string | null;
+  failures: number | null;
+}
+
+function formatTime(iso: string) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "America/Sao_Paulo",
+  }).format(new Date(iso));
+}
+
 interface ConversationRow {
   id: string;
   page_origin: string | null;
@@ -53,6 +69,8 @@ export default function ChatbotAdminPage() {
   const [selected, setSelected] = useState<ConversationRow | null>(null);
   const [history, setHistory] = useState<MessageRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [circuit, setCircuit] = useState<CircuitStatus | null>(null);
+  const [retrying, setRetrying] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -61,6 +79,7 @@ export default function ChatbotAdminPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Erro ao carregar.");
       setEnabled(data.enabled);
+      setCircuit(data.circuit ?? null);
       setStats(data.stats);
       setConversations(data.conversations ?? []);
     } catch (e) {
@@ -91,6 +110,24 @@ export default function ChatbotAdminPage() {
       setError((e as Error).message);
     } finally {
       setToggling(false);
+    }
+  }
+
+  async function retryNow() {
+    setRetrying(true);
+    setError("");
+    try {
+      const res = await fetch("/api/admin/chatbot/circuit", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Erro ao tentar religar.");
+      setCircuit(data.circuit);
+      if (data.circuit?.phase !== "closed") {
+        setError("A API da Anthropic ainda está falhando. O assistente continua pausado.");
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setRetrying(false);
     }
   }
 
@@ -153,6 +190,34 @@ export default function ChatbotAdminPage() {
           </label>
         )}
       </div>
+
+      {/* Desligamento automático por falhas da API (independente do botão
+          Ligado/Desligado, que tem prioridade) */}
+      {enabled && circuit && (
+        circuit.phase === "closed" ? (
+          <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm px-4 py-3 rounded-lg mb-4">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            Funcionando
+          </div>
+        ) : (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-amber-50 border border-amber-200 text-amber-900 text-sm px-4 py-3 rounded-lg mb-4">
+            <span className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+              Pausado automaticamente
+              {circuit.opened_at ? ` desde ${formatTime(circuit.opened_at)}` : ""}
+              {circuit.reason ? ` (motivo: ${circuit.reason})` : ""}
+            </span>
+            <button
+              type="button"
+              onClick={retryNow}
+              disabled={retrying}
+              className="shrink-0 text-xs font-medium bg-[#A0622A] text-white rounded-md px-3 py-1.5 hover:bg-[#5C3317] transition-colors disabled:opacity-50"
+            >
+              {retrying ? "Testando..." : "Tentar religar agora"}
+            </button>
+          </div>
+        )
+      )}
 
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg mb-4">{error}</div>
