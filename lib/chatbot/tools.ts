@@ -21,7 +21,13 @@ export interface ChatProductCard {
   price: number;
   image: string | null;
   soldOut?: boolean;
+  // Preço dos tamanhos plus size (G1/G2/G3), quando a peça tem esses tamanhos
+  // ativos. `from`: acréscimos diferentes entre G1, G2 e G3 → "a partir de".
+  plusSize?: { price: number; from: boolean };
 }
+
+// Motivos de encaminhamento que significam "a loja não tem a peça"
+export const NOT_FOUND_MOTIVOS = new Set(["novidades", "nao_encontrado", "nao_encontrada", "peca_nao_encontrada"]);
 
 export interface ToolOutcome {
   result: unknown;
@@ -352,14 +358,34 @@ const DISPONIBILIDADE_ORDEM: Record<Disponibilidade, number> = {
   esgotado: 1,
 };
 
-function toCard(p: ProductRow): ChatProductCard {
+const PLUS_SIZES = ["G1", "G2", "G3"];
+
+// Mesma fonte da página do produto: preço base + acréscimo configurado.
+function plusSizePrice(p: ProductRow, markups: Record<string, number>): ChatProductCard["plusSize"] {
+  const base = Number(p.price);
+  const sizes = uniq(
+    pdpVariants(p)
+      .map((v) => v.size.trim().toUpperCase())
+      .filter((s) => PLUS_SIZES.includes(s))
+  );
+  if (sizes.length === 0) return undefined;
+  const price = Math.min(...sizes.map((s) => calcularPrecoComPlusSize(base, s, markups)));
+  const from = new Set(PLUS_SIZES.map((s) => markups[s] || 0)).size > 1;
+  // Sem acréscimo configurado, a linha repetiria o preço base
+  if (price === base && !from) return undefined;
+  return { price, from };
+}
+
+function toCard(p: ProductRow, markups: Record<string, number>): ChatProductCard {
   const soldOut = productAvailability(pdpVariants(p)) === "esgotado";
+  const plusSize = plusSizePrice(p, markups);
   return {
     slug: p.slug,
     name: p.name,
     price: Number(p.price),
     image: p.images?.[0] ?? null,
     ...(soldOut ? { soldOut: true } : {}),
+    ...(plusSize ? { plusSize } : {}),
   };
 }
 
@@ -407,7 +433,10 @@ const NOT_FOUND_HINT =
 // `priorSlugs`: peças retornadas pelas ferramentas em mensagens anteriores da
 // conversa (gravadas em chat_messages.tools_used.returned) — as únicas, junto
 // com as desta rodada, que podem ir na mensagem para a consultora.
-export function createToolExecutor(conversationId: string, priorSlugs: string[] = []) {
+// `priorSearched`: se buscar_produtos ou detalhes_produto já rodou em alguma
+// mensagem anterior da conversa (trava do encaminhamento por "novidades").
+export function createToolExecutor(conversationId: string, priorSlugs: string[] = [], priorSearched = false) {
+  let searched = priorSearched;
   let catalogPromise: Promise<ProductRow[]> | null = null;
   let markupsPromise: Promise<Record<string, number>> | null = null;
   // Peças retornadas pelas ferramentas de catálogo nesta rodada: as únicas
@@ -472,6 +501,7 @@ export function createToolExecutor(conversationId: string, priorSlugs: string[] 
   }
 
   async function buscarProdutos(input: Record<string, unknown>): Promise<ToolOutcome> {
+    searched = true;
     const termo = str(input.termo);
     const categoria = stem(str(input.categoria));
     const corPedida = str(input.cor);
@@ -621,6 +651,7 @@ export function createToolExecutor(conversationId: string, priorSlugs: string[] 
   }
 
   async function detalhesProduto(input: Record<string, unknown>): Promise<ToolOutcome> {
+    searched = true;
     const slug = str(input.slug, 300) || str(input.referencia, 300);
     const catalog = await loadCatalog();
     const p = resolveProduct(catalog, slug);
@@ -715,7 +746,7 @@ export function createToolExecutor(conversationId: string, priorSlugs: string[] 
     };
   }
 
-  function mostrarProdutos(input: Record<string, unknown>): ToolOutcome {
+  async function mostrarProdutos(input: Record<string, unknown>): Promise<ToolOutcome> {
     const refs = (Array.isArray(input.refs) ? input.refs : [])
       .map((r) => str(r, 300))
       .filter(Boolean)
@@ -747,8 +778,14 @@ export function createToolExecutor(conversationId: string, priorSlugs: string[] 
             }
           : {}),
       },
-      cards: shown.map(toCard),
+      cards: await toCards(shown),
     };
+  }
+
+  async function toCards(products: ProductRow[]): Promise<ChatProductCard[]> {
+    if (products.length === 0) return [];
+    const markups = await loadMarkups();
+    return products.map((p) => toCard(p, markups));
   }
 
   function informacoesLoja(input: Record<string, unknown>): ToolOutcome {
@@ -759,6 +796,18 @@ export function createToolExecutor(conversationId: string, priorSlugs: string[] 
   }
 
   async function encaminharWhatsapp(input: Record<string, unknown>): Promise<ToolOutcome> {
+    // Trava: não dizer que a loja não tem a peça sem ter consultado o catálogo.
+    // Os demais motivos (atacado, troca, reclamação, pessoa) encaminham direto.
+    if (NOT_FOUND_MOTIVOS.has(str(input.motivo).toLowerCase()) && !searched) {
+      return {
+        result: {
+          encaminhado: false,
+          erro: "Faça uma busca no catálogo com buscar_produtos antes de informar que a peça não existe.",
+        },
+        isError: true,
+      };
+    }
+
     const refs = (Array.isArray(input.refs_de_interesse) ? input.refs_de_interesse : [])
       .map((r) => str(r, 300))
       .filter(Boolean)
@@ -816,7 +865,7 @@ export function createToolExecutor(conversationId: string, priorSlugs: string[] 
         case "sugerir_combinacoes":
           return await sugerirCombinacoes(input);
         case "mostrar_produtos":
-          return mostrarProdutos(input);
+          return await mostrarProdutos(input);
         case "informacoes_loja":
           return informacoesLoja(input);
         case "encaminhar_whatsapp":
@@ -835,6 +884,6 @@ export function createToolExecutor(conversationId: string, priorSlugs: string[] 
     interesseSlugs: () => interesse,
     // Cards de reserva quando a resposta fala de peças consultadas em
     // detalhes_produto e o modelo não chamou mostrar_produtos
-    detalhesCards: (max: number) => detalhadas.slice(0, max).map(toCard),
+    detalhesCards: (max: number) => toCards(detalhadas.slice(0, max)),
   });
 }
