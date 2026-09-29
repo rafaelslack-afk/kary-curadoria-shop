@@ -415,6 +415,8 @@ export function createToolExecutor(conversationId: string, priorSlugs: string[] 
   const returned = new Map<string, ProductRow>();
   // Peças validadas que foram na mensagem de WhatsApp desta rodada
   let interesse: string[] = [];
+  // Peças consultadas em detalhes_produto nesta rodada, na ordem das chamadas
+  const detalhadas: ProductRow[] = [];
 
   function remember(p: ProductRow) {
     returned.set(p.slug, p);
@@ -624,6 +626,7 @@ export function createToolExecutor(conversationId: string, priorSlugs: string[] 
     const p = resolveProduct(catalog, slug);
     if (!p) return { result: { encontrado: false, busca: slug, observacao: NOT_FOUND_HINT } };
     remember(p);
+    if (!detalhadas.includes(p)) detalhadas.push(p);
 
     const markups = await loadMarkups();
     const variants = pdpVariants(p);
@@ -830,5 +833,8 @@ export function createToolExecutor(conversationId: string, priorSlugs: string[] 
     // Para gravar em tools_used: permite validar peças em mensagens futuras
     returnedSlugs: () => Array.from(returned.keys()),
     interesseSlugs: () => interesse,
+    // Cards de reserva quando a resposta fala de peças consultadas em
+    // detalhes_produto e o modelo não chamou mostrar_produtos
+    detalhesCards: (max: number) => detalhadas.slice(0, max).map(toCard),
   });
 }

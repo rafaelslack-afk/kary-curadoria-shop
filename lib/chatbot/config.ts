@@ -2,15 +2,22 @@
 // Server-only (usa service role).
 import { createNoStoreAdminClient } from "@/lib/supabase/admin-no-store";
 
+// Limites pensados para CGNAT: muitas clientes de operadora móvel dividem o
+// mesmo IP, então o limite "de uso normal" é por sessão (session_id do
+// navegador) e os limites por IP são tetos contra abuso em massa/scripts.
 export interface ChatbotLimits {
   max_messages_per_conversation: number;
+  max_conversations_per_session_day: number;
   max_conversations_per_ip_day: number;
+  max_messages_per_ip_hour: number;
   max_input_chars: number;
 }
 
 const DEFAULT_LIMITS: ChatbotLimits = {
   max_messages_per_conversation: 20,
-  max_conversations_per_ip_day: 10,
+  max_conversations_per_session_day: 5,
+  max_conversations_per_ip_day: 100,
+  max_messages_per_ip_hour: 60,
   max_input_chars: 500,
 };
 

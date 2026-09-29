@@ -15,6 +15,7 @@ const MODEL = "claude-haiku-4-5";
 const MAX_TOKENS = 1024;
 const MAX_TOOL_ROUNDS = 6;
 const MAX_CARDS = 6;
+const MAX_DETAIL_CARDS = 3;
 const HISTORY_LIMIT = 40;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -25,8 +26,10 @@ const MSG = {
     "Nosso assistente está indisponível no momento. Fale com a nossa consultora pelo WhatsApp que ela te ajuda!",
   conversationLimit:
     "Chegamos ao limite desta conversa com o assistente. Para continuar, fale com a nossa consultora pelo WhatsApp.",
-  ipLimit:
+  dailyLimit:
     "Você já conversou bastante com o assistente hoje. Para continuar, fale com a nossa consultora pelo WhatsApp.",
+  hourlyLimit:
+    "Recebemos muitas mensagens em pouco tempo. Tente de novo daqui a alguns minutos ou fale com a nossa consultora pelo WhatsApp.",
   error:
     "Tive um problema para responder agora. Você pode tentar de novo em instantes ou falar com a nossa consultora pelo WhatsApp.",
   empty: "Não consegui formular uma resposta. Pode reformular a pergunta, ou falar com a nossa consultora pelo WhatsApp?",
@@ -45,6 +48,28 @@ function getAnthropic(): Anthropic {
   // Lê ANTHROPIC_API_KEY do ambiente (server-only). Nunca logar a chave.
   if (!anthropic) anthropic = new Anthropic({ timeout: 25_000, maxRetries: 1 });
   return anthropic;
+}
+
+// Frases usadas quando o modelo encaminha para o WhatsApp sem escrever texto
+const FORWARD_REPLY = {
+  notFound:
+    "Não encontrei essa peça na loja virtual, mas a nossa consultora pode te contar sobre novidades e peças que ainda não estão no site. É só tocar no botão abaixo.",
+  other: "A nossa consultora pode te ajudar com isso. É só tocar no botão abaixo.",
+};
+const NOT_FOUND_MOTIVOS = new Set(["novidades", "nao_encontrado", "nao_encontrada", "peca_nao_encontrada"]);
+
+type LimitType =
+  | "input_chars"
+  | "messages_per_conversation"
+  | "conversations_per_session_day"
+  | "conversations_per_ip_day"
+  | "messages_per_ip_hour";
+
+// Registro de limite atingido, para acompanhar se clientes reais estão sendo
+// barradas. Só o tipo de limite e o valor configurado: nada de IP, sessão,
+// conversa ou texto.
+function logLimit(type: LimitType, limit: number) {
+  console.warn(`[chat] limite atingido: tipo=${type} limite=${limit}`);
 }
 
 function friendly(reply: string, conversationId: string | null, status = 200) {
@@ -120,7 +145,11 @@ async function runAssistant(
   const toolsUsed: { name: string; input: unknown }[] = [];
   // Cards vêm só de mostrar_produtos (a última chamada da rodada vale)
   let cards: ChatProductCard[] = [];
+  let calledMostrar = false;
   let whatsappUrl: string | undefined;
+  let forwardMotivo = "";
+  // Texto escrito junto com uma chamada de ferramenta (a rodada final pode vir vazia)
+  let textWithTools = "";
   const usage: TurnUsage = {
     input_tokens: 0,
     output_tokens: 0,
@@ -163,8 +192,13 @@ async function runAssistant(
       for (const tu of toolUses) {
         toolsUsed.push({ name: tu.name, input: tu.input });
         const outcome = await runTool(tu.name, tu.input);
+        if (tu.name === "mostrar_produtos") calledMostrar = true;
         if (outcome.cards) cards = outcome.cards;
-        if (outcome.whatsappUrl) whatsappUrl = outcome.whatsappUrl;
+        if (outcome.whatsappUrl) {
+          whatsappUrl = outcome.whatsappUrl;
+          const motivo = (tu.input as { motivo?: unknown } | null)?.motivo;
+          forwardMotivo = typeof motivo === "string" ? motivo.trim().toLowerCase() : "";
+        }
         results.push({
           type: "tool_result" as const,
           tool_use_id: tu.id,
@@ -176,6 +210,7 @@ async function runAssistant(
       // Resposta já escrita e só faltava exibir os cards: encerra sem outra
       // chamada ao modelo.
       const reply = sanitizeReply(responseText);
+      if (reply) textWithTools = reply;
       if (reply && toolUses.every((tu) => tu.name === "mostrar_produtos")) {
         return finish(reply);
       }
@@ -186,12 +221,25 @@ async function runAssistant(
     }
 
     return finish(
-      response.stop_reason === "refusal" ? MSG.empty : sanitizeReply(responseText) || MSG.empty
+      (response.stop_reason === "refusal" ? "" : sanitizeReply(responseText) || textWithTools) ||
+        fallbackReply()
     );
   }
 
+  // Sem texto do modelo: se ele encaminhou para o WhatsApp, uma frase fixa
+  // apresenta o botão; a mensagem de falha fica só para quando não há nada.
+  function fallbackReply(): string {
+    if (!whatsappUrl) return MSG.empty;
+    return NOT_FOUND_MOTIVOS.has(forwardMotivo) ? FORWARD_REPLY.notFound : FORWARD_REPLY.other;
+  }
+
   function finish(reply: string) {
-    const products = cards.slice(0, MAX_CARDS);
+    // Rede de segurança: o modelo falou de peça consultada em detalhes_produto
+    // mas não chamou mostrar_produtos → cards dessas peças (dados do banco,
+    // só peças retornadas por ferramenta nesta rodada).
+    const products = (
+      !calledMostrar && cards.length === 0 ? runTool.detalhesCards(MAX_DETAIL_CARDS) : cards
+    ).slice(0, MAX_CARDS);
     return {
       reply,
       products,
@@ -234,6 +282,7 @@ export async function POST(request: NextRequest) {
   // 2. Validação da mensagem
   if (!message) return NextResponse.json({ error: "empty_message" }, { status: 400 });
   if (message.length > limits.max_input_chars) {
+    logLimit("input_chars", limits.max_input_chars);
     return NextResponse.json(
       {
         error: "message_too_long",
@@ -244,8 +293,25 @@ export async function POST(request: NextRequest) {
   }
 
   const admin = createAdminClient();
+  const ipHash = hashIp(request);
+  const now = Date.now();
 
-  // 3/4. Conversa existente (precisa pertencer à mesma sessão) ou nova
+  // 3. Teto por IP/hora (vale para toda mensagem): freia scripts sem barrar
+  //    clientes que dividem IP por CGNAT.
+  if (ipHash) {
+    const { count } = await admin
+      .from("chat_messages")
+      .select("id, chat_conversations!inner(ip_hash)", { count: "exact", head: true })
+      .eq("chat_conversations.ip_hash", ipHash)
+      .eq("role", "user")
+      .gte("created_at", new Date(now - 60 * 60 * 1000).toISOString());
+    if ((count ?? 0) >= limits.max_messages_per_ip_hour) {
+      logLimit("messages_per_ip_hour", limits.max_messages_per_ip_hour);
+      return friendly(MSG.hourlyLimit, requestedConversationId);
+    }
+  }
+
+  // 4. Conversa existente (precisa pertencer à mesma sessão) ou nova
   let conversation: { id: string; message_count: number; input_tokens: number; output_tokens: number } | null =
     null;
   if (requestedConversationId) {
@@ -259,15 +325,30 @@ export async function POST(request: NextRequest) {
   }
 
   if (!conversation) {
-    const ipHash = hashIp(request);
+    const since = new Date(now - 24 * 60 * 60 * 1000).toISOString();
+
+    // Limite de uso normal: conversas novas por sessão do navegador
+    const { count: sessionCount } = await admin
+      .from("chat_conversations")
+      .select("id", { count: "exact", head: true })
+      .eq("session_id", sessionId)
+      .gte("created_at", since);
+    if ((sessionCount ?? 0) >= limits.max_conversations_per_session_day) {
+      logLimit("conversations_per_session_day", limits.max_conversations_per_session_day);
+      return friendly(MSG.dailyLimit, null);
+    }
+
+    // Teto por IP/dia: só contra abuso em massa (o session_id é do client)
     if (ipHash) {
-      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const { count } = await admin
+      const { count: ipCount } = await admin
         .from("chat_conversations")
         .select("id", { count: "exact", head: true })
         .eq("ip_hash", ipHash)
         .gte("created_at", since);
-      if ((count ?? 0) >= limits.max_conversations_per_ip_day) return friendly(MSG.ipLimit, null);
+      if ((ipCount ?? 0) >= limits.max_conversations_per_ip_day) {
+        logLimit("conversations_per_ip_day", limits.max_conversations_per_ip_day);
+        return friendly(MSG.dailyLimit, null);
+      }
     }
 
     const { data: created, error } = await admin
@@ -280,6 +361,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (conversation.message_count >= limits.max_messages_per_conversation) {
+    logLimit("messages_per_conversation", limits.max_messages_per_conversation);
     return friendly(MSG.conversationLimit, conversation.id);
   }
 
@@ -313,7 +395,7 @@ export async function POST(request: NextRequest) {
   }
 
   const reply = outcome?.reply ?? MSG.error;
-  const now = new Date().toISOString();
+  const updatedAt = new Date().toISOString();
 
   // 7. Persistência
   await admin.from("chat_messages").insert([
@@ -345,7 +427,7 @@ export async function POST(request: NextRequest) {
       message_count: conversation.message_count + 1,
       input_tokens: conversation.input_tokens + totalInput,
       output_tokens: conversation.output_tokens + (outcome?.usage.output_tokens ?? 0),
-      updated_at: now,
+      updated_at: updatedAt,
     })
     .eq("id", conversation.id);
 
