@@ -2,7 +2,15 @@ import { createHmac } from "crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getChatbotConfig } from "@/lib/chatbot/config";
+import { CHAT_MODEL, getChatbotConfig } from "@/lib/chatbot/config";
+import {
+  claimProbe,
+  classifyApiError,
+  closeCircuit,
+  getCircuitStatus,
+  recordApiFailure,
+  reopenCircuit,
+} from "@/lib/chatbot/circuit";
 import { CHAT_SYSTEM_PROMPT } from "@/lib/chatbot/system-prompt";
 import { CHAT_TOOLS, NOT_FOUND_MOTIVOS, createToolExecutor, type ChatProductCard } from "@/lib/chatbot/tools";
 import { buildWhatsAppUrl } from "@/lib/site";
@@ -11,7 +19,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const MODEL = "claude-haiku-4-5";
+const MODEL = CHAT_MODEL;
 const MAX_TOKENS = 1024;
 const MAX_TOOL_ROUNDS = 6;
 const MAX_CARDS = 6;
@@ -296,6 +304,16 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Desligamento automático por falhas da API: responde sem chamar a API.
+  // Depois da pausa (half-open), só uma requisição passa como teste.
+  const circuit = await getCircuitStatus();
+  let isProbe = false;
+  if (circuit.phase === "open") return friendly(MSG.disabled, requestedConversationId);
+  if (circuit.phase === "half_open") {
+    if (!(await claimProbe())) return friendly(MSG.disabled, requestedConversationId);
+    isProbe = true;
+  }
+
   const admin = createAdminClient();
   const ipHash = hashIp(request);
   const now = Date.now();
@@ -400,7 +418,16 @@ export async function POST(request: NextRequest) {
     // Nunca expor detalhe técnico ao client nem logar a chave ou o conteúdo
     // das mensagens: só classe, status HTTP e tipo de erro da Anthropic.
     console.error("[chat] falha ao gerar resposta:", describeError(err));
+    const failureType = classifyApiError(err);
+    if (failureType) {
+      await (isProbe ? reopenCircuit(failureType) : recordApiFailure(failureType)).catch(() => {
+        /* registro do circuito não pode derrubar a resposta */
+      });
+    }
   }
+  // Chamada de teste deu certo: religa. (Se parou antes da API, por limite
+  // ou erro de banco, a reserva do teste expira e outra requisição testa.)
+  if (isProbe && outcome) await closeCircuit().catch(() => {});
 
   const reply = outcome?.reply ?? MSG.error;
   const updatedAt = new Date().toISOString();
