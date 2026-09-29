@@ -117,7 +117,7 @@ export function formatCEP(cep: string): string {
 }
 
 /**
- * Formata telefone: 11992169377 → (11) 99216-9377
+ * Formata telefone: 11913187730 → (11) 91318-7730
  */
 export function formatPhone(phone: string): string {
   const cleaned = phone.replace(/\D/g, "");

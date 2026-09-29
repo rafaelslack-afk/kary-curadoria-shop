@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Copy, Check, Loader2, Clock } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { buildWhatsAppUrl } from "@/lib/site";
 
 interface PixData {
   orderId: string;
@@ -167,7 +168,7 @@ function PixContent() {
         </p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center mt-4">
           <a
-            href="https://wa.me/5511992169377"
+            href={buildWhatsAppUrl()}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-block bg-kc text-white text-[11px] tracking-[0.18em] uppercase px-6 py-3 hover:bg-kc-dark transition-colors"

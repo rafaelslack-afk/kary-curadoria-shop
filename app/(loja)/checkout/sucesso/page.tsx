@@ -8,6 +8,7 @@ import { trackEvent } from "@/lib/analytics";
 import { pixelEvent } from "@/lib/pixel";
 import { GoogleCustomerReviewsOptIn } from "@/components/loja/GoogleCustomerReviewsOptIn";
 import { calcularDataEntregaEstimada } from "@/lib/google-customer-reviews";
+import { buildWhatsAppUrl } from "@/lib/site";
 
 // Status que indicam pagamento confirmado (paid ou etapas posteriores do
 // fluxo) — nunca 'pending', 'cancelled' ou qualquer outro.
@@ -250,7 +251,7 @@ export default function SucessoPage() {
         </Link>
         <div>
           <a
-            href="https://wa.me/5511992169377"
+            href={buildWhatsAppUrl()}
             target="_blank"
             rel="noopener noreferrer"
             className="text-[10px] text-kc-muted hover:text-kc-dark transition-colors underline underline-offset-2"

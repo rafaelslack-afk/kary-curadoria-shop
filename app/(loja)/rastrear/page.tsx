@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Search, Package, Truck, MapPin, ChevronLeft } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
+import { buildWhatsAppUrl } from "@/lib/site";
 import type { OrderStatus, PaymentMethod } from "@/types/database";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -349,7 +350,7 @@ export default function RastrearPage() {
             <div className="text-center py-4">
               <p className="text-xs text-kc-muted mb-2">Dúvidas sobre seu pedido?</p>
               <a
-                href="https://wa.me/5511992169377"
+                href={buildWhatsAppUrl()}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 text-[11px] tracking-[0.16em] uppercase text-kc hover:text-kc-dark transition-colors"
