@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getChatbotConfig } from "@/lib/chatbot/config";
 import { CHAT_SYSTEM_PROMPT } from "@/lib/chatbot/system-prompt";
-import { CHAT_TOOLS, createToolExecutor, type ChatProductCard } from "@/lib/chatbot/tools";
+import { CHAT_TOOLS, NOT_FOUND_MOTIVOS, createToolExecutor, type ChatProductCard } from "@/lib/chatbot/tools";
 import { buildWhatsAppUrl } from "@/lib/site";
 
 export const runtime = "nodejs";
@@ -56,7 +56,6 @@ const FORWARD_REPLY = {
     "Não encontrei essa peça na loja virtual, mas a nossa consultora pode te contar sobre novidades e peças que ainda não estão no site. É só tocar no botão abaixo.",
   other: "A nossa consultora pode te ajudar com isso. É só tocar no botão abaixo.",
 };
-const NOT_FOUND_MOTIVOS = new Set(["novidades", "nao_encontrado", "nao_encontrada", "peca_nao_encontrada"]);
 
 type LimitType =
   | "input_chars"
@@ -136,10 +135,11 @@ async function runAssistant(
   history: Anthropic.MessageParam[],
   userMessage: string,
   conversationId: string,
-  priorSlugs: string[]
+  priorSlugs: string[],
+  priorSearched: boolean
 ) {
   const client = getAnthropic();
-  const runTool = createToolExecutor(conversationId, priorSlugs);
+  const runTool = createToolExecutor(conversationId, priorSlugs, priorSearched);
   const messages: Anthropic.MessageParam[] = [...history, { role: "user", content: userMessage }];
 
   const toolsUsed: { name: string; input: unknown }[] = [];
@@ -189,10 +189,12 @@ async function runAssistant(
       // Em sequência, na ordem pedida: mostrar_produtos depende do que as
       // buscas anteriores da mesma mensagem retornaram.
       const results: Anthropic.ToolResultBlockParam[] = [];
+      let anyToolError = false;
       for (const tu of toolUses) {
         toolsUsed.push({ name: tu.name, input: tu.input });
         const outcome = await runTool(tu.name, tu.input);
         if (tu.name === "mostrar_produtos") calledMostrar = true;
+        if (outcome.isError) anyToolError = true;
         if (outcome.cards) cards = outcome.cards;
         if (outcome.whatsappUrl) {
           whatsappUrl = outcome.whatsappUrl;
@@ -210,7 +212,9 @@ async function runAssistant(
       // Resposta já escrita e só faltava exibir os cards: encerra sem outra
       // chamada ao modelo.
       const reply = sanitizeReply(responseText);
-      if (reply) textWithTools = reply;
+      // Texto de uma chamada recusada (ex.: "não temos" antes de buscar) não
+      // serve de resposta de reserva.
+      if (reply && !anyToolError) textWithTools = reply;
       if (reply && toolUses.every((tu) => tu.name === "mostrar_produtos")) {
         return finish(reply);
       }
@@ -233,12 +237,12 @@ async function runAssistant(
     return NOT_FOUND_MOTIVOS.has(forwardMotivo) ? FORWARD_REPLY.notFound : FORWARD_REPLY.other;
   }
 
-  function finish(reply: string) {
+  async function finish(reply: string) {
     // Rede de segurança: o modelo falou de peça consultada em detalhes_produto
     // mas não chamou mostrar_produtos → cards dessas peças (dados do banco,
     // só peças retornadas por ferramenta nesta rodada).
     const products = (
-      !calledMostrar && cards.length === 0 ? runTool.detalhesCards(MAX_DETAIL_CARDS) : cards
+      !calledMostrar && cards.length === 0 ? await runTool.detalhesCards(MAX_DETAIL_CARDS) : cards
     ).slice(0, MAX_CARDS);
     return {
       reply,
@@ -380,6 +384,10 @@ export async function POST(request: NextRequest) {
       })
     )
   );
+  const priorSearched = (historyRows ?? []).some((m) => {
+    const tools = (m.tools_used as { tools?: { name?: unknown }[] } | null)?.tools;
+    return Array.isArray(tools) && tools.some((t) => t?.name === "buscar_produtos" || t?.name === "detalhes_produto");
+  });
   const history: Anthropic.MessageParam[] = (historyRows ?? [])
     .filter((m) => m.role === "user" || m.role === "assistant")
     .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
@@ -387,7 +395,7 @@ export async function POST(request: NextRequest) {
   // 5/6. Modelo + loop de ferramentas
   let outcome: Awaited<ReturnType<typeof runAssistant>> | null = null;
   try {
-    outcome = await runAssistant(history, message, conversation.id, priorSlugs);
+    outcome = await runAssistant(history, message, conversation.id, priorSlugs, priorSearched);
   } catch (err) {
     // Nunca expor detalhe técnico ao client nem logar a chave ou o conteúdo
     // das mensagens: só classe, status HTTP e tipo de erro da Anthropic.

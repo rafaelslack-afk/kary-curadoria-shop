@@ -13,6 +13,8 @@ interface ProductCard {
   price: number;
   image: string | null;
   soldOut?: boolean;
+  // Preço de G1/G2/G3 calculado no servidor (mesma fonte da página do produto)
+  plusSize?: { price: number; from: boolean };
 }
 
 interface ChatMessage {
@@ -310,6 +312,12 @@ export function ChatWidget() {
                         <div className="p-2 flex flex-col gap-1 flex-1">
                           <p className="text-[11px] text-[#5C3317] leading-snug line-clamp-2">{p.name}</p>
                           <p className="text-xs font-medium text-[#A0622A]">{formatCurrency(p.price)}</p>
+                          {p.plusSize && (
+                            <p className="text-[10px] leading-tight text-[#8B6B4E] -mt-0.5">
+                              G1 a G3: {p.plusSize.from ? "a partir de " : ""}
+                              {formatCurrency(p.plusSize.price)}
+                            </p>
+                          )}
                           <Link
                             href={`/produtos/${p.slug}`}
                             className="mt-auto text-center text-[10px] tracking-[0.12em] uppercase bg-[#A0622A] text-white rounded py-1.5 hover:bg-[#5C3317] transition-colors"
