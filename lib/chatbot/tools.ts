@@ -4,19 +4,23 @@
 // Regra de segurança: o modelo NUNCA recebe URLs (imagem, produto, WhatsApp).
 // Cards de produto e o link de WhatsApp enviados ao client são montados pelo
 // servidor a partir de `cards` / `whatsappUrl` dos resultados — assim nenhum
-// link ou preço inventado pelo modelo chega à cliente.
+// link ou preço inventado pelo modelo chega à cliente. Cards só saem de
+// mostrar_produtos, e só para peças que as ferramentas de catálogo retornaram
+// nesta mesma rodada.
 import type Anthropic from "@anthropic-ai/sdk";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { STOCK_BUFFER } from "@/lib/constants";
+import { productAvailability, variantAvailability, isVariantOutOfStock, type Disponibilidade } from "@/lib/stock-availability";
 import { calcularPrecoComPlusSize } from "@/lib/pricing";
 import { getPlusSizeMarkups } from "@/lib/pricing-server";
-import { buildWhatsAppUrl } from "@/lib/site";
+import { buildConsultoraUrl } from "@/lib/chatbot/whatsapp";
+import { colorFamily, colorMatches, isColorWord } from "@/lib/chatbot/colors";
 
 export interface ChatProductCard {
   slug: string;
   name: string;
   price: number;
   image: string | null;
+  soldOut?: boolean;
 }
 
 export interface ToolOutcome {
@@ -32,17 +36,28 @@ export const CHAT_TOOLS: Anthropic.Tool[] = [
   {
     name: "buscar_produtos",
     description:
-      "Busca peças ativas e com estoque disponível na loja. Use para qualquer pedido de sugestão de peça. " +
-      "Use `termo` para tecido, estilo ou tipo de peça (ex: 'linho', 'pantalona', 'colete'), e `categoria` " +
-      "somente com um dos slugs de categoria listados no prompt. Retorna no máximo 6 peças.",
+      "Busca peças ativas da loja, com ou sem estoque. Use para qualquer pedido de sugestão de peça. " +
+      "Use `termo` para o que a cliente descreveu (tipo de peça, tecido, estilo, ou uma referência como " +
+      "'CON-0063'). Retorna só peças que têm TODAS as palavras (com sinônimos: blazer/casaqueto/terno, " +
+      "calça/pantalona) e `correspondencia: \"completa\"`; se nenhuma tiver, retorna as que têm parte das " +
+      "palavras com `correspondencia: \"parcial\"` (opções parecidas, não exatamente o pedido). " +
+      "Use `categoria` somente com um dos slugs listados no prompt. Só passe " +
+      "`cor`, `tamanho` ou `preco_max` se a cliente pediu isso nesta conversa. Cada peça traz `disponibilidade` " +
+      "('disponível', 'últimas unidades' ou 'esgotado'). Quando `termo_no_nome` é false, o termo aparece só na " +
+      "descrição: não afirme que a peça é daquele tecido. Retorna no máximo 6 peças.",
     input_schema: {
       type: "object",
       properties: {
-        termo: { type: "string", description: "Palavras-chave (tecido, estilo, tipo de peça)." },
+        termo: { type: "string", description: "Palavras-chave ou referência (ex: 'conjunto blazer calça', 'linho', 'CON-0063')." },
         categoria: { type: "string", description: "Slug de categoria, ex: 'conjuntos', 'blazer', 'calcas'." },
-        cor: { type: "string", description: "Cor desejada, ex: 'preto', 'off-white'." },
-        tamanho: { type: "string", description: "Tamanho desejado, ex: 'M', 'G1', 'Único'." },
-        preco_max: { type: "number", description: "Preço base máximo em reais." },
+        cor: {
+          type: "string",
+          description:
+            "Cor pedida pela cliente, ex: 'branca', 'bege'. Não elimina peças: ordena pela família da cor " +
+            "(branca inclui Off-White e Cru) e informa `cor_encontrada`.",
+        },
+        tamanho: { type: "string", description: "Tamanho pedido pela cliente, ex: 'M', 'G1', 'Único'." },
+        preco_max: { type: "number", description: "Preço base máximo em reais, se a cliente informou." },
         limite: { type: "number", description: "Quantidade máxima de peças (1 a 6)." },
       },
     },
@@ -51,13 +66,14 @@ export const CHAT_TOOLS: Anthropic.Tool[] = [
     name: "detalhes_produto",
     description:
       "Retorna descrição, disponibilidade por cor e tamanho (em rótulos) e o preço final de cada tamanho " +
-      "(já inclui o acréscimo de plus size em G1/G2/G3). Use antes de afirmar disponibilidade ou preço de um tamanho.",
+      "(já inclui o acréscimo de plus size em G1/G2/G3). Aceita o slug OU a referência da peça (ex: 'CON-0063', " +
+      "'con 0063'). Use antes de afirmar disponibilidade ou preço de um tamanho, e sempre que a cliente citar uma referência.",
     input_schema: {
       type: "object",
       properties: {
-        slug: { type: "string", description: "Slug da peça, obtido de buscar_produtos." },
+        slug: { type: "string", description: "Slug da peça (de buscar_produtos) ou a referência dela." },
+        referencia: { type: "string", description: "Referência da peça, ex: 'CON-0063'. Alternativa ao slug." },
       },
-      required: ["slug"],
     },
   },
   {
@@ -71,6 +87,26 @@ export const CHAT_TOOLS: Anthropic.Tool[] = [
         limite: { type: "number", description: "Quantidade máxima de sugestões (1 a 4)." },
       },
       required: ["slug_base"],
+    },
+  },
+  {
+    name: "mostrar_produtos",
+    description:
+      "Exibe para a cliente os cards (foto, preço e botão) das peças que você está recomendando. Chame ao " +
+      "recomendar peças, com exatamente as peças citadas na sua resposta, na mesma ordem. Só aceita peças " +
+      "retornadas por buscar_produtos, detalhes_produto ou sugerir_combinacoes nesta mesma resposta. Sem esta " +
+      "chamada, nenhum card é exibido.",
+    input_schema: {
+      type: "object",
+      properties: {
+        refs: {
+          type: "array",
+          items: { type: "string" },
+          maxItems: 6,
+          description: "Slugs ou referências (ex: 'CON-0063') das peças, na ordem em que aparecem no texto. Máx. 6.",
+        },
+      },
+      required: ["refs"],
     },
   },
   {
@@ -92,21 +128,34 @@ export const CHAT_TOOLS: Anthropic.Tool[] = [
   {
     name: "encaminhar_whatsapp",
     description:
-      "Encaminha a cliente para a consultora da loja no WhatsApp. Um botão com o link aparece automaticamente " +
-      "para a cliente — não escreva o link na resposta.",
+      "Encaminha a cliente para a consultora da loja no WhatsApp. Um botão aparece automaticamente para a " +
+      "cliente, com uma mensagem pré-preenchida montada a partir destes campos — não escreva o link na " +
+      "resposta. Preencha os campos com o que a cliente disse nesta conversa, sem inventar.",
     input_schema: {
       type: "object",
       properties: {
-        resumo: {
+        procura: {
           type: "string",
-          description: "Resumo curto, em primeira pessoa da cliente, do que ela precisa (vai pré-preenchido na mensagem).",
+          description:
+            "O que a cliente busca, curto e na voz dela, ex: 'conjunto de blazer e calça para trabalho', " +
+            "'comprar no atacado para revenda', 'novidades em camisas de linho'.",
+        },
+        tamanho: { type: "string", description: "Tamanho que ela informou, se informou." },
+        cor: { type: "string", description: "Cor que ela pediu, se pediu." },
+        ocasiao: { type: "string", description: "Ocasião que ela citou, se citou (ex: trabalho, casamento)." },
+        refs_de_interesse: {
+          type: "array",
+          items: { type: "string" },
+          maxItems: 3,
+          description: "Slugs ou referências das peças que ela viu e gostou nesta conversa (máx. 3).",
         },
         motivo: {
           type: "string",
-          description: "Motivo do encaminhamento, ex: 'atacado', 'medidas', 'troca', 'reclamacao', 'esgotado', 'pediu_pessoa'.",
+          description:
+            "Motivo: 'novidades', 'atacado', 'medidas', 'troca', 'reclamacao', 'esgotado' ou 'pediu_pessoa'.",
         },
       },
-      required: ["resumo", "motivo"],
+      required: ["procura", "motivo"],
     },
   },
 ];
@@ -178,6 +227,7 @@ interface VariantRow {
   color: string | null;
   size: string;
   stock_qty: number;
+  stock_min: number;
   active: boolean;
 }
 
@@ -185,6 +235,7 @@ interface ProductRow {
   id: string;
   name: string;
   slug: string;
+  sku_base: string | null;
   description: string | null;
   price: number;
   images: string[] | null;
@@ -195,7 +246,7 @@ interface ProductRow {
 }
 
 function norm(s: string): string {
-  return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 }
 
 // Singular aproximado para casar "conjuntos" com "conjunto"
@@ -204,21 +255,112 @@ function stem(word: string): string {
   return w.length > 3 && w.endsWith("s") ? w.slice(0, -1) : w;
 }
 
-const STOPWORDS = new Set(["de", "da", "do", "das", "dos", "com", "e", "em", "para", "um", "uma", "o", "a", "os", "as"]);
+const STOPWORDS = new Set([
+  "de", "da", "do", "das", "dos", "com", "e", "em", "para", "pra", "um", "uma", "uns", "umas",
+  "o", "a", "os", "as", "no", "na", "nos", "nas", "ou", "que",
+]);
 
-function available(v: VariantRow): number {
-  return v.active ? v.stock_qty - STOCK_BUFFER : 0;
+// Grupos de sinônimos (em forma normalizada/singular): uma palavra do termo
+// casa com qualquer palavra do mesmo grupo.
+const SINONIMOS: string[][] = [
+  ["blazer", "casaqueto", "terno"],
+  ["calca", "pantalona"],
+];
+const SYNONYM_OF = new Map<string, string[]>();
+for (const group of SINONIMOS) for (const w of group) SYNONYM_OF.set(w, group);
+
+function tokens(text: string): string[] {
+  return norm(text).split(/[^a-z0-9]+/).filter(Boolean);
 }
 
-function availabilityLabel(v: VariantRow): string {
-  const n = available(v);
-  if (n <= 0) return "esgotado";
-  if (n <= 2) return "últimas unidades";
-  return "disponível";
+// Casa por início de palavra ("blazer" ↔ "blazers"), nunca no meio
+// ("terno" não casa com "interno").
+function hasWord(hay: string[], word: string): boolean {
+  const group = SYNONYM_OF.get(word) ?? [word];
+  return hay.some((t) => group.some((g) => t.startsWith(g)));
 }
+
+// Estilo/ocasião: contam para ordenar, mas não são obrigatórias (quase nunca
+// estão no nome da peça — "camisa social de linho" deve achar a camisa de linho).
+const SOFT_WORDS = new Set([
+  "social", "casual", "elegante", "chique", "basico", "basica", "bonito", "bonita", "lindo", "linda",
+  "feminino", "feminina", "moderno", "moderna", "classico", "classica", "trabalho", "festa", "evento",
+  "dia", "noite", "verao", "inverno", "confortavel", "leve", "novo", "nova", "soltinho", "soltinha",
+  "sofisticado", "sofisticada", "discreto", "discreta", "ocasiao", "look",
+]);
+
+function searchWords(termo: string): string[] {
+  return uniq(
+    norm(termo)
+      .split(/[^a-z0-9]+/)
+      .filter((w) => w.length > 1 && !STOPWORDS.has(w))
+      .map(stem)
+  );
+}
+
+// Variantes que a PDP exibe: só as ativas (o produto já vem filtrado por ativo)
+function pdpVariants(p: ProductRow): VariantRow[] {
+  return p.product_variants.filter((v) => v.active);
+}
+
+function isBuyable(v: VariantRow): boolean {
+  return !isVariantOutOfStock(v);
+}
+
+// ── Referência (sku_base) ────────────────────────────────────────────────────
+// Aceita "CON-0063", "con 0063", "CON0063", "con 63". Compara letras + número,
+// então zeros à esquerda e separadores não importam.
+
+interface RefKey {
+  letters: string;
+  num: number;
+}
+
+function refKey(raw: string): RefKey | null {
+  const m = norm(raw).replace(/[^a-z0-9]/g, "").match(/^([a-z]+)(\d+)$/);
+  return m ? { letters: m[1], num: Number(m[2]) } : null;
+}
+
+// Candidatos a referência no texto: cada token, e pares "letras" + "número"
+// separados por espaço, hífen ou ponto (ex.: "con 0063").
+function referenceCandidates(text: string): RefKey[] {
+  const tokens = norm(text).split(/[^a-z0-9]+/).filter(Boolean);
+  const out: RefKey[] = [];
+  tokens.forEach((t, i) => {
+    const single = refKey(t);
+    if (single) out.push(single);
+    const next = tokens[i + 1];
+    if (/^[a-z]+$/.test(t) && next && /^\d+$/.test(next)) {
+      out.push({ letters: t, num: Number(next) });
+    }
+  });
+  return out;
+}
+
+function findByReference(catalog: ProductRow[], text: string): ProductRow[] {
+  const candidates = referenceCandidates(text);
+  if (candidates.length === 0) return [];
+  return catalog.filter((p) => {
+    const k = p.sku_base ? refKey(p.sku_base) : null;
+    return !!k && candidates.some((c) => c.letters === k.letters && c.num === k.num);
+  });
+}
+
+const DISPONIBILIDADE_ORDEM: Record<Disponibilidade, number> = {
+  "disponível": 0,
+  "últimas unidades": 0,
+  esgotado: 1,
+};
 
 function toCard(p: ProductRow): ChatProductCard {
-  return { slug: p.slug, name: p.name, price: Number(p.price), image: p.images?.[0] ?? null };
+  const soldOut = productAvailability(pdpVariants(p)) === "esgotado";
+  return {
+    slug: p.slug,
+    name: p.name,
+    price: Number(p.price),
+    image: p.images?.[0] ?? null,
+    ...(soldOut ? { soldOut: true } : {}),
+  };
 }
 
 function asRecord(input: unknown): Record<string, unknown> {
@@ -239,11 +381,44 @@ function uniq(values: string[]): string[] {
   return Array.from(new Set(values));
 }
 
+// Aceita slug ou referência. Resolve, em ordem: slug exato → referência
+// (sku_base, formato livre) → sufixo "-ref-xxx-0000" do slug → prefixo único.
+function resolveProduct(catalog: ProductRow[], raw: string): ProductRow | undefined {
+  const key = norm(raw).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  if (!key) return undefined;
+  const exact = catalog.find((p) => p.slug === key);
+  if (exact) return exact;
+  const bySku = findByReference(catalog, raw);
+  if (bySku.length === 1) return bySku[0];
+  const ref = key.match(/[a-z]{3}-\d{4}$/)?.[0];
+  if (ref) {
+    const byRef = catalog.filter((p) => p.slug.endsWith(`-${ref}`));
+    if (byRef.length === 1) return byRef[0];
+  }
+  const byPrefix = catalog.filter((p) => p.slug.startsWith(key));
+  return byPrefix.length === 1 ? byPrefix[0] : undefined;
+}
+
+const NOT_FOUND_HINT =
+  "Peça não encontrada por este slug ou referência. Use buscar_produtos com o nome ou a referência.";
+
 // Executor com cache por requisição (catálogo e markups carregados uma vez
 // mesmo que o modelo chame várias ferramentas na mesma mensagem).
-export function createToolExecutor(conversationId: string) {
+// `priorSlugs`: peças retornadas pelas ferramentas em mensagens anteriores da
+// conversa (gravadas em chat_messages.tools_used.returned) — as únicas, junto
+// com as desta rodada, que podem ir na mensagem para a consultora.
+export function createToolExecutor(conversationId: string, priorSlugs: string[] = []) {
   let catalogPromise: Promise<ProductRow[]> | null = null;
   let markupsPromise: Promise<Record<string, number>> | null = null;
+  // Peças retornadas pelas ferramentas de catálogo nesta rodada: as únicas
+  // que mostrar_produtos pode exibir.
+  const returned = new Map<string, ProductRow>();
+  // Peças validadas que foram na mensagem de WhatsApp desta rodada
+  let interesse: string[] = [];
+
+  function remember(p: ProductRow) {
+    returned.set(p.slug, p);
+  }
 
   function loadCatalog(): Promise<ProductRow[]> {
     if (!catalogPromise) {
@@ -252,7 +427,7 @@ export function createToolExecutor(conversationId: string) {
         const { data, error } = await admin
           .from("products")
           .select(
-            "id, name, slug, description, price, images, featured, created_at, categories(slug, name), product_variants(color, size, stock_qty, active)"
+            "id, name, slug, sku_base, description, price, images, featured, created_at, categories(slug, name), product_variants(color, size, stock_qty, stock_min, active)"
           )
           .eq("active", true)
           .limit(1000);
@@ -275,78 +450,185 @@ export function createToolExecutor(conversationId: string) {
     });
   }
 
+  function productSummary(p: ProductRow, variants: VariantRow[]) {
+    const buyable = variants.filter(isBuyable);
+    const disponibilidade = productAvailability(variants);
+    return {
+      slug: p.slug,
+      nome: p.name,
+      referencia: p.sku_base,
+      categoria: p.categories?.slug ?? null,
+      preco_base: Number(p.price),
+      disponibilidade,
+      ...(disponibilidade === "esgotado"
+        ? {}
+        : {
+            cores_disponiveis: uniq(buyable.map((v) => v.color).filter((c): c is string => !!c)),
+            tamanhos_disponiveis: uniq(buyable.map((v) => v.size)),
+          }),
+    };
+  }
+
   async function buscarProdutos(input: Record<string, unknown>): Promise<ToolOutcome> {
     const termo = str(input.termo);
     const categoria = stem(str(input.categoria));
-    const cor = norm(str(input.cor));
+    const corPedida = str(input.cor);
     const tamanho = norm(str(input.tamanho));
     const precoMax = Number(input.preco_max);
     const limite = clampInt(input.limite, 6, 1, 6);
 
-    const words = norm(termo)
-      .split(/[^a-z0-9]+/)
-      .filter((w) => w && !STOPWORDS.has(w))
-      .map(stem);
-
     const catalog = await loadCatalog();
-    const matches = catalog.filter((p) => {
-      const inStock = p.product_variants.filter((v) => available(v) > 0);
-      if (inStock.length === 0) return false;
 
+    // Referência (ex.: "CON-0063", "con 0063"): busca direta por sku_base
+    const byRef = termo ? findByReference(catalog, termo) : [];
+    if (byRef.length > 0) {
+      const selected = sortProducts(byRef).slice(0, limite);
+      return {
+        result: {
+          total_encontrado: byRef.length,
+          busca_por_referencia: true,
+          produtos: selected.map((p) => productSummary(p, pdpVariants(p))),
+        },
+      };
+    }
+
+    // Cor não elimina resultados: vira preferência de ordenação, pela família
+    // de cor (ex.: "branca" → Branco, Off-White, Cru...). Palavras de cor no
+    // termo ("camisa branca") valem como cor pedida e não precisam estar no nome.
+    const allWords = searchWords(termo);
+    const termColors = allWords.filter(isColorWord);
+    const words = allWords.filter((w) => !isColorWord(w));
+    const hard = words.filter((w) => !SOFT_WORDS.has(w));
+    const required = hard.length > 0 ? hard : words;
+    const colorRequest = [corPedida, ...termColors].filter(Boolean).join(" ");
+    const accepted = colorRequest
+      ? colorFamily(colorRequest) ?? new Set([norm(colorRequest)])
+      : null;
+
+    // Variantes consideradas: as que a PDP exibe, restritas ao tamanho pedido.
+    // Produtos sem estoque NÃO são descartados.
+    type Hit = {
+      p: ProductRow;
+      variants: VariantRow[];
+      tier: number;
+      score: number;
+      disp: Disponibilidade;
+      // 2: tem a cor pedida com estoque; 1: tem a cor, esgotada; 0: não tem
+      colorRank: number;
+      matchedColors: string[];
+    };
+    const hits: Hit[] = [];
+    for (const p of catalog) {
       if (categoria) {
         const cs = p.categories ? `${norm(p.categories.slug)} ${norm(p.categories.name)}` : "";
-        if (!cs.includes(categoria)) return false;
+        if (!cs.includes(categoria)) continue;
       }
 
+      if (Number.isFinite(precoMax) && precoMax > 0 && Number(p.price) > precoMax) continue;
+
+      let variants = pdpVariants(p);
+      if (tamanho) {
+        variants = variants.filter((v) => norm(v.size) === tamanho);
+        if (variants.length === 0) continue;
+      }
+
+      const colorVariants = accepted ? variants.filter((v) => colorMatches(v.color, accepted)) : [];
+      const colorRank = colorVariants.some(isBuyable) ? 2 : colorVariants.length > 0 ? 1 : 0;
+      const matchedColors = uniq(
+        colorVariants.filter(isBuyable).map((v) => v.color).filter((c): c is string => !!c)
+      );
+
+      // tier 0: todas as palavras no nome/categoria/referência;
+      // tier 1: todas as palavras, contando a descrição;
+      // tier 2: só parte das palavras (resultado parcial).
+      let tier = 0;
+      let score = 0;
       if (words.length > 0) {
-        const hay = norm(`${p.name} ${p.description ?? ""} ${p.categories?.name ?? ""}`);
-        if (!words.every((w) => hay.includes(w))) return false;
+        const main = tokens(`${p.name} ${p.categories?.name ?? ""} ${p.sku_base ?? ""}`);
+        const all = [...main, ...tokens(p.description ?? "")];
+        score = words.filter((w) => hasWord(all, w)).length;
+        if (score === 0) continue;
+        const reqHits = required.filter((w) => hasWord(all, w)).length;
+        tier = required.every((w) => hasWord(main, w)) ? 0 : reqHits === required.length ? 1 : 2;
       }
 
-      if (Number.isFinite(precoMax) && precoMax > 0 && Number(p.price) > precoMax) return false;
+      hits.push({ p, variants, tier, score, disp: productAvailability(variants), colorRank, matchedColors });
+    }
 
-      if (cor || tamanho) {
-        const ok = inStock.some(
-          (v) =>
-            (!cor || norm(v.color ?? "").includes(cor)) &&
-            (!tamanho || norm(v.size) === tamanho)
-        );
-        if (!ok) return false;
-      }
+    // Só o melhor nível que tiver resultado: peças com todas as palavras no
+    // nome; senão com todas as palavras em qualquer campo; senão parciais.
+    const bestTier = Math.min(...hits.map((h) => h.tier));
+    const pool = hits.filter((h) => h.tier === bestTier);
+    const correspondencia =
+      words.length === 0 || hits.length === 0 ? undefined : bestTier === 2 ? "parcial" : "completa";
 
-      return true;
-    });
-
-    const selected = sortProducts(matches).slice(0, limite);
+    // Cor pedida → mais palavras casadas → disponíveis antes de esgotadas →
+    // destaque → mais recentes
+    const recency = new Map(sortProducts(pool.map((h) => h.p)).map((p, i) => [p.id, i]));
+    pool.sort(
+      (a, b) =>
+        b.colorRank - a.colorRank ||
+        b.score - a.score ||
+        DISPONIBILIDADE_ORDEM[a.disp] - DISPONIBILIDADE_ORDEM[b.disp] ||
+        (recency.get(a.p.id) ?? 0) - (recency.get(b.p.id) ?? 0)
+    );
+    const selected = pool.slice(0, limite);
+    for (const h of selected) remember(h.p);
 
     return {
       result: {
-        total_encontrado: matches.length,
-        produtos: selected.map((p) => {
-          const inStock = p.product_variants.filter((v) => available(v) > 0);
-          return {
-            slug: p.slug,
-            nome: p.name,
-            categoria: p.categories?.slug ?? null,
-            preco_base: Number(p.price),
-            cores_disponiveis: uniq(inStock.map((v) => v.color).filter((c): c is string => !!c)),
-            tamanhos_disponiveis: uniq(inStock.map((v) => v.size)),
-          };
-        }),
+        total_encontrado: pool.length,
+        ...(correspondencia ? { correspondencia } : {}),
+        ...(accepted
+          ? pool.some((h) => h.colorRank === 2)
+            ? { cor_pedida: colorRequest, cor_encontrada: true }
+            : {
+                cor_pedida: colorRequest,
+                cor_encontrada: false,
+                observacao_cor:
+                  `Nenhuma destas peças está disponível na cor "${colorRequest}" (nem em tons da mesma família). ` +
+                  "Diga isso à cliente e apresente as cores que existem.",
+              }
+          : {}),
+        ...(selected.length === 0
+          ? {
+              observacao:
+                "Nada encontrado. Tente de novo com menos palavras ou sinônimos (ex.: blazer/casaqueto/terno, " +
+                "calça/pantalona) antes de dizer que não encontrou.",
+            }
+          : correspondencia === "parcial"
+          ? {
+              observacao:
+                `Nenhuma peça tem todas as palavras de "${termo}". Estas são opções parecidas: deixe claro para a ` +
+                "cliente que não é exatamente o que ela pediu.",
+            }
+          : bestTier === 1
+          ? {
+              observacao:
+                `Nenhuma peça tem "${termo}" no nome; o termo aparece na descrição (pode ser sugestão de look ` +
+                "ou parte da composição). Não afirme que as peças são desse tecido ou tipo; apresente como opções relacionadas.",
+            }
+          : {}),
+        produtos: selected.map((h) => ({
+          ...productSummary(h.p, h.variants),
+          ...(accepted && h.matchedColors.length > 0 ? { cores_da_familia_pedida: h.matchedColors } : {}),
+          ...(correspondencia === "parcial" ? { palavras_casadas: `${h.score}/${words.length}` } : {}),
+        })),
       },
-      cards: selected.map(toCard),
     };
   }
 
   async function detalhesProduto(input: Record<string, unknown>): Promise<ToolOutcome> {
-    const slug = str(input.slug, 300);
+    const slug = str(input.slug, 300) || str(input.referencia, 300);
     const catalog = await loadCatalog();
-    const p = catalog.find((x) => x.slug === slug);
-    if (!p) return { result: { encontrado: false, slug } };
+    const p = resolveProduct(catalog, slug);
+    if (!p) return { result: { encontrado: false, busca: slug, observacao: NOT_FOUND_HINT } };
+    remember(p);
 
     const markups = await loadMarkups();
+    const variants = pdpVariants(p);
     const byColor = new Map<string, VariantRow[]>();
-    for (const v of p.product_variants.filter((x) => x.active)) {
+    for (const v of variants) {
       const key = v.color ?? "Única";
       byColor.set(key, [...(byColor.get(key) ?? []), v]);
     }
@@ -356,19 +638,20 @@ export function createToolExecutor(conversationId: string) {
         encontrado: true,
         slug: p.slug,
         nome: p.name,
+        referencia: p.sku_base,
         categoria: p.categories?.slug ?? null,
         descricao: (p.description ?? "").slice(0, 1500),
         preco_base: Number(p.price),
-        grade: Array.from(byColor.entries()).map(([cor, variants]) => ({
+        disponibilidade: productAvailability(variants),
+        grade: Array.from(byColor.entries()).map(([cor, vs]) => ({
           cor,
-          tamanhos: variants.map((v) => ({
+          tamanhos: vs.map((v) => ({
             tamanho: v.size,
-            disponibilidade: availabilityLabel(v),
+            disponibilidade: variantAvailability(v),
             preco: calcularPrecoComPlusSize(Number(p.price), v.size, markups),
           })),
         })),
       },
-      cards: [toCard(p)],
     };
   }
 
@@ -376,10 +659,12 @@ export function createToolExecutor(conversationId: string) {
     const slugBase = str(input.slug_base, 300);
     const limite = clampInt(input.limite, 4, 1, 4);
     const catalog = await loadCatalog();
-    const base = catalog.find((x) => x.slug === slugBase);
-    if (!base) return { result: { encontrado: false, slug_base: slugBase } };
+    const base = resolveProduct(catalog, slugBase);
+    if (!base) return { result: { encontrado: false, slug_base: slugBase, observacao: NOT_FOUND_HINT } };
 
+    remember(base);
     const baseCat = base.categories?.slug ?? "";
+    const baseDisponivel = pdpVariants(base).some(isBuyable);
     const complementares = CATEGORIAS_COMPLEMENTARES[baseCat] ?? [];
     if (complementares.length === 0) {
       return { result: { encontrado: true, sugestoes: [], observacao: "Sem categorias complementares para esta peça." } };
@@ -392,7 +677,7 @@ export function createToolExecutor(conversationId: string) {
           (p) =>
             p.id !== base.id &&
             p.categories?.slug === cat &&
-            p.product_variants.some((v) => available(v) > 0)
+            pdpVariants(p).some(isBuyable)
         )
       )
     );
@@ -402,19 +687,64 @@ export function createToolExecutor(conversationId: string) {
         if (pool[i] && selected.length < limite) selected.push(pool[i]);
       }
     }
+    for (const p of selected) remember(p);
 
     return {
       result: {
         encontrado: true,
-        peca_base: { slug: base.slug, nome: base.name, categoria: baseCat },
+        peca_base: {
+          slug: base.slug,
+          nome: base.name,
+          categoria: baseCat,
+          disponivel: baseDisponivel,
+        },
+        ...(baseDisponivel
+          ? {}
+          : { observacao: "A peça base está esgotada. Avise a cliente antes de sugerir as combinações." }),
         sugestoes: selected.map((p) => ({
           slug: p.slug,
           nome: p.name,
+          referencia: p.sku_base,
           categoria: p.categories?.slug ?? null,
           preco_base: Number(p.price),
         })),
       },
-      cards: selected.map(toCard),
+    };
+  }
+
+  function mostrarProdutos(input: Record<string, unknown>): ToolOutcome {
+    const refs = (Array.isArray(input.refs) ? input.refs : [])
+      .map((r) => str(r, 300))
+      .filter(Boolean)
+      .slice(0, 6);
+    const allowed = Array.from(returned.values());
+    const shown: ProductRow[] = [];
+    const descartadas: string[] = [];
+    for (const ref of refs) {
+      const p = resolveProduct(allowed, ref);
+      if (!p) {
+        descartadas.push(ref);
+        continue;
+      }
+      if (!shown.includes(p)) shown.push(p);
+    }
+    if (descartadas.length > 0) {
+      console.warn(
+        `[chat] mostrar_produtos descartou refs não retornadas nesta rodada: ${JSON.stringify(descartadas)}`
+      );
+    }
+    return {
+      result: {
+        exibidos: shown.map((p) => p.sku_base ?? p.slug),
+        ...(descartadas.length > 0
+          ? {
+              descartados: descartadas,
+              observacao:
+                "Estas peças não foram exibidas porque não vieram de uma ferramenta nesta resposta. Não as cite.",
+            }
+          : {}),
+      },
+      cards: shown.map(toCard),
     };
   }
 
@@ -426,8 +756,35 @@ export function createToolExecutor(conversationId: string) {
   }
 
   async function encaminharWhatsapp(input: Record<string, unknown>): Promise<ToolOutcome> {
-    const resumo = str(input.resumo, 300);
-    const url = buildWhatsAppUrl(`Olá! Vim pelo assistente do site. ${resumo}`.trim());
+    const refs = (Array.isArray(input.refs_de_interesse) ? input.refs_de_interesse : [])
+      .map((r) => str(r, 300))
+      .filter(Boolean)
+      .slice(0, 3);
+
+    let pieces: ProductRow[] = [];
+    const descartadas: string[] = [];
+    if (refs.length > 0) {
+      const catalog = await loadCatalog();
+      const allowedSlugs = new Set([...priorSlugs, ...Array.from(returned.keys())]);
+      const allowed = catalog.filter((p) => allowedSlugs.has(p.slug));
+      for (const ref of refs) {
+        const p = resolveProduct(allowed, ref);
+        if (!p) descartadas.push(ref);
+        else if (!pieces.includes(p)) pieces.push(p);
+      }
+      pieces = pieces.slice(0, 3);
+      if (descartadas.length > 0) {
+        console.warn(`[chat] encaminhar_whatsapp descartou refs não vistas na conversa: ${JSON.stringify(descartadas)}`);
+      }
+    }
+    const { url, included } = buildConsultoraUrl({
+      procura: str(input.procura, 300),
+      tamanho: str(input.tamanho, 60),
+      cor: str(input.cor, 60),
+      ocasiao: str(input.ocasiao, 120),
+      pieces: pieces.map((p) => ({ name: p.name, sku_base: p.sku_base, slug: p.slug })),
+    });
+    interesse = included.map((p) => p.slug);
 
     const admin = createAdminClient();
     await admin
@@ -436,12 +793,16 @@ export function createToolExecutor(conversationId: string) {
       .eq("id", conversationId);
 
     return {
-      result: { encaminhado: true, observacao: "O botão do WhatsApp será exibido para a cliente." },
+      result: {
+        encaminhado: true,
+        pecas_na_mensagem: included.map((p) => p.sku_base ?? p.slug),
+        observacao: "O botão do WhatsApp será exibido para a cliente.",
+      },
       whatsappUrl: url,
     };
   }
 
-  return async function run(name: string, rawInput: unknown): Promise<ToolOutcome> {
+  const run = async function run(name: string, rawInput: unknown): Promise<ToolOutcome> {
     const input = asRecord(rawInput);
     try {
       switch (name) {
@@ -451,6 +812,8 @@ export function createToolExecutor(conversationId: string) {
           return await detalhesProduto(input);
         case "sugerir_combinacoes":
           return await sugerirCombinacoes(input);
+        case "mostrar_produtos":
+          return mostrarProdutos(input);
         case "informacoes_loja":
           return informacoesLoja(input);
         case "encaminhar_whatsapp":
@@ -462,4 +825,10 @@ export function createToolExecutor(conversationId: string) {
       return { result: { erro: "falha_temporaria_ao_consultar_a_loja" }, isError: true };
     }
   };
+
+  return Object.assign(run, {
+    // Para gravar em tools_used: permite validar peças em mensagens futuras
+    returnedSlugs: () => Array.from(returned.keys()),
+    interesseSlugs: () => interesse,
+  });
 }

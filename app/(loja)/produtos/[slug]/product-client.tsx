@@ -8,6 +8,7 @@ import { ChevronLeft, ShoppingBag, Check, Zap, ZoomIn, Truck, CreditCard } from 
 import { formatCurrency } from "@/lib/utils";
 import { getBestInstallment } from "@/lib/installments";
 import { calcularPrecoComPlusSize } from "@/lib/pricing";
+import { isVariantOutOfStock, isVariantLowStock } from "@/lib/stock-availability";
 import { useCartStore } from "@/lib/store/cart";
 import { buildWhatsAppUrl } from "@/lib/site";
 import { trackEvent } from "@/lib/analytics";
@@ -174,8 +175,8 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
     : 0;
 
   const outOfStock =
-    selectedVariant !== null && selectedVariant.stock_qty === 0;
-  const allOutOfStock = variants.every((v) => v.stock_qty === 0);
+    selectedVariant !== null && isVariantOutOfStock(selectedVariant);
+  const allOutOfStock = variants.every(isVariantOutOfStock);
 
   function handleAddToCart() {
     if (!selectedVariant || outOfStock) return;
@@ -612,8 +613,8 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
               <div className="flex flex-wrap gap-2">
                 {sizesForColor.map((v) => {
                   const isSelected = selectedVariant?.id === v.id;
-                  const isOos = v.stock_qty === 0;
-                  const isLow = !isOos && v.stock_qty <= v.stock_min;
+                  const isOos = isVariantOutOfStock(v);
+                  const isLow = isVariantLowStock(v);
                   return (
                     <div key={v.id} className="relative">
                       <button
@@ -646,9 +647,9 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
 
               {selectedVariant && (
                 <p className="text-[10px] text-kc-muted mt-2">
-                  {selectedVariant.stock_qty === 0
+                  {isVariantOutOfStock(selectedVariant)
                     ? "Sem estoque neste tamanho"
-                    : selectedVariant.stock_qty <= selectedVariant.stock_min
+                    : isVariantLowStock(selectedVariant)
                     ? `Últimas ${selectedVariant.stock_qty} unidade${
                         selectedVariant.stock_qty > 1 ? "s" : ""
                       }`

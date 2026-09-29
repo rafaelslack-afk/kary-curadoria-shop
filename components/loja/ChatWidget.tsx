@@ -5,12 +5,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { MessageCircle, Send, X } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { buildWhatsAppUrl } from "@/lib/site";
 
 interface ProductCard {
   slug: string;
   name: string;
   price: number;
   image: string | null;
+  soldOut?: boolean;
 }
 
 interface ChatMessage {
@@ -23,15 +25,21 @@ interface ChatMessage {
 const SESSION_KEY = "kvo-chat-session";
 const CONVERSATION_KEY = "kvo-chat-conversation";
 const MESSAGES_KEY = "kvo-chat-messages";
+// Convite: exibido no máximo uma vez por sessão e nunca depois que o chat
+// já foi aberto nesta sessão.
+const INVITE_SHOWN_KEY = "kvo-chat-invite-shown";
+const OPENED_KEY = "kvo-chat-opened";
+const INVITE_DELAY_MS = 6000;
+const INVITE_TEXT = "Oi! Quer ajuda para encontrar a peça ideal ou montar um look? 👋";
 
 const WELCOME =
   "Oi! Sou a assistente virtual da Kary Curadoria. Posso te ajudar a encontrar peças, montar um look ou tirar dúvidas de tamanho e entrega.";
 
 const SUGGESTIONS = ["Montar um look", "Tem no meu tamanho?", "Como funciona a troca?"];
 
-// O widget não aparece no checkout nem na recuperação de carrinho (o /admin
-// tem layout próprio e nunca monta este componente).
-const HIDDEN_PREFIXES = ["/checkout", "/retomar"];
+// O widget não aparece no checkout nem na recuperação de carrinho. O /admin
+// tem layout próprio e nunca monta este componente; fica na lista por garantia.
+const HIDDEN_PREFIXES = ["/checkout", "/retomar", "/admin"];
 
 const serif = { fontFamily: "Cormorant Garamond, Georgia, serif" } as const;
 const jost = { fontFamily: "Jost, sans-serif" } as const;
@@ -68,7 +76,27 @@ export function ChatWidget() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
+  // Link "Falar com a consultora": resumo da conversa montado no servidor
+  const [consultoraUrl, setConsultoraUrl] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const hidden = HIDDEN_PREFIXES.some((p) => pathname.startsWith(p));
+
+  function refreshConsultoraUrl() {
+    const conversationId = readStorage(CONVERSATION_KEY);
+    if (!conversationId) return;
+    fetch("/api/chat/whatsapp-link", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ conversation_id: conversationId, session_id: getSessionId() }),
+    })
+      .then((r) => r.json())
+      .then((d) => typeof d.url === "string" && setConsultoraUrl(d.url))
+      .catch(() => {
+        /* mantém o link anterior (ou o genérico) */
+      });
+  }
 
   useEffect(() => {
     fetch("/api/chat/status", { cache: "no-store" })
@@ -87,6 +115,7 @@ export function ChatWidget() {
         /* ignora histórico local corrompido */
       }
     }
+    refreshConsultoraUrl();
   }, []);
 
   useEffect(() => {
@@ -100,7 +129,24 @@ export function ChatWidget() {
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
-  if (!enabled || HIDDEN_PREFIXES.some((p) => pathname.startsWith(p))) return null;
+  // Convite após 6s na página (sem abrir o painel sozinho)
+  useEffect(() => {
+    if (!enabled || hidden || open) return;
+    if (readStorage(INVITE_SHOWN_KEY) || readStorage(OPENED_KEY)) return;
+    const timer = setTimeout(() => {
+      setShowInvite(true);
+      writeStorage(INVITE_SHOWN_KEY, "1");
+    }, INVITE_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [enabled, hidden, open]);
+
+  if (!enabled || hidden) return null;
+
+  function openChat() {
+    setShowInvite(false);
+    writeStorage(OPENED_KEY, "1");
+    setOpen(true);
+  }
 
   function pushMessages(next: ChatMessage[]) {
     setMessages(next);
@@ -141,6 +187,7 @@ export function ChatWidget() {
           whatsappUrl: data.whatsapp_url ?? undefined,
         },
       ]);
+      refreshConsultoraUrl();
     } catch {
       pushMessages([
         ...withUser,
@@ -158,14 +205,40 @@ export function ChatWidget() {
       {!open && (
         <button
           type="button"
-          onClick={() => setOpen(true)}
+          onClick={openChat}
           aria-label="Abrir assistente virtual"
-          className="fixed bottom-6 left-4 sm:left-6 z-50 flex items-center gap-2 rounded-full bg-[#5C3317] text-[#EDE8DC] pl-3 pr-4 py-3 shadow-lg hover:bg-[#A0622A] transition-colors"
+          className="fixed bottom-6 left-4 sm:left-6 z-50 flex items-center gap-2 rounded-full bg-[#A0622A] text-white pl-3 pr-4 py-3 shadow-[0_4px_14px_rgba(92,51,23,0.28)] hover:bg-[#8A5324] transition-colors"
           style={jost}
         >
+          <span aria-hidden className="kvo-chat-pulse pointer-events-none absolute inset-0 rounded-full" />
           <MessageCircle size={18} strokeWidth={1.75} />
           <span className="text-xs tracking-wide">Assistente Kary</span>
         </button>
+      )}
+
+      {/* Convite — ancorado acima do botão, à esquerda; largura limitada
+          para não alcançar o botão do WhatsApp no canto direito. */}
+      {!open && showInvite && (
+        <div
+          className="kvo-chat-invite fixed bottom-[84px] left-4 sm:left-6 z-50 w-[min(240px,calc(100vw-160px))] rounded-2xl rounded-bl-sm bg-white border border-[#D9C9B8] shadow-[0_4px_16px_rgba(92,51,23,0.18)]"
+          style={jost}
+        >
+          <button
+            type="button"
+            onClick={openChat}
+            className="block w-full text-left text-[13px] leading-snug text-[#5C3317] pl-3.5 pr-8 py-3"
+          >
+            {INVITE_TEXT}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowInvite(false)}
+            aria-label="Fechar convite do assistente"
+            className="absolute top-1.5 right-1.5 p-1 rounded-full text-[#B89070] hover:text-[#5C3317] hover:bg-[#F5F1EA] transition-colors"
+          >
+            <X size={14} />
+          </button>
+        </div>
       )}
 
       {open && (
@@ -176,10 +249,10 @@ export function ChatWidget() {
           style={jost}
         >
           {/* Cabeçalho */}
-          <div className="flex items-center justify-between px-4 py-3 bg-[#5C3317] text-[#EDE8DC] shrink-0">
+          <div className="flex items-center justify-between px-4 py-3 bg-[#A0622A] text-white shrink-0">
             <div>
               <p className="text-lg leading-tight" style={serif}>Assistente Kary</p>
-              <p className="text-[10px] tracking-[0.14em] uppercase text-[#EDE8DC]/70">Assistente virtual</p>
+              <p className="text-[10px] tracking-[0.14em] uppercase text-white/80">Assistente virtual</p>
             </div>
             <button
               type="button"
@@ -218,10 +291,20 @@ export function ChatWidget() {
                   <div className="grid grid-cols-2 gap-2">
                     {m.products.map((p) => (
                       <div key={p.slug} className="bg-white border border-[#D9C9B8] rounded-lg overflow-hidden flex flex-col">
-                        <div className="aspect-[3/4] bg-[#EDE8DC]">
+                        <div className="relative aspect-[3/4] bg-[#EDE8DC]">
                           {p.image && (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={p.image} alt={p.name} className="w-full h-full object-cover" loading="lazy" />
+                            <img
+                              src={p.image}
+                              alt={p.name}
+                              className={`w-full h-full object-cover ${p.soldOut ? "opacity-60" : ""}`}
+                              loading="lazy"
+                            />
+                          )}
+                          {p.soldOut && (
+                            <span className="absolute top-1.5 left-1.5 bg-[#5C3317] text-white text-[9px] tracking-[0.12em] uppercase px-1.5 py-0.5 rounded">
+                              Esgotado
+                            </span>
                           )}
                         </div>
                         <div className="p-2 flex flex-col gap-1 flex-1">
@@ -274,6 +357,16 @@ export function ChatWidget() {
             }}
             className="shrink-0 border-t border-[#D9C9B8] bg-white px-3 pt-3 pb-2"
           >
+            {messages.some((m) => m.role === "user") && (
+              <a
+                href={consultoraUrl ?? buildWhatsAppUrl("Olá! Vim pelo assistente do site.")}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block text-center text-[11px] text-[#A0622A] underline underline-offset-2 hover:text-[#5C3317] mb-2"
+              >
+                Falar com a consultora
+              </a>
+            )}
             <div className="flex items-end gap-2">
               <textarea
                 value={input}
