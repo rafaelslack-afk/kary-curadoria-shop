@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { buildWhatsAppUrl } from "@/lib/site";
 import Link from "next/link";
 import { Star, Heart, MapPin, RefreshCw, MessageCircle } from "lucide-react";
 
@@ -293,7 +294,7 @@ export default function SobrePage() {
               e onde você pode encontrar pessoalmente as peças que chamaram sua atenção online.
             </p>
             <a
-              href="https://wa.me/5511913187730"
+              href={buildWhatsAppUrl()}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2.5 bg-[#5C3317] text-[#EDE8DC] text-[11px] tracking-[0.2em] uppercase px-7 py-3.5 hover:bg-[#A0622A] transition-colors"

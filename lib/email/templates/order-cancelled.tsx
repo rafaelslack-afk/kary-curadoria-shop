@@ -1,4 +1,5 @@
 import * as React from "react";
+import { buildWhatsAppUrl } from "@/lib/site";
 
 interface OrderCancelledProps {
   orderNumber: string;
@@ -102,7 +103,7 @@ export function OrderCancelledEmail({
                             Visitar a Loja
                           </a>
                           <a
-                            href="https://wa.me/5511913187730"
+                            href={buildWhatsAppUrl()}
                             style={{ display: "inline-block", backgroundColor: "#A0622A", color: "#FFFFFF", textDecoration: "none", borderRadius: 4, padding: "12px 32px", fontSize: 15 }}
                           >
                             WhatsApp
