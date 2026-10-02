@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
 import {
   LayoutDashboard,
   Package,
@@ -45,6 +46,9 @@ const menuItems = [
   { href: "/admin/relatorios", label: "Relatórios", icon: BarChart3 },
 ];
 
+// Contadores do menu: no máximo uma consulta por minuto
+const COUNTS_INTERVAL_MS = 60_000;
+
 interface AdminSidebarProps {
   /**
    * Chamado ao clicar em qualquer link — usado pelo drawer mobile
@@ -57,22 +61,46 @@ export function AdminSidebar({ onClose }: AdminSidebarProps) {
   const pathname = usePathname();
   const [abandonosCount, setAbandonosCount] = useState<number | null>(null);
   const [syncErrorCount, setSyncErrorCount] = useState<number | null>(null);
+  const router = useRouter();
+  const [loggingOut, setLoggingOut] = useState(false);
 
-  // Contagem de abandonos não recuperados (últimos 7 dias)
+  // Contadores do menu numa chamada só: ao abrir, a cada COUNTS_INTERVAL_MS
+  // com a aba visível e ao voltar para a aba. Aba oculta não consulta nada.
   useEffect(() => {
-    fetch("/api/admin/abandoned-checkouts?period=7d&status=abandoned")
-      .then((r) => r.json())
-      .then((data) => { if (Array.isArray(data)) setAbandonosCount(data.length); })
-      .catch(() => {});
+    let lastFetch = 0;
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - lastFetch < COUNTS_INTERVAL_MS) return;
+      lastFetch = Date.now();
+      fetch("/api/admin/sidebar-counts", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data: { abandonos?: number | null; erpSyncErrors?: number | null } | null) => {
+          if (!data) return;
+          if (typeof data.abandonos === "number") setAbandonosCount(data.abandonos);
+          if (typeof data.erpSyncErrors === "number") setSyncErrorCount(data.erpSyncErrors);
+        })
+        .catch(() => {});
+    };
+    refresh();
+    const timer = setInterval(refresh, COUNTS_INTERVAL_MS);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, []);
 
-  // Contagem de erros de sync ERP não resolvidos
-  useEffect(() => {
-    fetch("/api/admin/erp-sync-errors/count")
-      .then((r) => r.json())
-      .then((data) => { if (typeof data.count === "number") setSyncErrorCount(data.count); })
-      .catch(() => {});
-  }, []);
+  async function logout() {
+    onClose?.();
+    setLoggingOut(true);
+    try {
+      await createClient().auth.signOut();
+    } finally {
+      // O middleware manda para o login quando não há sessão
+      router.replace("/admin/login");
+      router.refresh();
+    }
+  }
 
   return (
     // h-full + overflow-y-auto → menu rola dentro do drawer em telas curtas
@@ -80,7 +108,7 @@ export function AdminSidebar({ onClose }: AdminSidebarProps) {
 
       {/* Logo — oculto no mobile (o shell já exibe "Menu" no cabeçalho do drawer) */}
       <div className="hidden lg:block px-6 py-5 border-b border-white/10 shrink-0">
-        <Link href="/admin" className="flex flex-col" onClick={onClose}>
+        <Link href="/admin" prefetch={false} className="flex flex-col" onClick={onClose}>
           <span className="font-serif text-lg font-medium text-kc-cream tracking-[0.12em]">
             KVO
           </span>
@@ -104,6 +132,9 @@ export function AdminSidebar({ onClose }: AdminSidebarProps) {
             <Link
               key={href}
               href={href}
+              // Sem pré-carregamento: com ele, abrir o admin disparava ~17
+              // requisições simultâneas, cada uma validando a sessão.
+              prefetch={false}
               onClick={onClose}
               className={cn(
                 // py-3 garante ≥ 44px de altura — padrão de acessibilidade touch
@@ -135,6 +166,7 @@ export function AdminSidebar({ onClose }: AdminSidebarProps) {
         <Link
           href="/"
           target="_blank"
+          prefetch={false}
           onClick={onClose}
           className="flex items-center gap-3 px-3 py-3 text-sm text-kc-cream/60 hover:text-kc-cream transition-colors rounded-md hover:bg-white/5"
         >
@@ -142,14 +174,13 @@ export function AdminSidebar({ onClose }: AdminSidebarProps) {
           <span className="tracking-wide">Ver Loja</span>
         </Link>
         <button
-          className="flex items-center gap-3 px-3 py-3 text-sm text-kc-cream/60 hover:text-red-400 transition-colors w-full rounded-md hover:bg-white/5"
-          onClick={() => {
-            onClose?.();
-            // Logout via Supabase Auth (a implementar)
-          }}
+          type="button"
+          className="flex items-center gap-3 px-3 py-3 text-sm text-kc-cream/60 hover:text-red-400 transition-colors w-full rounded-md hover:bg-white/5 disabled:opacity-50"
+          onClick={logout}
+          disabled={loggingOut}
         >
           <LogOut size={18} strokeWidth={1.5} className="shrink-0" />
-          <span className="tracking-wide">Sair</span>
+          <span className="tracking-wide">{loggingOut ? "Saindo..." : "Sair"}</span>
         </button>
       </div>
     </div>

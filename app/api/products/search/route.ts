@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAnonClient } from "@/lib/supabase/anon";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json([]);
   }
 
-  const supabase = createClient();
+  const supabase = createAnonClient();
 
   const { data, error } = await supabase
     .from("products")

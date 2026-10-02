@@ -224,7 +224,7 @@ export default function AdminDashboard() {
             {loading ? "..." : stats?.alertasEstoque ?? 0}
           </p>
           {(stats?.alertasEstoque ?? 0) > 0 && (
-            <Link href="/admin/estoque" className="text-xs text-amber-600 hover:underline mt-1 block">
+            <Link prefetch={false} href="/admin/estoque" className="text-xs text-amber-600 hover:underline mt-1 block">
               Ver estoque →
             </Link>
           )}
@@ -238,7 +238,7 @@ export default function AdminDashboard() {
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
             <h2 className="font-serif text-base font-medium text-kc-dark">Pedidos Recentes</h2>
-            <Link href="/admin/pedidos" className="text-xs text-kc hover:underline">
+            <Link prefetch={false} href="/admin/pedidos" className="text-xs text-kc hover:underline">
               Ver todos →
             </Link>
           </div>
@@ -256,7 +256,7 @@ export default function AdminDashboard() {
                 {stats.pedidosRecentes.map((o) => (
                   <tr key={o.id} className="border-b border-gray-50 hover:bg-gray-50">
                     <td className="px-5 py-3">
-                      <Link href={`/admin/pedidos/${o.id}`} className="text-sm font-medium text-kc hover:underline">
+                      <Link prefetch={false} href={`/admin/pedidos/${o.id}`} className="text-sm font-medium text-kc hover:underline">
                         #{o.order_number}
                       </Link>
                       <p className="text-xs text-gray-400">{o.guest_name ?? "—"}</p>
@@ -280,7 +280,7 @@ export default function AdminDashboard() {
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
             <h2 className="font-serif text-base font-medium text-kc-dark">Top Produtos (30 dias)</h2>
-            <Link href="/admin/produtos" className="text-xs text-kc hover:underline">
+            <Link prefetch={false} href="/admin/produtos" className="text-xs text-kc hover:underline">
               Ver produtos →
             </Link>
           </div>

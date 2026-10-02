@@ -93,7 +93,7 @@ export default function ClienteDetailPage({ params }: { params: Promise<{ id: st
     return (
       <div className="p-8 text-center">
         <p className="text-gray-500 mb-4">Cliente não encontrado.</p>
-        <Link href="/admin/clientes" className="text-kc text-sm hover:underline">
+        <Link prefetch={false} href="/admin/clientes" className="text-kc text-sm hover:underline">
           ← Voltar para Clientes
         </Link>
       </div>
@@ -107,7 +107,7 @@ export default function ClienteDetailPage({ params }: { params: Promise<{ id: st
     <div className="max-w-4xl">
       {/* Header */}
       <div className="mb-6">
-        <Link
+        <Link prefetch={false}
           href="/admin/clientes"
           className="inline-flex items-center gap-1 text-[10px] tracking-[0.2em] text-kc-muted hover:text-kc-dark uppercase mb-4"
         >
@@ -233,7 +233,7 @@ export default function ClienteDetailPage({ params }: { params: Promise<{ id: st
               {customer.orders.map((o) => (
                 <tr key={o.id} className="border-b border-gray-100 hover:bg-gray-50">
                   <td className="px-4 py-3">
-                    <Link
+                    <Link prefetch={false}
                       href={`/admin/pedidos/${o.id}`}
                       className="text-sm font-medium text-kc hover:underline"
                     >

@@ -3,7 +3,8 @@ import { Footer } from "@/components/loja/footer";
 import { WhatsAppFloat } from "@/components/loja/whatsapp-float";
 import { FloatingCoupon } from "@/components/loja/floating-coupon";
 import { ChatWidget } from "@/components/loja/ChatWidget";
-import { isStorePrelaunchActive } from "@/lib/store-launch";
+import { PrelaunchHome } from "@/components/loja/prelaunch-home";
+import { formatLaunchDatePtBr, isStorePrelaunchActive } from "@/lib/store-launch";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -42,8 +43,14 @@ export default async function LojaLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // Pré-lançamento: toda página da loja mostra a tela de lançamento (antes o
+  // middleware redirecionava para "/"; ele agora só roda no /admin).
   if (isStorePrelaunchActive()) {
-    return <div className="min-h-screen">{children}</div>;
+    return (
+      <div className="min-h-screen">
+        <PrelaunchHome launchLabel={formatLaunchDatePtBr()} />
+      </div>
+    );
   }
 
   const navLinks = await getNavLinks();

@@ -53,7 +53,7 @@ export default function CategoriasPage() {
         <h1 className="text-2xl font-serif font-medium text-kc-dark">
           Categorias
         </h1>
-        <Link href="/admin/categorias/nova">
+        <Link prefetch={false} href="/admin/categorias/nova">
           <Button size="sm">
             <Plus size={14} className="mr-1.5" />
             Nova Categoria
@@ -70,7 +70,7 @@ export default function CategoriasPage() {
           <p className="text-gray-500 mb-4">
             Nenhuma categoria cadastrada ainda.
           </p>
-          <Link href="/admin/categorias/nova">
+          <Link prefetch={false} href="/admin/categorias/nova">
             <Button size="sm">
               <Plus size={14} className="mr-1.5" />
               Criar Primeira Categoria
@@ -148,7 +148,7 @@ export default function CategoriasPage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <Link href={`/admin/categorias/${category.id}`}>
+                        <Link prefetch={false} href={`/admin/categorias/${category.id}`}>
                           <button className="p-1.5 text-gray-400 hover:text-kc transition-colors">
                             <Pencil size={14} />
                           </button>
