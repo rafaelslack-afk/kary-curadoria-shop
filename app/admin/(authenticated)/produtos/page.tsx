@@ -154,7 +154,7 @@ export default function ProdutosPage() {
         <h1 className="text-2xl font-serif font-medium text-kc-dark">
           Produtos
         </h1>
-        <Link href="/admin/produtos/novo">
+        <Link prefetch={false} href="/admin/produtos/novo">
           <Button size="sm">
             <Plus size={14} className="mr-1.5" />
             Novo Produto
@@ -521,7 +521,7 @@ export default function ProdutosPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1">
-                      <Link href={`/admin/produtos/${product.id}`}>
+                      <Link prefetch={false} href={`/admin/produtos/${product.id}`}>
                         <button className="p-1.5 text-gray-400 hover:text-kc transition-colors" title="Editar">
                           <Pencil size={14} />
                         </button>

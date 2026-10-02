@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAnonClient } from "@/lib/supabase/anon";
 
 export const runtime = "nodejs";
 
@@ -13,7 +13,7 @@ export async function GET(
     return NextResponse.json({ error: "ID do pedido não informado." }, { status: 400 });
   }
 
-  const supabase = createClient();
+  const supabase = createAnonClient();
   const { data: order, error } = await supabase
     .from("orders")
     .select("id, order_number, status, pagbank_status, total, shipping_deadline")

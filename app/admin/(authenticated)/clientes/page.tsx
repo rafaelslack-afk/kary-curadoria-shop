@@ -120,7 +120,7 @@ export default function ClientesPage() {
                 <tr key={`${c.type}-${c.id}`} className="border-b border-gray-100 hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <Link
+                      <Link prefetch={false}
                         href={customerHref(c)}
                         className="text-sm font-medium text-kc-dark hover:text-kc hover:underline"
                       >
@@ -139,7 +139,7 @@ export default function ClientesPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <Link href={customerHref(c)} className="text-sm text-gray-600 hover:text-kc">
+                    <Link prefetch={false} href={customerHref(c)} className="text-sm text-gray-600 hover:text-kc">
                       {c.email}
                     </Link>
                   </td>

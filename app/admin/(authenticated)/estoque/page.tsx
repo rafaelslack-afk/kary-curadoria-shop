@@ -302,7 +302,7 @@ export default function EstoquePage() {
                 return (
                   <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="px-4 py-3">
-                      <Link
+                      <Link prefetch={false}
                         href={`/admin/produtos/${item.product_id}`}
                         className="text-sm text-kc hover:underline font-medium"
                       >
