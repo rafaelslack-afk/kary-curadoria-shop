@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, Save, Package2, Layers, RefreshCw, Upload, X, Trash2, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CopyShortLinkButton } from "@/components/admin/CopyShortLinkButton";
 import { cn, slugify } from "@/lib/utils";
 import { STOCK_BUFFER } from "@/lib/constants";
 import type { Category, ProductVariant, Color, Size, ProductType } from "@/types/database";
@@ -81,6 +82,7 @@ export default function EditarProdutoPage() {
   const [costPrice, setCostPrice]       = useState("");
   const [categoryId, setCategoryId]     = useState("");
   const [skuBase, setSkuBase]           = useState("");
+  const [savedSkuBase, setSavedSkuBase] = useState(""); // sku_base salvo (link curto)
   const [active, setActive]             = useState(true);
   const [featured, setFeatured]         = useState(false);
   const [images, setImages]             = useState<string[]>([]);
@@ -138,6 +140,7 @@ export default function EditarProdutoPage() {
         setProductType(product.product_type ?? "individual");
         setCategoryId(product.category_id ?? "");
         setSkuBase(product.sku_base ?? "");
+        setSavedSkuBase(product.sku_base ?? "");
         setActive(product.active ?? true);
         setFeatured(product.featured ?? false);
         setErpSyncEnabled(product.erp_sync_enabled !== false);       // default true
@@ -378,6 +381,7 @@ export default function EditarProdutoPage() {
       });
 
       if (res.ok) {
+        setSavedSkuBase((payload.sku_base as string | null) ?? "");
         setSuccess("Produto atualizado!");
         setTimeout(() => setSuccess(""), 3000);
       } else {
@@ -599,7 +603,10 @@ export default function EditarProdutoPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-serif font-medium text-kc-dark">Editar Produto</h1>
-        <Button variant="ghost" size="sm" onClick={() => router.push("/admin/produtos")}>Voltar</Button>
+        <div className="flex items-center gap-2">
+          {savedSkuBase && <CopyShortLinkButton skuBase={savedSkuBase} variant="full" />}
+          <Button variant="ghost" size="sm" onClick={() => router.push("/admin/produtos")}>Voltar</Button>
+        </div>
       </div>
 
       {success && (

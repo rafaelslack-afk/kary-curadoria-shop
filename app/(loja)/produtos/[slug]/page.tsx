@@ -6,6 +6,7 @@ import type { Product, ProductVariant, Category } from "@/types/database";
 import { ProductClient } from "./product-client";
 import { RelatedProducts } from "@/components/loja/RelatedProducts";
 import { BenefitsBar } from "@/components/loja/BenefitsBar";
+import { buildProductOg } from "@/lib/product-og";
 
 interface Props {
   params: { slug: string };
@@ -40,48 +41,25 @@ export async function generateMetadata({ params }: Props) {
   const product = await getProduct(params.slug);
   if (!product) return { title: "Produto não encontrado" };
 
-  const description =
-    product.description?.substring(0, 160) ??
-    `${product.name} — Kary Curadoria. Moda clássica e elegante direto do Brás, SP.`;
-
-  // Truncar título OG para ≤ 60 caracteres (limite recomendado por crawlers)
-  const ogTitle =
-    product.name.length > 60
-      ? product.name.slice(0, 57) + "..."
-      : product.name;
-
-  // Adicionar transformação Supabase para reduzir peso da imagem (< 600 KB)
-  // width/height=1200 mantém proporção 1:1 (ideal para produto de moda)
-  // quality=75 e format=webp reduzem drasticamente o tamanho
-  const rawImage = product.images?.[0];
-  const ogImageUrl = rawImage
-    ? `${rawImage.replace(
-        "/object/public/",
-        "/render/image/public/"
-      )}?width=1200&height=1200&quality=75&format=webp&resize=fill`
-    : "/opengraph-image";
-
-  const ogImage = rawImage
-    ? { url: ogImageUrl, width: 1200, height: 1200, alt: ogTitle, type: "image/webp" }
-    : { url: "/opengraph-image", width: 1200, height: 630, alt: "Kary Curadoria" };
+  const og = buildProductOg(product);
 
   return {
     title: product.name,
-    description,
+    description: og.description,
     openGraph: {
-      title: ogTitle,
-      description,
-      url: `https://karycuradoria.com.br/produtos/${params.slug}`,
+      title: og.title,
+      description: og.description,
+      url: og.url,
       siteName: "Kary Curadoria",
       locale: "pt_BR",
       type: "website",
-      images: [ogImage],
+      images: [og.image],
     },
     twitter: {
       card: "summary_large_image",
-      title: ogTitle,
-      description,
-      images: [ogImageUrl],
+      title: og.title,
+      description: og.description,
+      images: [og.image.url],
     },
   };
 }
