@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Plus, Pencil, Trash2, AlertTriangle, Package, Search, Unlink } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CopyShortLinkButton } from "@/components/admin/CopyShortLinkButton";
 import { formatCurrency, cn } from "@/lib/utils";
 import type { Product, Category } from "@/types/database";
 
@@ -521,6 +522,7 @@ export default function ProdutosPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1">
+                      {product.sku_base && <CopyShortLinkButton skuBase={product.sku_base} />}
                       <Link prefetch={false} href={`/admin/produtos/${product.id}`}>
                         <button className="p-1.5 text-gray-400 hover:text-kc transition-colors" title="Editar">
                           <Pencil size={14} />
