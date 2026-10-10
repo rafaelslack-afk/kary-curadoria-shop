@@ -14,7 +14,7 @@ interface Props {
 
 async function getProduct(slug: string) {
   const supabase = createAdminClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("products")
     .select(`
       *,
@@ -23,7 +23,14 @@ async function getProduct(slug: string) {
     `)
     .eq("slug", slug)
     .eq("active", true)
-    .single();
+    .maybeSingle();
+  // Erro de consulta (timeout, instabilidade do banco) não é "produto não
+  // encontrado": lança em vez de cair no notFound(), para o ISR não guardar
+  // um 404 em cache — a versão anterior da página continua sendo servida.
+  if (error) {
+    console.error("[produto] erro ao carregar", { slug, error });
+    throw new Error(`Falha ao carregar produto ${slug}: ${error.message}`);
+  }
   return data;
 }
 
