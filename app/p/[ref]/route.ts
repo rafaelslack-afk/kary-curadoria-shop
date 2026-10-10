@@ -3,7 +3,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { buildProductOg, shortProductUrl } from "@/lib/product-og";
 
 export const runtime = "nodejs";
+// Consulta o banco a cada requisição: sem lista do build, sem Data Cache.
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const fetchCache = "force-no-store";
 
 // GET /p/VES-0021 — link curto por referência (sku_base). É o link padrão de
 // compartilhamento em DM do Instagram e WhatsApp (e o usado pelo assistente).
@@ -14,7 +17,11 @@ export const dynamic = "force-dynamic";
 //   meta tags Open Graph da página do produto. Nem todo crawler segue
 //   redirecionamento, e assim o card sai igual ao da página. O og:url é o
 //   próprio link curto: tocar no card também passa pelo redirect com UTM.
-// - Referência inexistente ou produto inativo: vai para /produtos.
+// - Referência inexistente, produto inativo ou erro na consulta: vai para
+//   /produtos (o erro fica no log). Esta rota nunca responde 404.
+//
+// O header X-Link-Curto diz qual caminho a resposta seguiu (produto, preview,
+// nao-encontrado, invalido, erro), para diagnosticar com curl -sI.
 
 const PREVIEW_BOTS =
   /facebookexternalhit|facebookcatalog|meta-externalagent|meta-externalfetcher|facebot|whatsapp|twitterbot|telegrambot|slackbot|linkedinbot|discordbot|skypeuripreview|pinterest/i;
@@ -39,22 +46,38 @@ const NO_STORE = {
   Vary: "User-Agent",
 };
 
-function redirect(url: URL) {
-  return NextResponse.redirect(url, { status: 302, headers: NO_STORE });
+type Outcome = "produto" | "preview" | "nao-encontrado" | "invalido" | "erro";
+
+function redirect(url: URL, outcome: Outcome) {
+  return NextResponse.redirect(url, {
+    status: 302,
+    headers: { ...NO_STORE, "X-Link-Curto": outcome },
+  });
 }
 
 export async function GET(request: NextRequest, { params }: { params: { ref: string } }) {
+  const fallback = withUtm(new URL("/produtos", request.url));
+  try {
+    return await handle(request, params?.ref ?? "", fallback);
+  } catch (err) {
+    console.error("[link-curto] erro inesperado", { ref: params?.ref, err });
+    return redirect(fallback, "erro");
+  }
+}
+
+export const HEAD = GET;
+
+async function handle(request: NextRequest, rawRef: string, fallback: URL) {
   let ref = "";
   try {
-    ref = decodeURIComponent(params.ref ?? "").trim().toUpperCase();
+    ref = decodeURIComponent(rawRef).trim().toUpperCase();
   } catch {
-    // % malformado: trata como referência inexistente
+    // % malformado: trata como referência inválida
   }
-  const fallback = withUtm(new URL("/produtos", request.url));
-  if (!/^[A-Z0-9-]{2,20}$/.test(ref)) return redirect(fallback);
+  if (!/^[A-Z0-9-]{2,20}$/.test(ref)) return redirect(fallback, "invalido");
 
   const admin = createAdminClient();
-  const { data: product } = await admin
+  const { data: product, error } = await admin
     .from("products")
     .select("name, slug, description, images")
     .ilike("sku_base", ref) // sem diferenciar maiúsculas/minúsculas
@@ -62,12 +85,16 @@ export async function GET(request: NextRequest, { params }: { params: { ref: str
     .limit(1)
     .maybeSingle();
 
-  if (!product?.slug) return redirect(fallback);
+  if (error) {
+    console.error("[link-curto] erro na consulta", { ref, error });
+    return redirect(fallback, "erro");
+  }
+  if (!product?.slug) return redirect(fallback, "nao-encontrado");
 
   const destination = withUtm(new URL(`/produtos/${product.slug}`, request.url));
 
   const ua = request.headers.get("user-agent") ?? "";
-  if (!PREVIEW_BOTS.test(ua)) return redirect(destination);
+  if (!PREVIEW_BOTS.test(ua)) return redirect(destination, "produto");
 
   const og = buildProductOg(product);
   const e = escapeHtml;
@@ -100,6 +127,6 @@ ${og.image.type ? `<meta property="og:image:type" content="${e(og.image.type)}">
 
   return new NextResponse(html, {
     status: 200,
-    headers: { "Content-Type": "text/html; charset=utf-8", ...NO_STORE },
+    headers: { "Content-Type": "text/html; charset=utf-8", ...NO_STORE, "X-Link-Curto": "preview" },
   });
 }
