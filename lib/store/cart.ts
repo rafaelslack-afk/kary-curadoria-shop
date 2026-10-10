@@ -10,6 +10,9 @@ export interface CartItem {
   size: string;
   color: string | null;
   sku: string;
+  // g:id no catálogo da Meta (produto + cor), para os eventos do Pixel.
+  // Opcional: itens salvos no carrinho antes deste campo não o têm.
+  catalogId?: string;
   price: number;
   image: string | null;
   quantity: number;

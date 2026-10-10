@@ -13,6 +13,7 @@ import { useCartStore } from "@/lib/store/cart";
 import { buildWhatsAppUrl } from "@/lib/site";
 import { trackEvent } from "@/lib/analytics";
 import { pixelEvent } from "@/lib/pixel";
+import { catalogCode, catalogItemId } from "@/lib/meta-catalog";
 import type { Product, ProductVariant, Category } from "@/types/database";
 
 // ── Componente de imagem com zoom/pan ────────────────────────────────────────
@@ -124,10 +125,11 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
         },
       ],
     });
+    // Página do produto = grupo do catálogo da Meta (g:item_group_id)
     pixelEvent("ViewContent", {
       content_name: product.name,
-      content_ids: [product.sku_base ?? product.id],
-      content_type: "product",
+      content_ids: [product.sku_base ? catalogCode(product.sku_base) : product.id],
+      content_type: product.sku_base ? "product_group" : "product",
       value: Number(product.price),
       currency: "BRL",
     });
@@ -178,8 +180,14 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
     selectedVariant !== null && isVariantOutOfStock(selectedVariant);
   const allOutOfStock = variants.every(isVariantOutOfStock);
 
+  // g:id do item no catálogo da Meta (produto + cor) — o mesmo do /feed.xml
+  function variantCatalogId(v: ProductVariant): string {
+    return product.sku_base ? catalogItemId(product.sku_base, v.color) : v.sku;
+  }
+
   function handleAddToCart() {
     if (!selectedVariant || outOfStock) return;
+    const catalogId = variantCatalogId(selectedVariant);
     // Preço com acréscimo de plus size calculado AGORA — gravado no item do
     // carrinho já ajustado, não recalculado depois (ver lib/pricing.ts).
     const finalPrice = calcularPrecoComPlusSize(product.price, selectedVariant.size, plusSizeMarkups);
@@ -191,6 +199,7 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
       size: selectedVariant.size,
       color: selectedVariant.color ?? null,
       sku: selectedVariant.sku,
+      catalogId: variantCatalogId(selectedVariant),
       price: finalPrice,
       image: product.images?.[0] ?? null,
       weight_g: product.weight_g,
@@ -216,7 +225,8 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
     });
     pixelEvent("AddToCart", {
       content_name: product.name,
-      content_ids: [selectedVariant.sku],
+      content_ids: [catalogId],
+      contents: [{ id: catalogId, quantity: 1, item_price: Number(finalPrice) }],
       content_type: "product",
       value: Number(finalPrice),
       currency: "BRL",
@@ -236,6 +246,7 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
       size: selectedVariant.size,
       color: selectedVariant.color ?? null,
       sku: selectedVariant.sku,
+      catalogId: variantCatalogId(selectedVariant),
       price: finalPrice,
       image: product.images?.[0] ?? null,
       weight_g: product.weight_g,

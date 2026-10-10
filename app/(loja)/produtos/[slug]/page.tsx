@@ -7,6 +7,7 @@ import { ProductClient } from "./product-client";
 import { RelatedProducts } from "@/components/loja/RelatedProducts";
 import { BenefitsBar } from "@/components/loja/BenefitsBar";
 import { buildProductOg } from "@/lib/product-og";
+import { buildCatalogItems, representativeItem } from "@/lib/meta-catalog";
 
 interface Props {
   params: { slug: string };
@@ -94,10 +95,17 @@ export default async function ProductPage({ params }: Props) {
 
   const totalStock = variants.reduce((sum, v) => sum + v.stock_qty, 0);
 
+  // IDs do catálogo da Meta (/feed.xml): o Pixel lê este JSON-LD na página
+  const catalogItem = product.sku_base
+    ? representativeItem(buildCatalogItems({ ...product, sku_base: product.sku_base }))
+    : null;
+
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "Product",
     name: product.name,
+    sku: catalogItem?.id,
+    productGroupID: catalogItem?.groupId,
     description: product.description ?? undefined,
     image: product.images ?? [],
     brand: {
@@ -109,6 +117,7 @@ export default async function ProductPage({ params }: Props) {
       url: `https://karycuradoria.com.br/produtos/${product.slug}`,
       priceCurrency: "BRL",
       price: product.price,
+      itemCondition: "https://schema.org/NewCondition",
       availability:
         totalStock > 0
           ? "https://schema.org/InStock"

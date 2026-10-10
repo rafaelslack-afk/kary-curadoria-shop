@@ -9,7 +9,7 @@ import { formatCurrency } from "@/lib/utils";
 import { useCoupon } from "@/lib/hooks/useCoupon";
 import { useShipping, type ShippingOption } from "@/lib/hooks/useShipping";
 import { trackEvent } from "@/lib/analytics";
-import { pixelEvent } from "@/lib/pixel";
+import { pixelEvent, pixelCartContents } from "@/lib/pixel";
 import { CardTokenizerForm } from "@/components/loja/checkout/CardTokenizerForm";
 import { validarCPF } from "@/lib/validations";
 
@@ -224,6 +224,7 @@ export default function CheckoutPage() {
       })),
     });
     pixelEvent("InitiateCheckout", {
+      ...pixelCartContents(items),
       num_items: items.length,
       value: subtotal(),
       currency: "BRL",
@@ -370,6 +371,7 @@ export default function CheckoutPage() {
         customerEmail: form.email,
         prazo: form.shippingOption!.prazo,
         total: subtotal() - discount + form.shippingOption!.preco,
+        pixel: pixelCartContents(items),
       }));
       clearCart();
       router.push("/checkout/sucesso");
@@ -515,6 +517,7 @@ export default function CheckoutPage() {
           expiresAt: data.expiresAt,
           total: orderTotal,
           orderNumber: data.orderNumber,
+          pixel: pixelCartContents(items),
         }));
         clearCart();
         router.push(`/checkout/pix?order_id=${data.orderId}`);
@@ -526,6 +529,7 @@ export default function CheckoutPage() {
           customerEmail: form.email,
           prazo: form.shippingOption!.prazo,
           total: orderTotal,
+          pixel: pixelCartContents(items),
         }));
         clearCart();
         router.push("/checkout/sucesso");
