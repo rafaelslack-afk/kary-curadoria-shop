@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Copy, Check, Loader2, Clock } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { buildWhatsAppUrl } from "@/lib/site";
+import type { PixelContents } from "@/lib/pixel";
 
 interface PixData {
   orderId: string;
@@ -13,6 +14,7 @@ interface PixData {
   expiresAt: string | null;
   total: number;
   orderNumber: number;
+  pixel?: PixelContents;        // itens do pedido para o Purchase do Pixel
 }
 
 const POLL_INTERVAL = 5000;
@@ -113,6 +115,7 @@ function PixContent() {
             customerEmail: "",
             prazo: d.prazo ?? null,
             total: pixData.total,
+            pixel: pixData.pixel,
           }));
           setTimeout(() => router.push("/checkout/sucesso"), 1500);
         }

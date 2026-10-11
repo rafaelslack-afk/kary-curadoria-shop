@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Check, Package, ExternalLink } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
-import { pixelEvent } from "@/lib/pixel";
+import { pixelEvent, type PixelContents } from "@/lib/pixel";
 import { GoogleCustomerReviewsOptIn } from "@/components/loja/GoogleCustomerReviewsOptIn";
 import { calcularDataEntregaEstimada } from "@/lib/google-customer-reviews";
 import { buildWhatsAppUrl } from "@/lib/site";
@@ -21,6 +21,7 @@ interface OrderData {
   customerEmail: string;
   prazo: number | null;
   total?: number;
+  pixel?: PixelContents;   // content_ids/contents com os IDs do catálogo da Meta
   // boleto specific
   boletoLine?: string;
   boletoPdf?: string;
@@ -58,6 +59,7 @@ export default function SucessoPage() {
           currency: 'BRL',
         });
         pixelEvent('Purchase', {
+          ...data.pixel,
           value: data.total,
           currency: 'BRL',
           content_type: 'product',
@@ -78,6 +80,7 @@ export default function SucessoPage() {
           currency: 'BRL',
         });
         pixelEvent('Purchase', {
+          ...data.pixel,
           value: data.total,
           currency: 'BRL',
           content_type: 'product',

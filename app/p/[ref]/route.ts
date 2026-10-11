@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildProductOg, shortProductUrl } from "@/lib/product-og";
+import {
+  CATALOG_BRAND,
+  CATALOG_CURRENCY,
+  buildCatalogItems,
+  representativeItem,
+} from "@/lib/meta-catalog";
 
 export const runtime = "nodejs";
 // Consulta o banco a cada requisição: sem lista do build, sem Data Cache.
@@ -17,6 +23,10 @@ export const fetchCache = "force-no-store";
 //   meta tags Open Graph da página do produto. Nem todo crawler segue
 //   redirecionamento, e assim o card sai igual ao da página. O og:url é o
 //   próprio link curto: tocar no card também passa pelo redirect com UTM.
+//   Esta URL é também o g:link do feed do catálogo da Meta (/feed.xml): por
+//   isso a resposta traz og:type=product, as tags product:* (preço,
+//   disponibilidade, IDs do catálogo), canonical e JSON-LD Product, tudo no
+//   HTML inicial (o crawler da Meta não executa JS).
 // - Referência inexistente, produto inativo ou erro na consulta: vai para
 //   /produtos (o erro fica no log). Esta rota nunca responde 404.
 //
@@ -79,7 +89,11 @@ async function handle(request: NextRequest, rawRef: string, fallback: URL) {
   const admin = createAdminClient();
   const { data: product, error } = await admin
     .from("products")
-    .select("name, slug, description, images")
+    .select(
+      `name, slug, description, images, price, original_price, sku_base,
+       categories(slug),
+       product_variants(color, size, stock_qty, active, images)`
+    )
     .ilike("sku_base", ref) // sem diferenciar maiúsculas/minúsculas
     .eq("active", true)
     .limit(1)
@@ -97,6 +111,36 @@ async function handle(request: NextRequest, rawRef: string, fallback: URL) {
   if (!PREVIEW_BOTS.test(ua)) return redirect(destination, "produto");
 
   const og = buildProductOg(product);
+  const canonical = shortProductUrl(ref);
+  const items = buildCatalogItems({ ...product, sku_base: product.sku_base ?? ref });
+  const item = representativeItem(items)!;
+  const inStock = items.some((i) => i.inStock);
+  // Preço pago hoje (promocional, se houver) — o mesmo da página do produto
+  const currentPrice = item.salePrice ?? item.price;
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: product.name,
+    description: item.description,
+    image: (product.images ?? []).length > 0 ? product.images : [og.image.url],
+    sku: item.id,
+    productGroupID: item.groupId,
+    brand: { "@type": "Brand", name: CATALOG_BRAND },
+    url: canonical,
+    offers: {
+      "@type": "Offer",
+      url: canonical,
+      priceCurrency: CATALOG_CURRENCY,
+      price: currentPrice.toFixed(2),
+      itemCondition: "https://schema.org/NewCondition",
+      availability: inStock ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+      seller: { "@type": "Organization", name: CATALOG_BRAND },
+    },
+  };
+  // "<" escapado: o JSON não pode fechar a tag <script> antes da hora
+  const jsonLdHtml = JSON.stringify(jsonLd).replace(/</g, "\\u003c");
+
   const e = escapeHtml;
   const href = e(destination.toString());
   const html = `<!doctype html>
@@ -105,13 +149,13 @@ async function handle(request: NextRequest, rawRef: string, fallback: URL) {
 <meta charset="utf-8">
 <title>${e(product.name)} | Kary Curadoria</title>
 <meta name="description" content="${e(og.description)}">
-<link rel="canonical" href="${e(og.url)}">
+<link rel="canonical" href="${e(canonical)}">
 <meta property="og:title" content="${e(og.title)}">
 <meta property="og:description" content="${e(og.description)}">
-<meta property="og:url" content="${e(shortProductUrl(ref))}">
+<meta property="og:url" content="${e(canonical)}">
 <meta property="og:site_name" content="Kary Curadoria">
 <meta property="og:locale" content="pt_BR">
-<meta property="og:type" content="website">
+<meta property="og:type" content="product">
 <meta property="og:image" content="${e(og.image.url)}">
 <meta property="og:image:secure_url" content="${e(og.image.url)}">
 ${og.image.type ? `<meta property="og:image:type" content="${e(og.image.type)}">\n` : ""}<meta property="og:image:width" content="${og.image.width}">
@@ -121,6 +165,14 @@ ${og.image.type ? `<meta property="og:image:type" content="${e(og.image.type)}">
 <meta name="twitter:title" content="${e(og.title)}">
 <meta name="twitter:description" content="${e(og.description)}">
 <meta name="twitter:image" content="${e(og.image.url)}">
+<meta property="product:brand" content="${e(CATALOG_BRAND)}">
+<meta property="product:availability" content="${inStock ? "in stock" : "out of stock"}">
+<meta property="product:condition" content="new">
+<meta property="product:price:amount" content="${item.price.toFixed(2)}">
+<meta property="product:price:currency" content="${CATALOG_CURRENCY}">
+${item.salePrice != null ? `<meta property="product:sale_price:amount" content="${item.salePrice.toFixed(2)}">\n<meta property="product:sale_price:currency" content="${CATALOG_CURRENCY}">\n` : ""}<meta property="product:retailer_item_id" content="${e(item.id)}">
+<meta property="product:item_group_id" content="${e(item.groupId)}">
+<script type="application/ld+json">${jsonLdHtml}</script>
 </head>
 <body><a href="${href}">${e(product.name)}</a></body>
 </html>`;
