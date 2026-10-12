@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
@@ -9,6 +10,9 @@ export const revalidate = 0;
 // Lista todos os pedidos para o painel admin (ordenados do mais recente ao mais antigo)
 
 export async function GET() {
+  const unauthorized = await requireAdmin();
+  if (unauthorized) return unauthorized;
+
   const admin = createAdminClient();
   const { data: orders, error } = await admin
     .from("orders")
