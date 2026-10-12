@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendOrderShippedEmail } from "@/lib/email/send";
 
@@ -24,7 +25,11 @@ export async function GET(
 
   const admin = createAdminClient();
 
+  // ?full=1 → pedido completo (CPF, telefone, endereço): só o admin logado.
   if (full) {
+    const unauthorized = await requireAdmin();
+    if (unauthorized) return unauthorized;
+
     const { data: order, error } = await admin
       .from("orders")
       .select(`
@@ -69,6 +74,8 @@ export async function GET(
     );
   }
 
+  // Resposta pública (páginas de PIX e de sucesso, que só têm o id do pedido):
+  // nada de nome, e-mail, CPF, telefone ou endereço.
   return NextResponse.json(
     {
       id: order.id,
@@ -92,6 +99,9 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const unauthorized = await requireAdmin();
+  if (unauthorized) return unauthorized;
+
   const { id } = params;
 
   if (!id) {

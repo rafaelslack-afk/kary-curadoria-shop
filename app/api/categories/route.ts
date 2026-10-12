@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { withRetry } from "@/lib/supabase/retry";
 import type { CategoryInsert } from "@/types/database";
@@ -38,6 +39,9 @@ export async function GET(request: NextRequest) {
 
 // POST /api/categories — Create a new category
 export async function POST(request: NextRequest) {
+  const unauthorized = await requireAdmin();
+  if (unauthorized) return unauthorized;
+
   const supabase = createAdminClient();
 
   try {

@@ -138,12 +138,14 @@ export async function POST(request: NextRequest) {
       used_count: number;
       max_uses: number | null;
       expires_at: string | null;
+      type: "percent" | "fixed";
+      value: number;
     } | null = null;
 
     if (couponCode) {
       const { data: coupon } = await admin
         .from("coupons")
-        .select("code, active, max_uses, used_count, expires_at")
+        .select("code, active, max_uses, used_count, expires_at, type, value")
         .eq("code", couponCode)
         .maybeSingle();
 
@@ -230,6 +232,38 @@ export async function POST(request: NextRequest) {
           { status: 409 }
         );
       }
+    }
+
+    // ── 1.7. Validar subtotal, desconto e frete enviados pelo frontend ───────
+    // O valor cobrado no Mercado Pago é subtotal - desconto + frete. Os preços
+    // unitários já foram conferidos acima; aqui o subtotal precisa ser a soma
+    // dos itens, e o desconto não pode passar do que o cupom permite (mesma
+    // fórmula de /api/coupons/validate). Sem isso, um pedido podia ser pago —
+    // e marcado como 'paid' no cartão — por qualquer valor.
+    const itemsSubtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
+    const maxDiscount = validatedCoupon
+      ? validatedCoupon.type === "percent"
+        ? (itemsSubtotal * Number(validatedCoupon.value)) / 100
+        : Math.min(Number(validatedCoupon.value), itemsSubtotal)
+      : 0;
+    const invalidQuantity = items.some((i) => !Number.isInteger(i.quantity) || i.quantity < 1);
+    if (
+      invalidQuantity ||
+      !Number.isFinite(subtotal) ||
+      Math.abs(subtotal - itemsSubtotal) > 0.01 ||
+      !Number.isFinite(discount) ||
+      discount < 0 ||
+      discount > maxDiscount + 0.01 ||
+      !Number.isFinite(shipping?.preco) ||
+      shipping.preco < 0
+    ) {
+      console.warn("[orders/create] Valores do pedido inconsistentes:", {
+        subtotal, itemsSubtotal, discount, maxDiscount, shipping: shipping?.preco, invalidQuantity,
+      });
+      return NextResponse.json(
+        { error: "Os valores do pedido mudaram. Atualize a página e tente novamente.", code: "TOTAL_INVALIDO" },
+        { status: 409 }
+      );
     }
 
     // ── 2. Validar estoque (leitura atômica via adminClient) ─────────────────
