@@ -4,6 +4,12 @@ import { getMPPayment, MERCADOPAGO_ENV, type MPPaymentResponse } from "@/lib/mer
 import { sendOrderCreatedEmail, sendPaymentConfirmedEmail } from "@/lib/email/send";
 import { calcularPrecoComPlusSize } from "@/lib/pricing";
 import { getPlusSizeMarkups } from "@/lib/pricing-server";
+import { waitUntil } from "@vercel/functions";
+import {
+  requestTrackingContext,
+  saveOrderTrackingContext,
+  sendOrderPurchase,
+} from "@/lib/tracking/tiktok-server";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -604,6 +610,26 @@ export async function POST(request: NextRequest) {
     const { error: itemsErr } = await admin.from("order_items").insert(orderItems);
     if (itemsErr) {
       console.error("[orders/create] Failed to insert order_items:", itemsErr);
+    }
+
+    // ── 6.5. TikTok Events API (em segundo plano, nunca bloqueia) ───────────
+    // Guarda IP / user agent / _ttp / ttclid para o Purchase do webhook. Cartão
+    // aprovado já é a confirmação real do pagamento: envia o Purchase agora
+    // (o webhook depois vê wasAlreadyPaid e não reenvia).
+    try {
+      const trackingContext = requestTrackingContext(request.headers);
+      const orderId = order.id;
+      const paidNow = orderStatus === "paid";
+      waitUntil((async () => {
+        try {
+          await saveOrderTrackingContext(orderId, trackingContext);
+          if (paidNow) await sendOrderPurchase(orderId);
+        } catch (err) {
+          console.error("[orders/create] TikTok em segundo plano falhou:", err);
+        }
+      })());
+    } catch (err) {
+      console.error("[orders/create] Falha ao agendar TikTok:", err);
     }
 
     // ── 7. Vincular reservas ao pedido (inventory_log) ───────────────────────

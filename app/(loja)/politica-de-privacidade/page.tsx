@@ -70,7 +70,7 @@ export default function PoliticaDePrivacidadePage() {
           Política de Privacidade
         </h1>
         <p className="text-xs text-[#A0622A]/80 tracking-wide mb-6" style={jost}>
-          Última atualização: setembro de 2026
+          Última atualização: outubro de 2026
         </p>
         <p className="text-sm text-[#5C3317]/65 leading-relaxed max-w-xl mx-auto" style={jost}>
           A Kary Curadoria está comprometida com a privacidade e a proteção dos seus dados pessoais.
@@ -174,8 +174,16 @@ export default function PoliticaDePrivacidadePage() {
           "Google Analytics: análise de navegação de forma anonimizada",
           "Resend: envio de e-mails transacionais",
           "Anthropic: processamento das mensagens enviadas ao assistente virtual",
+          "Meta (Facebook e Instagram) e TikTok: parceiros de publicidade, para medir o resultado das nossas campanhas",
         ]} />
         <Prose>
+          <p className="mt-3">
+            Para medir as campanhas de publicidade, enviamos ao Meta e ao TikTok dados do pedido e
+            da navegação: e-mail e telefone criptografados com hash (SHA-256, de forma que o dado
+            original não é enviado), endereço IP, informações do navegador e os itens comprados,
+            com valores. Os dados técnicos (IP e navegador) guardados para esse envio são apagados
+            do pedido logo após o envio, ou em até 7 dias.
+          </p>
           <p className="mt-3">
             Todos os parceiros operam sob suas próprias políticas de privacidade e estão em
             conformidade com a LGPD.
@@ -191,6 +199,7 @@ export default function PoliticaDePrivacidadePage() {
           "Manter itens no carrinho de compras",
           "Manter sua sessão ativa após login",
           "Analisar o comportamento de navegação (Google Analytics — dados anonimizados)",
+          "Medir o resultado de campanhas de publicidade (Meta Pixel e TikTok Pixel)",
           "Melhorar a performance do site",
         ]} />
         <Prose>

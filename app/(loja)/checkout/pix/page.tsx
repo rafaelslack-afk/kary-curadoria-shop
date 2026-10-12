@@ -6,6 +6,7 @@ import { Copy, Check, Loader2, Clock } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { buildWhatsAppUrl } from "@/lib/site";
 import type { PixelContents } from "@/lib/pixel";
+import type { TrackingItem } from "@/lib/tracking/contents";
 
 interface PixData {
   orderId: string;
@@ -15,6 +16,7 @@ interface PixData {
   total: number;
   orderNumber: number;
   pixel?: PixelContents;        // itens do pedido para o Purchase do Pixel
+  items?: TrackingItem[];       // itens do pedido para o Purchase do TikTok
 }
 
 const POLL_INTERVAL = 5000;
@@ -116,6 +118,7 @@ function PixContent() {
             prazo: d.prazo ?? null,
             total: pixData.total,
             pixel: pixData.pixel,
+            items: pixData.items,
           }));
           setTimeout(() => router.push("/checkout/sucesso"), 1500);
         }

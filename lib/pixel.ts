@@ -7,11 +7,17 @@ declare global {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function pixelEvent(event: string, params?: Record<string, any>) {
+// options.eventID: deduplicação com a futura Conversions API (hoje só no Purchase).
+export function pixelEvent(
+  event: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  params?: Record<string, any>,
+  options?: { eventID: string }
+) {
   if (!event || typeof event !== 'string') return;
   if (typeof window !== 'undefined' && window.fbq) {
-    window.fbq('track', event, params);
+    if (options) window.fbq('track', event, params, options);
+    else window.fbq('track', event, params);
   }
 }
 

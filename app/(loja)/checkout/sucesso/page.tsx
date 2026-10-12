@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Check, Package, ExternalLink } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
-import { pixelEvent, type PixelContents } from "@/lib/pixel";
+import type { PixelContents } from "@/lib/pixel";
+import { trackConversion } from "@/lib/tracking/events";
+import { purchaseEventId, tiktokProperties, type TrackingItem } from "@/lib/tracking/contents";
 import { GoogleCustomerReviewsOptIn } from "@/components/loja/GoogleCustomerReviewsOptIn";
 import { calcularDataEntregaEstimada } from "@/lib/google-customer-reviews";
 import { buildWhatsAppUrl } from "@/lib/site";
@@ -22,6 +24,7 @@ interface OrderData {
   prazo: number | null;
   total?: number;
   pixel?: PixelContents;   // content_ids/contents com os IDs do catálogo da Meta
+  items?: TrackingItem[];  // mesmos itens, com nome, para o TikTok
   // boleto specific
   boletoLine?: string;
   boletoPdf?: string;
@@ -37,8 +40,8 @@ export default function SucessoPage() {
   // Dados reais do pedido, buscados no banco — o snapshot do sessionStorage
   // (acima) é escrito no momento da CRIAÇÃO do pedido e não tem `status`
   // nem `updated_at`, então não é confiável para decidir se o pedido foi
-  // de fato pago. Usado exclusivamente para o opt-in do Google Customer
-  // Reviews (não altera nenhuma outra parte desta página).
+  // de fato pago. Usado pelo opt-in do Google Customer Reviews e pelo
+  // Purchase do Meta/TikTok (abaixo).
   const [orderStatus, setOrderStatus] = useState<string | null>(null);
   const [orderUpdatedAt, setOrderUpdatedAt] = useState<string | null>(null);
 
@@ -58,12 +61,6 @@ export default function SucessoPage() {
           value: data.total,
           currency: 'BRL',
         });
-        pixelEvent('Purchase', {
-          ...data.pixel,
-          value: data.total,
-          currency: 'BRL',
-          content_type: 'product',
-        });
       }
       return;
     }
@@ -79,19 +76,12 @@ export default function SucessoPage() {
           value: data.total,
           currency: 'BRL',
         });
-        pixelEvent('Purchase', {
-          ...data.pixel,
-          value: data.total,
-          currency: 'BRL',
-          content_type: 'product',
-        });
       }
     }
   }, []);
 
-  // Busca status + updated_at reais do pedido no banco, exclusivamente
-  // para decidir se o opt-in do Google Customer Reviews deve renderizar.
-  // Não interfere em nenhum outro estado/comportamento desta página.
+  // Busca status + updated_at reais do pedido no banco, para decidir se o
+  // opt-in do Google Customer Reviews renderiza e se o Purchase dispara.
   useEffect(() => {
     if (!order?.orderId) return;
     let cancelled = false;
@@ -107,6 +97,32 @@ export default function SucessoPage() {
 
     return () => { cancelled = true; };
   }, [order?.orderId]);
+
+  // Purchase no navegador (Meta + TikTok): SÓ com o pedido confirmadamente
+  // pago, pelo status real do banco (boleto/PIX pendente e cartão em análise
+  // não disparam — o servidor envia quando o webhook confirmar). event_id
+  // purchase_<orderId>, o mesmo do Purchase do servidor (deduplicação).
+  const purchaseTracked = useRef(false);
+  useEffect(() => {
+    if (purchaseTracked.current || !order?.orderId || !order.total) return;
+    if (!orderStatus || !PAID_OR_LATER_STATUSES.includes(orderStatus)) return;
+    purchaseTracked.current = true;
+
+    const items: TrackingItem[] =
+      order.items ??
+      (order.pixel?.contents ?? []).map((c) => ({ id: c.id, name: "", price: c.item_price, quantity: c.quantity }));
+
+    trackConversion("Purchase", {
+      eventId: purchaseEventId(order.orderId),
+      meta: {
+        ...order.pixel,
+        value: order.total,
+        currency: 'BRL',
+        content_type: 'product',
+      },
+      tiktok: tiktokProperties(items, order.total, String(order.orderNumber)),
+    });
+  }, [order, orderStatus]);
 
   function handleCopyBoleto() {
     navigator.clipboard.writeText(boletoLine).then(() => {

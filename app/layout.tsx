@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Script from "next/script";
 import GoogleAnalytics from "@/components/analytics/google-analytics";
+import TikTokPixel from "@/components/analytics/tiktok-pixel";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://karycuradoria.com.br"),
@@ -111,6 +112,9 @@ export default function RootLayout({
             alt=""
           />
         </noscript>
+
+        {/* TikTok Pixel (ID em NEXT_PUBLIC_TIKTOK_PIXEL_ID) */}
+        <TikTokPixel />
 
         {children}
       </body>
