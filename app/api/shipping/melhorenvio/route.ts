@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { signShippingQuote } from "@/lib/shipping-quote";
 
 export const runtime = "nodejs";
 
@@ -57,6 +58,20 @@ function mockOptions(cepDestino: string): ShippingOption[] {
   ];
 }
 
+// Acrescenta o comprovante assinado (quoteToken) a cada opção, sem mudar
+// nenhum outro campo. Se a assinatura falhar, devolve as opções como antes.
+function withQuoteTokens(opcoes: ShippingOption[], cepDestino: string) {
+  try {
+    return opcoes.map((o) => {
+      const quoteToken = signShippingQuote(o, cepDestino);
+      return quoteToken ? { ...o, quoteToken } : o;
+    });
+  } catch (err) {
+    console.warn("[melhorenvio] Falha ao assinar cotação:", (err as Error).message);
+    return opcoes;
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as ShippingInput;
@@ -101,13 +116,13 @@ export async function POST(request: NextRequest) {
       if (!res.ok) {
         const text = await res.text();
         console.warn(`[melhorenvio] API retornou ${res.status}: ${text}`);
-        return NextResponse.json({ opcoes: mockOptions(cepDestino) });
+        return NextResponse.json({ opcoes: withQuoteTokens(mockOptions(cepDestino), cepDestino) });
       }
 
       data = await res.json() as unknown[];
     } catch (err) {
       console.warn("[melhorenvio] Falha na requisição:", (err as Error).message);
-      return NextResponse.json({ opcoes: mockOptions(cepDestino) });
+      return NextResponse.json({ opcoes: withQuoteTokens(mockOptions(cepDestino), cepDestino) });
     }
 
     // Filtra apenas serviços dos Correios (company.id === 1 ou nome contém "correios")
@@ -135,10 +150,10 @@ export async function POST(request: NextRequest) {
       .sort((a, b) => a.preco - b.preco);
 
     if (opcoes.length === 0) {
-      return NextResponse.json({ opcoes: mockOptions(cepDestino) });
+      return NextResponse.json({ opcoes: withQuoteTokens(mockOptions(cepDestino), cepDestino) });
     }
 
-    return NextResponse.json({ opcoes });
+    return NextResponse.json({ opcoes: withQuoteTokens(opcoes, cepDestino) });
   } catch (err) {
     console.error("[melhorenvio] Erro interno:", err);
     return NextResponse.json(

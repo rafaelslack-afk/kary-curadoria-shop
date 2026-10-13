@@ -10,6 +10,7 @@ import {
   saveOrderTrackingContext,
   sendOrderPurchase,
 } from "@/lib/tracking/tiktok-server";
+import { checkOrderTotal } from "@/lib/order-total-check";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -731,6 +732,33 @@ export async function POST(request: NextRequest) {
       })());
     } catch (err) {
       console.error("[orders/create] Falha ao agendar TikTok:", err);
+    }
+
+    // ── 9.6. Checagem do total — FASE 1, só observação ──────────────────────
+    // Recalcula subtotal, desconto do cupom e frete (comprovante assinado) e
+    // compara com o total cobrado. Em segundo plano, depois de tudo gravado:
+    // não recusa, não altera valor, status, estoque nem a cobrança. Divergência
+    // só gera o log TOTAL_DIVERGENTE e uma linha em order_total_checks.
+    try {
+      waitUntil(checkOrderTotal({
+        orderId: order.id,
+        orderNumber: order.order_number,
+        paymentMethod: payment.method,
+        email: customer.email,
+        cep: address.cep,
+        items: items.map((i) => ({ productId: i.productId, size: i.size, price: i.price, quantity: i.quantity })),
+        subtotal,
+        discount,
+        couponCode: couponCode ?? null,
+        shipping: {
+          codigo: shipping.codigo,
+          preco: shipping.preco,
+          quoteToken: (shipping as { quoteToken?: unknown }).quoteToken,
+        },
+        plusSizeMarkups,
+      }));
+    } catch (err) {
+      console.error("[orders/create] Falha ao agendar checagem do total:", err);
     }
 
     // ── 10. Montar resposta por método de pagamento ──────────────────────────
