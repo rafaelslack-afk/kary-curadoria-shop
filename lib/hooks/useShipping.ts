@@ -8,6 +8,7 @@ export interface ShippingOption {
   company: string;
   preco: number; // R$
   prazo: number; // dias úteis
+  quoteToken?: string; // comprovante assinado da cotação (reenviado no pedido)
 }
 
 export interface ShippingItemInput {

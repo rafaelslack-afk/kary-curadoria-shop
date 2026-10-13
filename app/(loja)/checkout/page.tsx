@@ -334,6 +334,7 @@ export default function CheckoutPage() {
           codigo: String(form.shippingOption!.id),
           preco: form.shippingOption!.preco,
           prazo: form.shippingOption!.prazo,
+          quoteToken: form.shippingOption!.quoteToken,
         },
         payment: { method: "credit_card", brickFormData: formData },
         items: items.map((i) => ({
@@ -496,6 +497,7 @@ export default function CheckoutPage() {
           codigo: String(form.shippingOption!.id),
           preco: form.shippingOption!.preco,
           prazo: form.shippingOption!.prazo,
+          quoteToken: form.shippingOption!.quoteToken,
         },
         payment: { method: form.paymentMethod },
         items: items.map((i) => ({
