@@ -20,8 +20,19 @@ export interface TikTokContent {
 }
 
 // Itens do carrinho → TrackingItem. Tamanhos da mesma cor somam no mesmo
-// item, como em pixelCartContents (lib/pixel.ts).
+// item, como em pixelCartContents (lib/pixel.ts). Nunca lança: é chamada no
+// caminho do pagamento (checkout) e, em caso de erro, devolve lista vazia.
 export function cartTrackingItems(
+  items: { catalogId?: string; sku: string; productName: string; quantity: number; price: number }[]
+): TrackingItem[] {
+  try {
+    return groupCartItems(items);
+  } catch {
+    return [];
+  }
+}
+
+function groupCartItems(
   items: { catalogId?: string; sku: string; productName: string; quantity: number; price: number }[]
 ): TrackingItem[] {
   const byId = new Map<string, TrackingItem>();

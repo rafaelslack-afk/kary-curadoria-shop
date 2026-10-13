@@ -225,15 +225,17 @@ export default function CheckoutPage() {
         quantity: item.quantity,
       })),
     });
-    trackConversion("InitiateCheckout", {
-      meta: {
-        ...pixelCartContents(items),
-        num_items: items.length,
-        value: subtotal(),
-        currency: "BRL",
-      },
-      tiktok: tiktokProperties(cartTrackingItems(items), subtotal()),
-    });
+    try {
+      trackConversion("InitiateCheckout", {
+        meta: {
+          ...pixelCartContents(items),
+          num_items: items.length,
+          value: subtotal(),
+          currency: "BRL",
+        },
+        tiktok: tiktokProperties(cartTrackingItems(items), subtotal()),
+      });
+    } catch { /* tracking nunca bloqueia o checkout */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -297,9 +299,11 @@ export default function CheckoutPage() {
   // TikTok AddPaymentInfo: ao enviar o pagamento (PIX ou cartão), antes de
   // criar o pedido. Só TikTok — o Meta não tinha este evento.
   function trackAddPaymentInfo() {
-    trackConversion("AddPaymentInfo", {
-      tiktok: tiktokProperties(cartTrackingItems(items), total),
-    });
+    try {
+      trackConversion("AddPaymentInfo", {
+        tiktok: tiktokProperties(cartTrackingItems(items), total),
+      });
+    } catch { /* tracking nunca bloqueia o pagamento */ }
   }
 
   // ── Handler de submit do cartão (ref atualizada a cada render) ──
