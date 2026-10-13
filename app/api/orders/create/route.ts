@@ -744,7 +744,6 @@ export async function POST(request: NextRequest) {
         orderId: order.id,
         orderNumber: order.order_number,
         paymentMethod: payment.method,
-        email: customer.email,
         cep: address.cep,
         items: items.map((i) => ({ productId: i.productId, size: i.size, price: i.price, quantity: i.quantity })),
         subtotal,

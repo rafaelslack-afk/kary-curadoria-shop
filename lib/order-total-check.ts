@@ -9,16 +9,17 @@ import { verifyShippingQuote, toCents } from "@/lib/shipping-quote";
 // log TOTAL_DIVERGENTE com os valores e o motivo. Nunca lança.
 //
 // Regras do cupom: as mesmas de /api/coupons/validate (valor/percentual,
-// pedido mínimo, produto específico, forma de pagamento) + a exceção de
-// abandono recente de /api/orders/create. Limite de usos e validade já são
-// recusados pelo orders/create antes da cobrança e não são refeitos aqui
-// (a checagem roda depois do incremento de used_count).
+// pedido mínimo, produto específico, forma de pagamento). Cupom ativo ou
+// inativo-com-abandono-recente, limite de usos e validade já são recusados
+// pelo orders/create ANTES da cobrança; não são refeitos aqui porque a
+// checagem roda depois do pedido gravado — o used_count já foi incrementado e
+// o registro de abandono pode ter sido apagado (passo 5b), o que geraria
+// divergência falsa.
 
 export interface OrderTotalCheckInput {
   orderId: string;
   orderNumber: number;
   paymentMethod: string;
-  email: string;
   cep: string;
   items: { productId: string; size: string; price: number; quantity: number }[];
   subtotal: number;
@@ -29,7 +30,6 @@ export interface OrderTotalCheckInput {
 }
 
 interface CouponRow {
-  active: boolean;
   type: "percent" | "fixed";
   value: number;
   min_order: number | null;
@@ -39,7 +39,6 @@ interface CouponRow {
 
 export interface OrderTotalCheckDeps {
   fetchCoupon: (code: string) => Promise<CouponRow | null>;
-  hasRecentAbandonment: (email: string) => Promise<boolean>;
   saveCheck: (row: Record<string, unknown>) => Promise<void>;
 }
 
@@ -71,7 +70,6 @@ export async function checkOrderTotal(
         const allowed = coupon.allowed_payment_methods ?? "all";
         const productIds = input.items.map((i) => i.productId);
         const ruleFailures: string[] = [];
-        if (!coupon.active && !(await deps.hasRecentAbandonment(input.email))) ruleFailures.push("cupom_inativo");
         if (expectedSubtotal < toCents(coupon.min_order ?? 0)) ruleFailures.push("cupom_pedido_minimo");
         if (coupon.product_id && !productIds.includes(coupon.product_id)) ruleFailures.push("cupom_produto");
         if (allowed !== "all" && allowed !== input.paymentMethod) ruleFailures.push("cupom_forma_pagamento");
@@ -138,22 +136,10 @@ function defaultDeps(): OrderTotalCheckDeps {
     async fetchCoupon(code) {
       const { data } = await admin
         .from("coupons")
-        .select("active, type, value, min_order, product_id, allowed_payment_methods")
+        .select("type, value, min_order, product_id, allowed_payment_methods")
         .eq("code", code)
         .maybeSingle();
       return (data as CouponRow | null) ?? null;
-    },
-    // Mesma regra do orders/create: abandono registrado nos últimos 7 dias.
-    async hasRecentAbandonment(email) {
-      const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-      const { data } = await admin
-        .from("abandoned_checkouts")
-        .select("id")
-        .eq("email", email.trim().toLowerCase())
-        .gte("created_at", since)
-        .limit(1)
-        .maybeSingle();
-      return Boolean(data);
     },
     async saveCheck(row) {
       const { error } = await admin.from("order_total_checks").insert(row);
