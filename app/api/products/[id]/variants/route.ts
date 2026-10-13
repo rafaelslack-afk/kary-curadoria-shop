@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { ProductVariantInsert, ProductVariantUpdate } from "@/types/database";
 import { STOCK_BUFFER } from "@/lib/constants";
@@ -44,6 +45,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const unauthorized = await requireAdmin();
+  if (unauthorized) return unauthorized;
+
   const supabase = createAdminClient();
 
   try {
@@ -91,6 +95,9 @@ export async function POST(
 
 // PUT /api/products/[id]/variants — Update a variant (variant_id in body)
 export async function PUT(request: NextRequest) {
+  const unauthorized = await requireAdmin();
+  if (unauthorized) return unauthorized;
+
   const supabase = createAdminClient();
 
   try {
@@ -128,6 +135,9 @@ export async function PUT(request: NextRequest) {
 
 // DELETE /api/products/[id]/variants — Delete a variant (variant_id in body)
 export async function DELETE(request: NextRequest) {
+  const unauthorized = await requireAdmin();
+  if (unauthorized) return unauthorized;
+
   const supabase = createAdminClient();
 
   try {
