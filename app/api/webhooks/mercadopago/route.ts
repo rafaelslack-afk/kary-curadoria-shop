@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendPaymentConfirmedEmail, sendOrderCancelledEmail, sendLowStockAlertEmail } from "@/lib/email/send";
+import { waitUntil } from "@vercel/functions";
+import { sendOrderPurchase } from "@/lib/tracking/tiktok-server";
 
 // Semântica dos status MP no contexto do KVO:
 //
@@ -266,6 +268,18 @@ export async function POST(request: Request) {
       // Notifica o ERP sobre a nova venda (fire-and-forget — não bloqueia)
       if (!wasAlreadyPaid) {
         notifyErpNewSale(order).catch(() => {});
+      }
+
+      // TikTok Events API — Purchase pela confirmação real do pagamento (PIX,
+      // boleto, cartão em análise). Em segundo plano; sendOrderPurchase nunca
+      // lança e é idempotente. Cartão aprovado na hora já foi enviado em
+      // /api/orders/create (aqui wasAlreadyPaid = true).
+      if (!wasAlreadyPaid) {
+        try {
+          waitUntil(sendOrderPurchase(order.id));
+        } catch (err) {
+          console.error("[Webhook MP] Falha ao agendar Purchase do TikTok:", err);
+        }
       }
     } else if (payment.status === "rejected") {
       // ── Cartão recusado ──────────────────────────────────────────────────

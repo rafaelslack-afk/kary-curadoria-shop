@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isOrderExpired } from "@/lib/order-expiration";
 import { sendOrderCancelledEmail } from "@/lib/email/send";
+import { purgeTrackingContext } from "@/lib/tracking/tiktok-server";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -23,6 +24,9 @@ export const maxDuration = 60;
  * 2. Reverter estoque dos `order_items` (devolve ao `product_variants.stock_qty`)
  *    e registrar em `inventory_log`
  * 3. Enviar e-mail de cancelamento com `wasAlreadyPaid: false`
+ *
+ * Também apaga IP / user agent / _ttp / ttclid (orders.tracking_context) de
+ * pedidos com mais de 7 dias que ainda os guardam — retenção do TikTok.
  *
  * Sempre retorna 200 mesmo se houver falhas parciais — o corpo inclui
  * a contagem de sucesso/erro para monitoramento.
@@ -179,12 +183,16 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Retenção do tracking_context (TikTok). Nunca lança.
+  const trackingContextPurged = await purgeTrackingContext();
+
   const finishedAt = new Date().toISOString();
-  console.log("[cron/cancel-expired] Resultado:", JSON.stringify(results));
+  console.log("[cron/cancel-expired] Resultado:", JSON.stringify({ ...results, trackingContextPurged }));
 
   return NextResponse.json({
     checked: pendingOrders.length,
     ...results,
+    trackingContextPurged,
     startedAt,
     finishedAt,
   });

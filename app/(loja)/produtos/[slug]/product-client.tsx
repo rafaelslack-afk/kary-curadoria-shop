@@ -12,7 +12,8 @@ import { isVariantOutOfStock, isVariantLowStock } from "@/lib/stock-availability
 import { useCartStore } from "@/lib/store/cart";
 import { buildWhatsAppUrl } from "@/lib/site";
 import { trackEvent } from "@/lib/analytics";
-import { pixelEvent } from "@/lib/pixel";
+import { trackConversion } from "@/lib/tracking/events";
+import { tiktokProperties } from "@/lib/tracking/contents";
 import { catalogCode, catalogItemId } from "@/lib/meta-catalog";
 import type { Product, ProductVariant, Category } from "@/types/database";
 
@@ -125,13 +126,27 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
         },
       ],
     });
-    // Página do produto = grupo do catálogo da Meta (g:item_group_id)
-    pixelEvent("ViewContent", {
-      content_name: product.name,
-      content_ids: [product.sku_base ? catalogCode(product.sku_base) : product.id],
-      content_type: product.sku_base ? "product_group" : "product",
-      value: Number(product.price),
-      currency: "BRL",
+    // Meta: página do produto = grupo do catálogo (g:item_group_id).
+    // TikTok: content_type "product" → um item por cor (g:id), já que a
+    // página mostra todas as cores antes da escolha.
+    const colorItemIds = product.sku_base
+      ? Array.from(new Set(variants.map((v) => catalogItemId(product.sku_base!, v.color))))
+      : [];
+    if (colorItemIds.length === 0) {
+      colorItemIds.push(product.sku_base ? catalogCode(product.sku_base) : product.id);
+    }
+    trackConversion("ViewContent", {
+      meta: {
+        content_name: product.name,
+        content_ids: [product.sku_base ? catalogCode(product.sku_base) : product.id],
+        content_type: product.sku_base ? "product_group" : "product",
+        value: Number(product.price),
+        currency: "BRL",
+      },
+      tiktok: tiktokProperties(
+        colorItemIds.map((id) => ({ id, name: product.name, price: Number(product.price), quantity: 1 })),
+        Number(product.price)
+      ),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product.id]);
@@ -223,13 +238,19 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
         },
       ],
     });
-    pixelEvent("AddToCart", {
-      content_name: product.name,
-      content_ids: [catalogId],
-      contents: [{ id: catalogId, quantity: 1, item_price: Number(finalPrice) }],
-      content_type: "product",
-      value: Number(finalPrice),
-      currency: "BRL",
+    trackConversion("AddToCart", {
+      meta: {
+        content_name: product.name,
+        content_ids: [catalogId],
+        contents: [{ id: catalogId, quantity: 1, item_price: Number(finalPrice) }],
+        content_type: "product",
+        value: Number(finalPrice),
+        currency: "BRL",
+      },
+      tiktok: tiktokProperties(
+        [{ id: catalogId, name: product.name, price: Number(finalPrice), quantity: 1 }],
+        Number(finalPrice)
+      ),
     });
     setAdded(true);
     setTimeout(() => setAdded(false), 2000);
@@ -253,6 +274,13 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
       length_cm: product.length_cm,
       width_cm: product.width_cm,
       height_cm: product.height_cm,
+    });
+    // Só TikTok: o Meta nunca recebeu AddToCart no "Comprar agora".
+    trackConversion("AddToCart", {
+      tiktok: tiktokProperties(
+        [{ id: variantCatalogId(selectedVariant), name: product.name, price: Number(finalPrice), quantity: 1 }],
+        Number(finalPrice)
+      ),
     });
     router.push("/checkout");
   }

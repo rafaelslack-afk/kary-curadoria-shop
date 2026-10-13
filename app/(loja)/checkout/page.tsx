@@ -9,7 +9,9 @@ import { formatCurrency } from "@/lib/utils";
 import { useCoupon } from "@/lib/hooks/useCoupon";
 import { useShipping, type ShippingOption } from "@/lib/hooks/useShipping";
 import { trackEvent } from "@/lib/analytics";
-import { pixelEvent, pixelCartContents } from "@/lib/pixel";
+import { pixelCartContents } from "@/lib/pixel";
+import { trackConversion, identifyCustomer } from "@/lib/tracking/events";
+import { cartTrackingItems, tiktokProperties } from "@/lib/tracking/contents";
 import { CardTokenizerForm } from "@/components/loja/checkout/CardTokenizerForm";
 import { validarCPF } from "@/lib/validations";
 
@@ -223,12 +225,17 @@ export default function CheckoutPage() {
         quantity: item.quantity,
       })),
     });
-    pixelEvent("InitiateCheckout", {
-      ...pixelCartContents(items),
-      num_items: items.length,
-      value: subtotal(),
-      currency: "BRL",
-    });
+    try {
+      trackConversion("InitiateCheckout", {
+        meta: {
+          ...pixelCartContents(items),
+          num_items: items.length,
+          value: subtotal(),
+          currency: "BRL",
+        },
+        tiktok: tiktokProperties(cartTrackingItems(items), subtotal()),
+      });
+    } catch { /* tracking nunca bloqueia o checkout */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -289,11 +296,22 @@ export default function CheckoutPage() {
     return method !== allowed;
   }
 
+  // TikTok AddPaymentInfo: ao enviar o pagamento (PIX ou cartão), antes de
+  // criar o pedido. Só TikTok — o Meta não tinha este evento.
+  function trackAddPaymentInfo() {
+    try {
+      trackConversion("AddPaymentInfo", {
+        tiktok: tiktokProperties(cartTrackingItems(items), total),
+      });
+    } catch { /* tracking nunca bloqueia o pagamento */ }
+  }
+
   // ── Handler de submit do cartão (ref atualizada a cada render) ──
   // Atribuição direta na ref — não dispara re-render, sempre tem o closure mais recente
   cardSubmitHandlerRef.current = async (formData: unknown) => {
     setSubmitting(true);
     setSubmitError("");
+    trackAddPaymentInfo();
     try {
       const payload = {
         customer: {
@@ -372,6 +390,7 @@ export default function CheckoutPage() {
         prazo: form.shippingOption!.prazo,
         total: subtotal() - discount + form.shippingOption!.preco,
         pixel: pixelCartContents(items),
+        items: cartTrackingItems(items),
       }));
       clearCart();
       router.push("/checkout/sucesso");
@@ -453,6 +472,7 @@ export default function CheckoutPage() {
   async function doSubmit() {
     setSubmitting(true);
     setSubmitError("");
+    trackAddPaymentInfo();
 
     try {
       const payload = {
@@ -518,6 +538,7 @@ export default function CheckoutPage() {
           total: orderTotal,
           orderNumber: data.orderNumber,
           pixel: pixelCartContents(items),
+          items: cartTrackingItems(items),
         }));
         clearCart();
         router.push(`/checkout/pix?order_id=${data.orderId}`);
@@ -530,6 +551,7 @@ export default function CheckoutPage() {
           prazo: form.shippingOption!.prazo,
           total: orderTotal,
           pixel: pixelCartContents(items),
+          items: cartTrackingItems(items),
         }));
         clearCart();
         router.push("/checkout/sucesso");
@@ -575,7 +597,10 @@ export default function CheckoutPage() {
 
   // ── Avançar etapa ──
   function handleContinue() {
-    if (step === 0) saveAbandonedCheckout();
+    if (step === 0) {
+      saveAbandonedCheckout();
+      identifyCustomer(form.email, form.telefone); // ttq.identify com SHA-256
+    }
     // Ao avançar da etapa de endereço para pagamento, limpa o CEP salvo
     if (step === 1) {
       try { sessionStorage.removeItem("kary_cep_simulado"); } catch { /* ignore */ }
