@@ -181,7 +181,7 @@ export default function PedidoDetailPage() {
 
   async function fetchOrder() {
     try {
-      const res = await fetch(`/api/orders/${id}?full=1`);
+      const res = await fetch(`/api/admin/orders/${id}`);
       if (!res.ok) throw new Error("Pedido não encontrado");
       const data: FullOrder = await res.json();
       setOrder(data);

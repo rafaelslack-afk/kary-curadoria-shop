@@ -12,12 +12,15 @@ const NO_CACHE = {
   Pragma: "no-cache",
 };
 
+// GET /api/orders/[id] — rota PÚBLICA (só o id do pedido é necessário).
+// Usada pelas páginas /checkout/pix e /checkout/sucesso; devolve apenas os
+// campos que elas leem. Nada de nome, e-mail, CPF, telefone ou endereço.
+// O pedido completo do admin está em GET /api/admin/orders/[id] (protegida).
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   const { id } = params;
-  const full = request.nextUrl.searchParams.get("full") === "1";
 
   if (!id) {
     return NextResponse.json({ error: "ID do pedido nao informado." }, { status: 400 });
@@ -25,40 +28,9 @@ export async function GET(
 
   const admin = createAdminClient();
 
-  if (full) {
-    const { data: order, error } = await admin
-      .from("orders")
-      .select(`
-        id, order_number, status, payment_method,
-        pagbank_charge_id, pagbank_status,
-        guest_name, guest_email, guest_cpf, customer_phone,
-        subtotal, shipping_cost, discount, coupon_code, total,
-        shipping_service, shipping_deadline, shipping_address_json,
-        tracking_code, label_url, nf_number, nf_key, nf_status, notes,
-        created_at, updated_at,
-        order_items (
-          id, product_id, variant_id,
-          product_name, size_snapshot, color_snapshot, sku_snapshot,
-          quantity, unit_price, total_price
-        )
-      `)
-      .eq("id", id)
-      .single();
-
-    if (error || !order) {
-      console.error(`[Orders GET full] Pedido nao encontrado: ${id}`, error?.message);
-      return NextResponse.json(
-        { error: "Pedido nao encontrado." },
-        { status: 404, headers: NO_CACHE }
-      );
-    }
-
-    return NextResponse.json(order, { headers: NO_CACHE });
-  }
-
   const { data: order, error } = await admin
     .from("orders")
-    .select("id, order_number, status, pagbank_status, total, shipping_deadline, payment_method, updated_at")
+    .select("id, order_number, status, total, shipping_deadline, updated_at")
     .eq("id", id)
     .single();
 
@@ -75,10 +47,8 @@ export async function GET(
       id: order.id,
       orderNumber: order.order_number,
       status: order.status,
-      mpStatus: order.pagbank_status,
       total: order.total,
       prazo: order.shipping_deadline,
-      paymentMethod: order.payment_method,
       // updatedAt — usado como proxy de data de confirmação de pagamento
       // (não há coluna dedicada paid_at/confirmed_at na tabela orders).
       updatedAt: order.updated_at,
