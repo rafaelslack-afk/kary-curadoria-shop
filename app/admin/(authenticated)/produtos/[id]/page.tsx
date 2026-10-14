@@ -66,6 +66,8 @@ export default function EditarProdutoPage() {
   const [togglingSync, setTogglingSync]             = useState(false);
   const [notificaErpVenda, setNotificaErpVenda]     = useState(true);
   const [togglingNotifica, setTogglingNotifica]     = useState(false);
+  const [atacadoEnabled, setAtacadoEnabled]         = useState(true);
+  const [togglingAtacado, setTogglingAtacado]       = useState(false);
   const [success, setSuccess]           = useState("");
   const [categories, setCategories]     = useState<Category[]>([]);
   const [allColors, setAllColors]       = useState<Color[]>([]);
@@ -145,6 +147,7 @@ export default function EditarProdutoPage() {
         setFeatured(product.featured ?? false);
         setErpSyncEnabled(product.erp_sync_enabled !== false);       // default true
         setNotificaErpVenda(product.notifica_erp_venda !== false);  // default true
+        setAtacadoEnabled(product.atacado_enabled !== false);       // default true
         setImages(product.images ?? []);
         setWeightG(product.weight_g ? String(product.weight_g) : "");
         setLengthCm(product.length_cm ? String(product.length_cm) : "");
@@ -440,6 +443,31 @@ export default function EditarProdutoPage() {
       setError("Erro ao atualizar configuração de sync.");
     } finally {
       setTogglingSync(false);
+    }
+  }
+
+  // ── Toggle atacado (só a área de atacado lê este campo) ──────────────────
+
+  async function handleToggleAtacado(enabled: boolean) {
+    setTogglingAtacado(true);
+    try {
+      const res = await fetch(`/api/products/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ atacado_enabled: enabled }),
+      });
+      if (res.ok) {
+        setAtacadoEnabled(enabled);
+        setSuccess(enabled ? "Atacado ativado — a peça aparece no catálogo de atacado." : "Atacado desativado — a peça não aparece no catálogo de atacado.");
+        setTimeout(() => setSuccess(""), 4000);
+      } else {
+        const d = await res.json();
+        setError(d.error ?? "Erro ao atualizar o atacado.");
+      }
+    } catch {
+      setError("Erro ao atualizar o atacado.");
+    } finally {
+      setTogglingAtacado(false);
     }
   }
 
@@ -1002,6 +1030,33 @@ export default function EditarProdutoPage() {
                 </label>
               </div>
             )}
+
+            {/* Toggle — aparece na área de atacado (não afeta o varejo) */}
+            <div className="flex items-center justify-between p-4 bg-[#F5F1EA] border border-[#D9C9B8] rounded-xl mb-4">
+              <div>
+                <p className="text-sm font-semibold text-[#5C3317]">Atacado</p>
+                <p className="text-xs text-[#B89070] mt-0.5">
+                  {atacadoEnabled ? "Aparece no catálogo de atacado" : "Não aparece no catálogo de atacado"}
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-4">
+                <input
+                  type="checkbox"
+                  checked={atacadoEnabled}
+                  disabled={togglingAtacado}
+                  onChange={(e) => handleToggleAtacado(e.target.checked)}
+                  className="sr-only peer"
+                  aria-label="Atacado"
+                />
+                <div className={`w-11 h-6 rounded-full transition-colors relative
+                  ${atacadoEnabled ? "bg-[#A0622A]" : "bg-gray-200"}
+                  ${togglingAtacado ? "opacity-50 cursor-wait" : ""}
+                  after:content-[''] after:absolute after:top-[2px] after:left-[2px]
+                  after:bg-white after:rounded-full after:h-5 after:w-5
+                  after:transition-all peer-checked:after:translate-x-full`}
+                />
+              </label>
+            </div>
 
             {/* Banner contextual — ERP ativo vs estoque independente */}
             {erpIntegrado && erpSyncEnabled && (

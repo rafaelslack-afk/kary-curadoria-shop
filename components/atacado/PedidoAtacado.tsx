@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, Loader2, MessageCircle, Trash2, Truck } from "lucide-react";
 import { useAtacadoConfig, useMounted } from "@/components/atacado/AtacadoProvider";
@@ -8,6 +8,7 @@ import { SeletorPagamento, useFormaPagamento } from "@/components/atacado/Seleto
 import { useAtacadoCart, MAX_QTD_POR_ITEM, type AtacadoCartItem } from "@/lib/atacado/cart-store";
 import { precoAtacado } from "@/lib/atacado/pricing";
 import { mascaraDocumento, validarDocumento } from "@/lib/atacado/documento";
+import { mensagemForaDoAtacado } from "@/lib/atacado/disponibilidade";
 import { sortSizes } from "@/lib/atacado/types";
 import { formatCurrency, cn } from "@/lib/utils";
 
@@ -63,6 +64,36 @@ export function PedidoAtacado() {
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
   const [enviado, setEnviado] = useState<{ orderNumber: string; whatsappUrl: string } | null>(null);
+  // Peças que saíram do atacado depois de entrarem no carrinho
+  const [foraDoAtacado, setForaDoAtacado] = useState<Set<string>>(new Set());
+
+  const productIdsKey = useMemo(
+    () => Array.from(new Set(items.map((it) => it.productId))).sort().join(","),
+    [items]
+  );
+
+  // Ao carregar (e quando as peças do carrinho mudam), confere no servidor se
+  // alguma foi desativada no atacado
+  useEffect(() => {
+    if (!mounted || !productIdsKey) {
+      setForaDoAtacado(new Set());
+      return;
+    }
+    let cancelled = false;
+    fetch("/api/atacado/disponibilidade", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ productIds: productIdsKey.split(",") }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { foraDoAtacado?: { productId: string }[] } | null) => {
+        if (!cancelled && d) setForaDoAtacado(new Set((d.foraDoAtacado ?? []).map((x) => x.productId)));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [mounted, productIdsKey]);
 
   const grupos = useMemo<Grupo[]>(() => {
     const map = new Map<string, Grupo>();
@@ -85,6 +116,7 @@ export function PedidoAtacado() {
   const pieces = items.reduce((n, it) => n + it.quantity, 0);
   const total = Math.round(items.reduce((s, it) => s + unit(it) * it.quantity, 0) * 100) / 100;
   const faltam = Math.max(0, minimoPecas - pieces);
+  const bloqueadoPorAtacado = items.some((it) => foraDoAtacado.has(it.productId));
 
   function set<K extends keyof typeof form>(key: K, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -127,7 +159,7 @@ export function PedidoAtacado() {
     setErro("");
     const msg = validar();
     if (msg) return setErro(msg);
-    if (faltam > 0) return;
+    if (faltam > 0 || bloqueadoPorAtacado) return;
     setEnviando(true);
     try {
       const res = await fetch("/api/atacado/pedidos", {
@@ -160,6 +192,10 @@ export function PedidoAtacado() {
       const data = await res.json();
       if (!res.ok) {
         setErro(data.error ?? "Não foi possível enviar o pedido.");
+        // A peça saiu do atacado entre o carregamento e o envio: sinaliza no item
+        if (Array.isArray(data.foraDoAtacado)) {
+          setForaDoAtacado((prev) => new Set([...Array.from(prev), ...data.foraDoAtacado]));
+        }
         return;
       }
       setEnviado({ orderNumber: data.orderNumber, whatsappUrl: data.whatsappUrl });
@@ -239,7 +275,15 @@ export function PedidoAtacado() {
             // Preço unitário por tamanho (plus size tem outro preço)
             const precos = tamanhos.map((t) => ({ t, p: unit(g.items.find((i) => i.size === t)!) }));
             return (
-              <div key={g.productId} className="bg-white border border-kc-line rounded-lg p-4">
+              <div
+                key={g.productId}
+                className={cn("bg-white border rounded-lg p-4", foraDoAtacado.has(g.productId) ? "border-red-300" : "border-kc-line")}
+              >
+                {foraDoAtacado.has(g.productId) && (
+                  <p role="alert" className="mb-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                    {mensagemForaDoAtacado(g.name)}
+                  </p>
+                )}
                 <div className="flex gap-3">
                   <div className="w-16 h-20 rounded bg-kc-cream overflow-hidden shrink-0">
                     {g.image && (
@@ -451,6 +495,11 @@ export function PedidoAtacado() {
               </span>
             </label>
 
+            {bloqueadoPorAtacado && (
+              <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                Remova do pedido as peças que não estão mais disponíveis no atacado para continuar.
+              </p>
+            )}
             {faltam > 0 && (
               <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                 Pedido mínimo de {minimoPecas} peças. {faltam === 1 ? "Falta 1 peça" : `Faltam ${faltam} peças`}.
@@ -461,7 +510,7 @@ export function PedidoAtacado() {
             <button
               type="button"
               onClick={enviar}
-              disabled={faltam > 0 || enviando}
+              disabled={faltam > 0 || bloqueadoPorAtacado || enviando}
               className="w-full bg-kc-dark text-white rounded-lg py-3.5 text-sm tracking-[0.12em] uppercase hover:bg-kc transition-colors disabled:opacity-40 flex items-center justify-center gap-2"
             >
               {enviando && <Loader2 size={16} className="animate-spin" />}

@@ -45,6 +45,7 @@ export async function getAtacadoCatalogo(): Promise<AtacadoProduct[]> {
     .from("products")
     .select(SELECT)
     .eq("active", true)
+    .eq("atacado_enabled", true) // desativado no atacado: some daqui, varejo não muda
     .order("created_at", { ascending: false })
     .limit(1000);
   if (error) throw new Error("catalogo_indisponivel");
@@ -53,7 +54,13 @@ export async function getAtacadoCatalogo(): Promise<AtacadoProduct[]> {
 
 export async function getAtacadoProduto(slug: string): Promise<AtacadoProduct | null> {
   const db = createNoStoreAdminClient();
-  const { data } = await db.from("products").select(SELECT).eq("slug", slug).eq("active", true).maybeSingle();
+  const { data } = await db
+    .from("products")
+    .select(SELECT)
+    .eq("slug", slug)
+    .eq("active", true)
+    .eq("atacado_enabled", true)
+    .maybeSingle();
   if (!data) return null;
   const p = toProduct(data as unknown as Row);
   return p.variants.length > 0 ? p : null;

@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
     .from("products")
     .select("id, name, sku_base, price, images, product_variants(id, color, size, sku, active)")
     .eq("active", true)
+    .eq("atacado_enabled", true) // só peças ativadas no atacado
     .or(`name.ilike.%${q}%,sku_base.ilike.%${q}%`)
     .limit(15);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
