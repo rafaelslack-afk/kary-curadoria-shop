@@ -5,7 +5,7 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: "*",
       allow: "/",
-      disallow: ["/admin/", "/api/", "/checkout/"],
+      disallow: ["/admin/", "/api/", "/checkout/", "/atacado"],
     },
     sitemap: "https://karycuradoria.com.br/sitemap.xml",
   };
