@@ -397,7 +397,7 @@ export default function TrocasEDevolucoesPage() {
       </section>
 
       {/* ── VENDAS EM ATACADO ── */}
-      <section className="max-w-5xl mx-auto px-6 pb-16">
+      <section id="vendas-em-atacado" className="max-w-5xl mx-auto px-6 pb-16 scroll-mt-24">
         <h2
           className="font-serif text-2xl md:text-3xl font-medium text-[#5C3317] mb-8"
           style={{ fontFamily: "Cormorant Garamond, Georgia, serif" }}

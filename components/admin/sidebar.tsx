@@ -23,6 +23,7 @@ import {
   RefreshCw,
   Settings,
   Bot,
+  Store,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -40,6 +41,7 @@ const menuItems = [
   { href: "/admin/configuracoes/plus-size", label: "Plus Size", icon: Settings },
   { href: "/admin/cupons",     label: "Cupons",     icon: Tag },
   { href: "/admin/clientes",   label: "Clientes",   icon: Users },
+  { href: "/admin/atacado",    label: "Atacado",    icon: Store },
   { href: "/admin/abandonos",  label: "Abandonos",  icon: ShoppingBag },
   { href: "/admin/erp-sync",   label: "Sync ERP",   icon: RefreshCw },
   { href: "/admin/chatbot",    label: "Assistente Virtual", icon: Bot },
@@ -61,6 +63,7 @@ export function AdminSidebar({ onClose }: AdminSidebarProps) {
   const pathname = usePathname();
   const [abandonosCount, setAbandonosCount] = useState<number | null>(null);
   const [syncErrorCount, setSyncErrorCount] = useState<number | null>(null);
+  const [atacadoNovos, setAtacadoNovos] = useState<number | null>(null);
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -74,10 +77,11 @@ export function AdminSidebar({ onClose }: AdminSidebarProps) {
       lastFetch = Date.now();
       fetch("/api/admin/sidebar-counts", { cache: "no-store" })
         .then((r) => (r.ok ? r.json() : null))
-        .then((data: { abandonos?: number | null; erpSyncErrors?: number | null } | null) => {
+        .then((data: { abandonos?: number | null; erpSyncErrors?: number | null; atacadoNovos?: number | null } | null) => {
           if (!data) return;
           if (typeof data.abandonos === "number") setAbandonosCount(data.abandonos);
           if (typeof data.erpSyncErrors === "number") setSyncErrorCount(data.erpSyncErrors);
+          if (typeof data.atacadoNovos === "number") setAtacadoNovos(data.atacadoNovos);
         })
         .catch(() => {});
     };
@@ -127,6 +131,7 @@ export function AdminSidebar({ onClose }: AdminSidebarProps) {
               : pathname.startsWith(href);
           const isAbandonos = href === "/admin/abandonos";
           const isSyncErp  = href === "/admin/erp-sync";
+          const isAtacado  = href === "/admin/atacado";
 
           return (
             <Link
@@ -154,6 +159,11 @@ export function AdminSidebar({ onClose }: AdminSidebarProps) {
               {isSyncErp && syncErrorCount !== null && syncErrorCount > 0 && (
                 <span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-none">
                   {syncErrorCount > 99 ? "99+" : syncErrorCount}
+                </span>
+              )}
+              {isAtacado && atacadoNovos !== null && atacadoNovos > 0 && (
+                <span className="bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-none">
+                  {atacadoNovos > 99 ? "99+" : atacadoNovos}
                 </span>
               )}
             </Link>
