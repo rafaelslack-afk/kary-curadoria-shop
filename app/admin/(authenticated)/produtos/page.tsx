@@ -26,15 +26,20 @@ export default function ProdutosPage() {
     categoria: '',
     status: '',
     codigo: '',
-    destaque: ''
+    destaque: '',
+    atacado: ''
   });
   const [filtrosAplicados, setFiltrosAplicados] = useState({
     busca: '',
     categoria: '',
     status: '',
     codigo: '',
-    destaque: ''
+    destaque: '',
+    atacado: ''
   });
+  // Toggle de atacado na linha: produto em gravação e confirmação "Atualizado"
+  const [togglingAtacado, setTogglingAtacado] = useState<string | null>(null);
+  const [atacadoOk, setAtacadoOk] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/categories')
@@ -75,6 +80,29 @@ export default function ProdutosPage() {
     }
   }
 
+  // Liga/desliga a peça na área de atacado (não afeta o varejo)
+  async function handleToggleAtacado(product: ProductWithCategory) {
+    const enabled = product.atacado_enabled === false;
+    setTogglingAtacado(product.id);
+    setAtacadoOk(null);
+    try {
+      const res = await fetch(`/api/products/${product.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ atacado_enabled: enabled }),
+      });
+      if (res.ok) {
+        setProducts((prev) =>
+          prev.map((p) => p.id === product.id ? { ...p, atacado_enabled: enabled } : p)
+        );
+        setAtacadoOk(product.id);
+        setTimeout(() => setAtacadoOk((cur) => (cur === product.id ? null : cur)), 2500);
+      }
+    } finally {
+      setTogglingAtacado(null);
+    }
+  }
+
   async function handleDelete(product: ProductWithCategory) {
     if (!confirm(`Excluir "${product.name}"? Esta ação não pode ser desfeita.`)) return;
     setDeleteError("");
@@ -101,7 +129,8 @@ export default function ProdutosPage() {
     filtrosAplicados.categoria !== '' ||
     filtrosAplicados.status !== '' ||
     filtrosAplicados.codigo !== '' ||
-    filtrosAplicados.destaque !== '';
+    filtrosAplicados.destaque !== '' ||
+    filtrosAplicados.atacado !== '';
 
   async function aplicarFiltros() {
     setFiltrosAplicados({ ...filtros });
@@ -110,7 +139,7 @@ export default function ProdutosPage() {
   }
 
   function limparFiltros() {
-    const vazio = { busca: '', categoria: '', status: '', codigo: '', destaque: '' };
+    const vazio = { busca: '', categoria: '', status: '', codigo: '', destaque: '', atacado: '' };
     setFiltros(vazio);
     setFiltrosAplicados(vazio);
     setHasSearched(false);
@@ -144,6 +173,12 @@ export default function ProdutosPage() {
     if (filtrosAplicados.destaque === 'sim' && !produto.featured)
       return false;
     if (filtrosAplicados.destaque === 'nao' && produto.featured)
+      return false;
+
+    // Atacado: ausente conta como ativado, igual ao default do banco
+    if (filtrosAplicados.atacado === 'ativado' && produto.atacado_enabled === false)
+      return false;
+    if (filtrosAplicados.atacado === 'desativado' && produto.atacado_enabled !== false)
       return false;
 
     return true;
@@ -326,6 +361,39 @@ export default function ProdutosPage() {
             </select>
           </div>
 
+          {/* Atacado */}
+          <div>
+            <label style={{
+              fontSize: 10,
+              fontWeight: 600,
+              letterSpacing: '0.1em',
+              color: '#5C3317',
+              display: 'block',
+              marginBottom: 4
+            }}>
+              ATACADO
+            </label>
+            <select
+              value={filtros.atacado}
+              onChange={e => setFiltros(f => ({ ...f, atacado: e.target.value }))}
+              aria-label="Filtrar por atacado"
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: '1px solid #B89070',
+                borderRadius: 6,
+                fontSize: 13,
+                color: '#5C3317',
+                background: 'white',
+                boxSizing: 'border-box'
+              }}
+            >
+              <option value="">Todos</option>
+              <option value="ativado">Ativados</option>
+              <option value="desativado">Desativados</option>
+            </select>
+          </div>
+
           {/* Código / Referência */}
           <div>
             <label style={{
@@ -444,6 +512,9 @@ export default function ProdutosPage() {
                   Status
                 </th>
                 <th className="text-center text-[11px] tracking-wider text-gray-500 uppercase px-4 py-3">
+                  Atacado
+                </th>
+                <th className="text-center text-[11px] tracking-wider text-gray-500 uppercase px-4 py-3">
                   Frete
                 </th>
                 <th className="text-right text-[11px] tracking-wider text-gray-500 uppercase px-4 py-3">
@@ -509,6 +580,35 @@ export default function ProdutosPage() {
                     >
                       {toggling === product.id ? "..." : product.active ? "Ativo" : "Inativo"}
                     </button>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    {(() => {
+                      const on = product.atacado_enabled !== false;
+                      const busy = togglingAtacado === product.id;
+                      return (
+                        <div className="inline-flex flex-col items-center gap-0.5">
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={on}
+                            aria-label={`Atacado: ${product.name}`}
+                            title={on ? "Aparece no catálogo de atacado — clique para desativar" : "Não aparece no catálogo de atacado — clique para ativar"}
+                            onClick={() => handleToggleAtacado(product)}
+                            disabled={busy}
+                            className={cn(
+                              "relative w-9 h-5 rounded-full transition-colors",
+                              on ? "bg-[#A0622A]" : "bg-gray-200",
+                              busy && "opacity-50 cursor-wait"
+                            )}
+                          >
+                            <span className={cn("absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform", on && "translate-x-4")} />
+                          </button>
+                          {atacadoOk === product.id && (
+                            <span className="text-[9px] text-green-600">Atualizado</span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td className="px-4 py-3 text-center">
                     {hasDimensions(product) ? (

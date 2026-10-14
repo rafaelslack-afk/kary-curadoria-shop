@@ -6,6 +6,7 @@ import { getRegraPrecoAtacado, newRomaneioToken } from "@/lib/atacado/config";
 import { isFormaPagamento, labelFormaPagamento, precoAtacado } from "@/lib/atacado/pricing";
 import { formatarDocumento, validarDocumento } from "@/lib/atacado/documento";
 import { buildAtacadoWhatsAppUrl, mensagemPedidoAtacado } from "@/lib/atacado/whatsapp";
+import { mensagemForaDoAtacado } from "@/lib/atacado/disponibilidade";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,7 +53,14 @@ interface VariantRow {
   color: string | null;
   active: boolean;
   product_id: string;
-  products: { id: string; name: string; sku_base: string | null; price: number | string; active: boolean } | null;
+  products: {
+    id: string;
+    name: string;
+    sku_base: string | null;
+    price: number | string;
+    active: boolean;
+    atacado_enabled: boolean;
+  } | null;
 }
 
 export async function POST(request: NextRequest) {
@@ -127,7 +135,7 @@ export async function POST(request: NextRequest) {
   // 5. Preços recalculados com os dados do banco
   const { data: rows, error: variantsError } = await admin
     .from("product_variants")
-    .select("id, sku, size, color, active, product_id, products(id, name, sku_base, price, active)")
+    .select("id, sku, size, color, active, product_id, products(id, name, sku_base, price, active, atacado_enabled)")
     .in("id", Array.from(quantidades.keys()));
   if (variantsError) return erro("Não foi possível conferir as peças agora. Tente de novo em instantes.", 503);
 
@@ -139,6 +147,15 @@ export async function POST(request: NextRequest) {
   if (indisponiveis.length > 0) {
     return erro("Algumas peças do pedido não estão mais disponíveis. Remova-as e envie de novo.", 409, {
       indisponiveis,
+    });
+  }
+
+  // Peça desativada no atacado (cadastro do produto): recusa nomeando a peça
+  const foraDoAtacado = variants.filter((v) => v.products!.atacado_enabled === false);
+  if (foraDoAtacado.length > 0) {
+    const nomes = Array.from(new Set(foraDoAtacado.map((v) => v.products!.name)));
+    return erro(mensagemForaDoAtacado(nomes.join(", ")), 409, {
+      foraDoAtacado: Array.from(new Set(foraDoAtacado.map((v) => v.product_id))),
     });
   }
 
