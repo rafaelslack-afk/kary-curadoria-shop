@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buildProductOg, shortProductUrl } from "@/lib/product-og";
+import { optimizedImageUrl } from "@/lib/storage-image";
 import {
   CATALOG_BRAND,
   CATALOG_CURRENCY,
@@ -123,7 +124,7 @@ async function handle(request: NextRequest, rawRef: string, fallback: URL) {
     "@type": "Product",
     name: product.name,
     description: item.description,
-    image: (product.images ?? []).length > 0 ? product.images : [og.image.url],
+    image: (product.images ?? []).length > 0 ? product.images!.map(optimizedImageUrl) : [og.image.url],
     sku: item.id,
     productGroupID: item.groupId,
     brand: { "@type": "Brand", name: CATALOG_BRAND },
@@ -159,8 +160,7 @@ async function handle(request: NextRequest, rawRef: string, fallback: URL) {
 <meta property="og:image" content="${e(og.image.url)}">
 <meta property="og:image:secure_url" content="${e(og.image.url)}">
 ${og.image.type ? `<meta property="og:image:type" content="${e(og.image.type)}">\n` : ""}<meta property="og:image:width" content="${og.image.width}">
-<meta property="og:image:height" content="${og.image.height}">
-<meta property="og:image:alt" content="${e(og.image.alt)}">
+${og.image.height ? `<meta property="og:image:height" content="${og.image.height}">\n` : ""}<meta property="og:image:alt" content="${e(og.image.alt)}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${e(og.title)}">
 <meta name="twitter:description" content="${e(og.description)}">
