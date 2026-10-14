@@ -1,4 +1,5 @@
 import { SITE_URL } from "@/lib/site";
+import { OPTIMIZED_IMAGE_TYPE, OPTIMIZED_IMAGE_WIDTH, optimizedImageUrl } from "@/lib/storage-image";
 
 // Dados do card de compartilhamento (Open Graph) de um produto. Usado pela
 // página /produtos/[slug] e pelo link curto /p/[ref] — os dois precisam gerar
@@ -14,7 +15,8 @@ export interface ProductOg {
   title: string;
   description: string;
   url: string;
-  image: { url: string; width: number; height: number; alt: string; type?: string };
+  // height ausente: a imagem mantém a proporção da foto (altura varia)
+  image: { url: string; width: number; height?: number; alt: string; type?: string };
 }
 
 export function buildProductOg(product: ProductOgSource): ProductOg {
@@ -26,17 +28,16 @@ export function buildProductOg(product: ProductOgSource): ProductOg {
   const title =
     product.name.length > 60 ? product.name.slice(0, 57) + "..." : product.name;
 
-  // Adicionar transformação Supabase para reduzir peso da imagem (< 600 KB)
-  // width/height=1200 mantém proporção 1:1 (ideal para produto de moda)
-  // quality=75 e format=webp reduzem drasticamente o tamanho
+  // Mesma versão otimizada do feed da Meta (lib/storage-image.ts): WebP com
+  // 1080px de largura, mantendo a proporção da foto (antes era 1200x1200 com
+  // resize=fill, que achatava as fotos verticais).
   const rawImage = product.images?.[0];
   const image = rawImage
     ? {
-        url: `${rawImage.replace("/object/public/", "/render/image/public/")}?width=1200&height=1200&quality=75&format=webp&resize=fill`,
-        width: 1200,
-        height: 1200,
+        url: optimizedImageUrl(rawImage),
+        width: OPTIMIZED_IMAGE_WIDTH,
         alt: title,
-        type: "image/webp",
+        type: OPTIMIZED_IMAGE_TYPE,
       }
     : { url: `${SITE_URL}/opengraph-image`, width: 1200, height: 630, alt: "Kary Curadoria" };
 

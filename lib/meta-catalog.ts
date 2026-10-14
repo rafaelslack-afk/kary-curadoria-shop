@@ -1,4 +1,5 @@
 import { shortProductUrl } from "@/lib/product-og";
+import { optimizedImageUrl } from "@/lib/storage-image";
 
 // Catálogo da Meta (Commerce Manager → marcação de produtos no Instagram).
 //
@@ -144,7 +145,9 @@ export function buildCatalogItems(product: CatalogSourceProduct): CatalogItem[] 
   const title = truncate(product.name.replace(/[\u200B-\u200D\uFEFF]/g, "").replace(/\s+/g, " ").trim(), MAX_TITLE);
   const description = truncate(plainText(product.description) || title, MAX_DESCRIPTION);
   const link = catalogProductUrl(product.sku_base);
-  const productImages = (product.images ?? []).filter(Boolean);
+  // Versão otimizada (WebP 1080px): o PNG original passa de 2 MB e a Meta
+  // marca "Imagens ausentes ou inválidas" (image_fetch_status: not_fetched).
+  const productImages = (product.images ?? []).filter(Boolean).map(optimizedImageUrl);
   const category = Array.isArray(product.categories) ? product.categories[0] : product.categories;
   const googleCategory = googleProductCategory(category?.slug);
 
@@ -191,7 +194,9 @@ export function buildCatalogItems(product: CatalogSourceProduct): CatalogItem[] 
     if (seenIds.has(id)) continue;
     seenIds.add(id);
 
-    const colorImages = group.find((v) => (v.images ?? []).length > 0)?.images ?? [];
+    const colorImages = (group.find((v) => (v.images ?? []).length > 0)?.images ?? []).map(
+      optimizedImageUrl
+    );
     const images = Array.from(new Set([...colorImages, ...productImages].filter(Boolean)));
     const sizes = Array.from(new Set(group.map((v) => v.size)));
 
