@@ -4,14 +4,15 @@ import { createNoStoreAdminClient } from "@/lib/supabase/admin-no-store";
 import { getRegraPrecoAtacado } from "@/lib/atacado/config";
 import { precoAtacado } from "@/lib/atacado/pricing";
 import { sortSizes } from "@/lib/atacado/types";
+import { variantesDisponiveisAtacado } from "@/lib/atacado/disponibilidade";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // GET /api/admin/atacado/produtos?q=texto — busca de produto para adicionar
 // a um pedido de atacado, com o preço sugerido pela regra de atacado por
-// variante (cor × tamanho) nas duas formas de pagamento. Estoque não importa
-// no atacado.
+// variante (cor × tamanho) nas duas formas de pagamento. Só variantes
+// disponíveis (ativas e com stock_qty > 0), a mesma regra do catálogo.
 export async function GET(request: NextRequest) {
   const unauthorized = await requireAdmin();
   if (unauthorized) return unauthorized;
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
   const db = createNoStoreAdminClient();
   const { data, error } = await db
     .from("products")
-    .select("id, name, sku_base, price, images, product_variants(id, color, size, sku, active)")
+    .select("id, name, sku_base, price, images, product_variants(id, color, size, sku, active, stock_qty)")
     .eq("active", true)
     .eq("atacado_enabled", true) // só peças ativadas no atacado
     .or(`name.ilike.%${q}%,sku_base.ilike.%${q}%`)
@@ -36,10 +37,10 @@ export async function GET(request: NextRequest) {
     sku_base: string | null;
     price: number | string;
     images: string[] | null;
-    product_variants: { id: string; color: string | null; size: string; sku: string | null; active: boolean }[];
+    product_variants: { id: string; color: string | null; size: string; sku: string | null; active: boolean; stock_qty: number }[];
   };
   const products = ((data ?? []) as unknown as Row[]).map((p) => {
-    const variants = p.product_variants.filter((v) => v.active);
+    const variants = variantesDisponiveisAtacado(p.product_variants);
     const order = sortSizes(variants.map((v) => v.size));
     return {
       id: p.id,

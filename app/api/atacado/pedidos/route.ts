@@ -6,7 +6,7 @@ import { getRegraPrecoAtacado, newRomaneioToken } from "@/lib/atacado/config";
 import { isFormaPagamento, labelFormaPagamento, precoAtacado } from "@/lib/atacado/pricing";
 import { formatarDocumento, validarDocumento } from "@/lib/atacado/documento";
 import { buildAtacadoWhatsAppUrl, mensagemPedidoAtacado } from "@/lib/atacado/whatsapp";
-import { mensagemForaDoAtacado } from "@/lib/atacado/disponibilidade";
+import { mensagemForaDoAtacado, mensagemVarianteIndisponivel, varianteDisponivelAtacado } from "@/lib/atacado/disponibilidade";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,6 +52,7 @@ interface VariantRow {
   size: string;
   color: string | null;
   active: boolean;
+  stock_qty: number;
   product_id: string;
   products: {
     id: string;
@@ -135,11 +136,12 @@ export async function POST(request: NextRequest) {
   // 5. Preços recalculados com os dados do banco
   const { data: rows, error: variantsError } = await admin
     .from("product_variants")
-    .select("id, sku, size, color, active, product_id, products(id, name, sku_base, price, active, atacado_enabled)")
+    .select("id, sku, size, color, active, stock_qty, product_id, products(id, name, sku_base, price, active, atacado_enabled)")
     .in("id", Array.from(quantidades.keys()));
   if (variantsError) return erro("Não foi possível conferir as peças agora. Tente de novo em instantes.", 503);
 
   const variants = (rows ?? []) as unknown as VariantRow[];
+  // Variante inexistente, inativa ou de produto inativo
   const indisponiveis = Array.from(quantidades.keys()).filter((id) => {
     const v = variants.find((x) => x.id === id);
     return !v || !v.active || !v.products || !v.products.active;
@@ -156,6 +158,16 @@ export async function POST(request: NextRequest) {
     const nomes = Array.from(new Set(foraDoAtacado.map((v) => v.products!.name)));
     return erro(mensagemForaDoAtacado(nomes.join(", ")), 409, {
       foraDoAtacado: Array.from(new Set(foraDoAtacado.map((v) => v.product_id))),
+    });
+  }
+
+  // Variante sem estoque (stock_qty = 0): recusa nomeando a peça. Só a
+  // disponibilidade conta; a QUANTIDADE não é conferida contra o estoque.
+  const semEstoque = variants.filter((v) => !varianteDisponivelAtacado(v));
+  if (semEstoque.length > 0) {
+    const v = semEstoque[0];
+    return erro(mensagemVarianteIndisponivel(v.products!.name, v.color, v.size), 409, {
+      variantesIndisponiveis: semEstoque.map((x) => x.id),
     });
   }
 
