@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Search } from "lucide-react";
 import { useAtacadoConfig } from "@/components/atacado/AtacadoProvider";
@@ -9,16 +9,62 @@ import { SeletorPagamento, useFormaPagamento } from "@/components/atacado/Seleto
 import { precoAtacado, precoPlusSizeCard } from "@/lib/atacado/pricing";
 import { formatCurrency } from "@/lib/utils";
 import type { AtacadoProduct } from "@/lib/atacado/types";
+import { consumirRestauracao, salvarCatalogo } from "@/lib/atacado/navegacao";
 
 function norm(s: string) {
   return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 }
 
-export function CatalogoAtacado({ products }: { products: AtacadoProduct[] }) {
+interface Props {
+  products: AtacadoProduct[];
+  categoriaInicial?: string;
+  buscaInicial?: string;
+}
+
+export function CatalogoAtacado({ products, categoriaInicial = "", buscaInicial = "" }: Props) {
   const { regra } = useAtacadoConfig();
   const forma = useFormaPagamento();
-  const [categoria, setCategoria] = useState("");
-  const [busca, setBusca] = useState("");
+  const [categoria, setCategoria] = useState(() =>
+    products.some((p) => p.category?.slug === categoriaInicial) ? categoriaInicial : ""
+  );
+  const [busca, setBusca] = useState(buscaInicial);
+  const primeiraVez = useRef(true);
+
+  // Categoria e busca ficam na URL (replaceState: sem recarregar) e no
+  // sessionStorage, para "Voltar ao catálogo" reabrir como a lojista deixou.
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (categoria) params.set("categoria", categoria);
+    if (busca.trim()) params.set("busca", busca.trim());
+    const qs = params.toString();
+    salvarCatalogo({ qs });
+    if (primeiraVez.current) {
+      primeiraVez.current = false;
+      return;
+    }
+    const t = setTimeout(() => {
+      window.history.replaceState(window.history.state, "", qs ? `/atacado?${qs}` : "/atacado");
+    }, 300);
+    return () => clearTimeout(t);
+  }, [categoria, busca]);
+
+  // Rolagem: restaura quando a lojista volta pelos botões; senão começa do topo
+  useEffect(() => {
+    const y = consumirRestauracao();
+    if (y != null) requestAnimationFrame(() => window.scrollTo(0, y));
+    else salvarCatalogo({ scrollY: 0 });
+
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const onScroll = () => {
+      if (t) clearTimeout(t);
+      t = setTimeout(() => salvarCatalogo({ scrollY: window.scrollY }), 120);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (t) clearTimeout(t);
+    };
+  }, []);
 
   const categorias = useMemo(() => {
     const map = new Map<string, string>();
@@ -84,6 +130,7 @@ export function CatalogoAtacado({ products }: { products: AtacadoProduct[] }) {
               key={p.id}
               href={`/atacado/produto/${p.slug}`}
               prefetch={false}
+              onClick={() => salvarCatalogo({ scrollY: window.scrollY })}
               className="group bg-white border border-kc-line rounded-lg overflow-hidden flex flex-col"
             >
               <div className="aspect-[3/4] bg-kc-cream overflow-hidden">

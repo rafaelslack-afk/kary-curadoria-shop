@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, Minus, Plus, Check } from "lucide-react";
+import { Minus, Plus, Check, ShoppingBag } from "lucide-react";
 import { useAtacadoConfig } from "@/components/atacado/AtacadoProvider";
+import { BotaoCatalogo } from "@/components/atacado/BotaoCatalogo";
 import { SeletorPagamento, useFormaPagamento } from "@/components/atacado/SeletorPagamento";
 import { useAtacadoCart, MAX_QTD_POR_ITEM } from "@/lib/atacado/cart-store";
 import { precoAtacado } from "@/lib/atacado/pricing";
@@ -20,6 +21,12 @@ export function ProdutoAtacado({ product }: { product: AtacadoProduct }) {
   const [qtd, setQtd] = useState<Record<string, number>>({}); // variantId → quantidade
   const [foto, setFoto] = useState(0);
   const [adicionado, setAdicionado] = useState(false);
+  const confirmacaoRef = useRef<HTMLDivElement>(null);
+
+  // Confirmação inline (não cobre o botão de WhatsApp): leva à vista ao adicionar
+  useEffect(() => {
+    if (adicionado) confirmacaoRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [adicionado]);
 
   const variantesDaCor = useMemo(() => {
     const vs = product.variants.filter((v) => v.color === cor);
@@ -63,9 +70,9 @@ export function ProdutoAtacado({ product }: { product: AtacadoProduct }) {
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5 sm:py-8">
-      <Link href="/atacado" prefetch={false} className="inline-flex items-center gap-1 text-sm text-kc-muted hover:text-kc-dark mb-4">
-        <ChevronLeft size={16} /> Catálogo
-      </Link>
+      <div className="mb-5">
+        <BotaoCatalogo>Voltar ao catálogo</BotaoCatalogo>
+      </div>
 
       <div className="grid md:grid-cols-2 gap-6 md:gap-10">
         {/* Fotos */}
@@ -178,15 +185,30 @@ export function ProdutoAtacado({ product }: { product: AtacadoProduct }) {
           </button>
 
           {adicionado && (
-            <div className="mt-3 flex items-center justify-between gap-3 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2.5 text-sm text-emerald-800">
-              <span className="flex items-center gap-2">
-                <Check size={16} /> Adicionado ao pedido
-              </span>
-              <Link href="/atacado/pedido" prefetch={false} className="underline underline-offset-2">
-                Ver pedido
-              </Link>
+            <div
+              ref={confirmacaoRef}
+              role="status"
+              className="mt-4 rounded-lg bg-emerald-50 border border-emerald-300 p-4 text-emerald-900"
+            >
+              <p className="flex items-center gap-2 text-base font-medium mb-3">
+                <Check size={20} aria-hidden /> Peça adicionada ao pedido
+              </p>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <BotaoCatalogo className="sm:flex-1">Continuar escolhendo</BotaoCatalogo>
+                <Link
+                  href="/atacado/pedido"
+                  prefetch={false}
+                  className="inline-flex w-full sm:flex-1 items-center justify-center gap-2 min-h-[44px] px-5 py-2.5 rounded-lg bg-kc-dark text-white text-base font-medium hover:bg-kc transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kc-dark"
+                >
+                  <ShoppingBag size={18} aria-hidden /> Ver meu pedido
+                </Link>
+              </div>
             </div>
           )}
+
+          <div className="mt-4">
+            <BotaoCatalogo>Voltar ao catálogo</BotaoCatalogo>
+          </div>
 
           {product.description && (
             <div className="mt-8">
