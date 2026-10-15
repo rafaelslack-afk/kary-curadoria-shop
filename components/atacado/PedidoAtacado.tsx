@@ -8,7 +8,7 @@ import { SeletorPagamento, useFormaPagamento } from "@/components/atacado/Seleto
 import { useAtacadoCart, MAX_QTD_POR_ITEM, type AtacadoCartItem } from "@/lib/atacado/cart-store";
 import { precoAtacado } from "@/lib/atacado/pricing";
 import { mascaraDocumento, validarDocumento } from "@/lib/atacado/documento";
-import { mensagemForaDoAtacado } from "@/lib/atacado/disponibilidade";
+import { mensagemForaDoAtacado, AVISO_VARIANTE_INDISPONIVEL } from "@/lib/atacado/disponibilidade";
 import { sortSizes } from "@/lib/atacado/types";
 import { formatCurrency, cn } from "@/lib/utils";
 
@@ -66,34 +66,41 @@ export function PedidoAtacado() {
   const [enviado, setEnviado] = useState<{ orderNumber: string; whatsappUrl: string } | null>(null);
   // Peças que saíram do atacado depois de entrarem no carrinho
   const [foraDoAtacado, setForaDoAtacado] = useState<Set<string>>(new Set());
+  // Cor/tamanho (variante) que ficou sem estoque ou inativa depois de entrar no carrinho
+  const [semEstoque, setSemEstoque] = useState<Set<string>>(new Set());
 
   const productIdsKey = useMemo(
     () => Array.from(new Set(items.map((it) => it.productId))).sort().join(","),
     [items]
   );
 
+  const variantIdsKey = useMemo(() => items.map((it) => it.variantId).sort().join(","), [items]);
+
   // Ao carregar (e quando as peças do carrinho mudam), confere no servidor se
-  // alguma foi desativada no atacado
+  // alguma foi desativada no atacado ou ficou sem estoque (cor/tamanho)
   useEffect(() => {
     if (!mounted || !productIdsKey) {
       setForaDoAtacado(new Set());
+      setSemEstoque(new Set());
       return;
     }
     let cancelled = false;
     fetch("/api/atacado/disponibilidade", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ productIds: productIdsKey.split(",") }),
+      body: JSON.stringify({ productIds: productIdsKey.split(","), variantIds: variantIdsKey.split(",") }),
     })
       .then((r) => (r.ok ? r.json() : null))
-      .then((d: { foraDoAtacado?: { productId: string }[] } | null) => {
-        if (!cancelled && d) setForaDoAtacado(new Set((d.foraDoAtacado ?? []).map((x) => x.productId)));
+      .then((d: { foraDoAtacado?: { productId: string }[]; variantesIndisponiveis?: { variantId: string }[] } | null) => {
+        if (cancelled || !d) return;
+        setForaDoAtacado(new Set((d.foraDoAtacado ?? []).map((x) => x.productId)));
+        setSemEstoque(new Set((d.variantesIndisponiveis ?? []).map((x) => x.variantId)));
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [mounted, productIdsKey]);
+  }, [mounted, productIdsKey, variantIdsKey]);
 
   const grupos = useMemo<Grupo[]>(() => {
     const map = new Map<string, Grupo>();
@@ -116,7 +123,7 @@ export function PedidoAtacado() {
   const pieces = items.reduce((n, it) => n + it.quantity, 0);
   const total = Math.round(items.reduce((s, it) => s + unit(it) * it.quantity, 0) * 100) / 100;
   const faltam = Math.max(0, minimoPecas - pieces);
-  const bloqueadoPorAtacado = items.some((it) => foraDoAtacado.has(it.productId));
+  const bloqueadoPorAtacado = items.some((it) => foraDoAtacado.has(it.productId) || semEstoque.has(it.variantId));
 
   function set<K extends keyof typeof form>(key: K, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -195,6 +202,9 @@ export function PedidoAtacado() {
         // A peça saiu do atacado entre o carregamento e o envio: sinaliza no item
         if (Array.isArray(data.foraDoAtacado)) {
           setForaDoAtacado((prev) => new Set([...Array.from(prev), ...data.foraDoAtacado]));
+        }
+        if (Array.isArray(data.variantesIndisponiveis)) {
+          setSemEstoque((prev) => new Set([...Array.from(prev), ...data.variantesIndisponiveis]));
         }
         return;
       }
@@ -277,13 +287,20 @@ export function PedidoAtacado() {
             return (
               <div
                 key={g.productId}
-                className={cn("bg-white border rounded-lg p-4", foraDoAtacado.has(g.productId) ? "border-red-300" : "border-kc-line")}
+                className={cn("bg-white border rounded-lg p-4", foraDoAtacado.has(g.productId) || g.items.some((i) => semEstoque.has(i.variantId)) ? "border-red-300" : "border-kc-line")}
               >
                 {foraDoAtacado.has(g.productId) && (
                   <p role="alert" className="mb-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
                     {mensagemForaDoAtacado(g.name)}
                   </p>
                 )}
+                {g.items
+                  .filter((i) => semEstoque.has(i.variantId))
+                  .map((i) => (
+                    <p key={i.variantId} role="alert" className="mb-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                      {AVISO_VARIANTE_INDISPONIVEL} ({i.color}, {i.size}). Remova-a (quantidade 0) para continuar.
+                    </p>
+                  ))}
                 <div className="flex gap-3">
                   <div className="w-16 h-20 rounded bg-kc-cream overflow-hidden shrink-0">
                     {g.image && (
@@ -340,7 +357,7 @@ export function PedidoAtacado() {
                                     value={it.quantity}
                                     onChange={(e) => setQuantity(it.variantId, Math.floor(Number(e.target.value) || 0))}
                                     aria-label={`Quantidade ${c} ${t}`}
-                                    className="w-14 h-8 text-center border border-kc-line rounded-md text-sm text-kc-dark focus:outline-none focus:border-kc"
+                                    className={cn("w-14 h-8 text-center border rounded-md text-sm text-kc-dark focus:outline-none focus:border-kc", semEstoque.has(it.variantId) ? "border-red-400 bg-red-50" : "border-kc-line")}
                                   />
                                 ) : (
                                   <span className="text-kc-muted">—</span>

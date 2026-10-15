@@ -1,20 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createNoStoreAdminClient } from "@/lib/supabase/admin-no-store";
 import { checkAtacadoAccess } from "@/lib/atacado/access";
+import { varianteDisponivelAtacado } from "@/lib/atacado/disponibilidade";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// POST /api/atacado/disponibilidade { productIds } — quais peças do carrinho
-// de atacado saíram do atacado (desativadas no cadastro ou inativas). O
-// carrinho sinaliza essas peças e bloqueia o envio até a cliente removê-las.
+// POST /api/atacado/disponibilidade { productIds, variantIds } — o que mudou
+// no carrinho de atacado: peças que saíram do atacado (desativadas no cadastro
+// ou inativas) e variantes (cor/tamanho) sem estoque ou inativas. O carrinho
+// sinaliza e bloqueia o envio até a cliente remover. Só devolve ids: o número
+// do estoque nunca sai daqui.
 export async function POST(request: NextRequest) {
   const { ok } = await checkAtacadoAccess();
   if (!ok) return NextResponse.json({ error: "Link de atacado expirado." }, { status: 401 });
 
-  let body: { productIds?: unknown };
+  let body: { productIds?: unknown; variantIds?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -23,11 +26,19 @@ export async function POST(request: NextRequest) {
   const ids = Array.from(
     new Set((Array.isArray(body.productIds) ? body.productIds : []).filter((id): id is string => typeof id === "string" && UUID_RE.test(id)))
   ).slice(0, 300);
-  if (ids.length === 0) return NextResponse.json({ foraDoAtacado: [] });
+  const variantIds = Array.from(
+    new Set((Array.isArray(body.variantIds) ? body.variantIds : []).filter((id): id is string => typeof id === "string" && UUID_RE.test(id)))
+  ).slice(0, 300);
+  if (ids.length === 0 && variantIds.length === 0) return NextResponse.json({ foraDoAtacado: [], variantesIndisponiveis: [] });
 
   const db = createNoStoreAdminClient();
-  const { data, error } = await db.from("products").select("id, name, active, atacado_enabled").in("id", ids);
-  if (error) return NextResponse.json({ error: "Não foi possível conferir agora." }, { status: 503 });
+  const [{ data, error }, { data: vdata, error: verror }] = await Promise.all([
+    db.from("products").select("id, name, active, atacado_enabled").in("id", ids),
+    variantIds.length > 0
+      ? db.from("product_variants").select("id, product_id, active, stock_qty").in("id", variantIds)
+      : Promise.resolve({ data: [] as { id: string; product_id: string; active: boolean; stock_qty: number }[], error: null }),
+  ]);
+  if (error || verror) return NextResponse.json({ error: "Não foi possível conferir agora." }, { status: 503 });
 
   const encontrados = new Map((data ?? []).map((p) => [p.id, p]));
   const foraDoAtacado = ids
@@ -37,5 +48,13 @@ export async function POST(request: NextRequest) {
     })
     .map((id) => ({ productId: id, name: encontrados.get(id)?.name ?? null }));
 
-  return NextResponse.json({ foraDoAtacado }, { headers: { "Cache-Control": "no-store" } });
+  const achadas = new Map((vdata ?? []).map((v) => [v.id, v]));
+  const variantesIndisponiveis = variantIds
+    .filter((id) => {
+      const v = achadas.get(id);
+      return !v || !varianteDisponivelAtacado(v);
+    })
+    .map((id) => ({ variantId: id, productId: achadas.get(id)?.product_id ?? null }));
+
+  return NextResponse.json({ foraDoAtacado, variantesIndisponiveis }, { headers: { "Cache-Control": "no-store" } });
 }

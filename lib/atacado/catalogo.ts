@@ -1,8 +1,9 @@
-// Catálogo do atacado: produtos ativos e TODAS as variantes ativas (inclusive
-// com estoque zero). Estoque nunca sai do servidor nem bloqueia o pedido.
-// Server-only.
+// Catálogo do atacado: produtos ativos e só as variantes disponíveis (ativas e
+// com stock_qty > 0, ver variantesDisponiveisAtacado). A quantidade pedida não
+// é limitada e o número do estoque nunca sai do servidor. Server-only.
 import { createNoStoreAdminClient } from "@/lib/supabase/admin-no-store";
 import type { AtacadoProduct } from "@/lib/atacado/types";
+import { variantesDisponiveisAtacado } from "@/lib/atacado/disponibilidade";
 
 export type { AtacadoProduct, AtacadoVariant } from "@/lib/atacado/types";
 
@@ -16,7 +17,7 @@ interface Row {
   images: string[] | null;
   created_at: string;
   categories: { slug: string; name: string } | null;
-  product_variants: { id: string; color: string | null; size: string; sku: string | null; images: string[] | null; active: boolean }[];
+  product_variants: { id: string; color: string | null; size: string; sku: string | null; images: string[] | null; active: boolean; stock_qty: number }[];
 }
 
 function toProduct(r: Row): AtacadoProduct {
@@ -30,14 +31,13 @@ function toProduct(r: Row): AtacadoProduct {
     images: r.images ?? [],
     category: r.categories,
     createdAt: r.created_at,
-    variants: (r.product_variants ?? [])
-      .filter((v) => v.active)
+    variants: variantesDisponiveisAtacado(r.product_variants)
       .map((v) => ({ id: v.id, color: v.color ?? "Única", size: v.size, sku: v.sku, images: v.images ?? [] })),
   };
 }
 
 const SELECT =
-  "id, slug, name, sku_base, description, price, images, created_at, categories(slug, name), product_variants(id, color, size, sku, images, active)";
+  "id, slug, name, sku_base, description, price, images, created_at, categories(slug, name), product_variants(id, color, size, sku, images, active, stock_qty)";
 
 export async function getAtacadoCatalogo(): Promise<AtacadoProduct[]> {
   const db = createNoStoreAdminClient();
