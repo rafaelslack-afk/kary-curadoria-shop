@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, Loader2, MessageCircle, Trash2, Truck } from "lucide-react";
 import { useAtacadoConfig, useMounted } from "@/components/atacado/AtacadoProvider";
+import { BotaoCatalogo } from "@/components/atacado/BotaoCatalogo";
 import { SeletorPagamento, useFormaPagamento } from "@/components/atacado/SeletorPagamento";
 import { useAtacadoCart, MAX_QTD_POR_ITEM, type AtacadoCartItem } from "@/lib/atacado/cart-store";
 import { precoAtacado } from "@/lib/atacado/pricing";
@@ -260,15 +261,16 @@ export function PedidoAtacado() {
     return (
       <div className="max-w-xl mx-auto px-6 py-16 text-center">
         <h1 className="font-serif text-3xl text-kc-dark mb-3">Seu pedido está vazio</h1>
-        <Link href="/atacado" prefetch={false} className="text-sm text-kc underline underline-offset-2">
-          Ver o catálogo
-        </Link>
+        <BotaoCatalogo className="sm:w-auto">Ver o catálogo</BotaoCatalogo>
       </div>
     );
   }
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5 sm:py-8">
+      <div className="mb-5">
+        <BotaoCatalogo>Continuar escolhendo peças</BotaoCatalogo>
+      </div>
       <h1 className="font-serif text-3xl sm:text-4xl text-kc-dark mb-4">Meu pedido</h1>
       <div className="mb-6">
         <SeletorPagamento />
@@ -378,10 +380,12 @@ export function PedidoAtacado() {
               </div>
             );
           })}
+
+          <BotaoCatalogo>Continuar escolhendo peças</BotaoCatalogo>
         </div>
 
         {/* Resumo + dados */}
-        <div className="space-y-4 lg:sticky lg:top-20">
+        <div className="space-y-4 lg:sticky lg:top-28">
           <div className="bg-white border border-kc-line rounded-lg p-4 space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-kc-dark/70">Total de peças</span>
