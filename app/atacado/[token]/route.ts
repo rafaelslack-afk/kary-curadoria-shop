@@ -1,29 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ATACADO_COOKIE, ATACADO_COOKIE_MAX_AGE, tokensIguais } from "@/lib/atacado/access";
-import { getAtacadoConfig } from "@/lib/atacado/config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// GET /atacado/[token] — link secreto do atacado. Token certo → cookie
-// httpOnly de 30 dias e catálogo. Token errado/antigo → /atacado, que mostra
-// a página de link expirado (e o cookie antigo, se houver, é removido).
-export async function GET(request: NextRequest, { params }: { params: { token: string } }) {
-  const config = await getAtacadoConfig();
-  const response = NextResponse.redirect(new URL("/atacado", request.url));
-  response.headers.set("Cache-Control", "no-store");
+// GET /atacado/[token] — links antigos do atacado (da época do link secreto).
+// O catálogo agora fica em endereço fixo e aberto (/atacado): qualquer token
+// redireciona para lá (308), para os links já enviados às lojistas seguirem
+// funcionando. O cookie de acesso antigo, se houver, é removido.
+export function GET(request: NextRequest) {
+  const response = NextResponse.redirect(new URL("/atacado", request.url), 308);
   response.headers.set("X-Robots-Tag", "noindex, nofollow");
-
-  if (tokensIguais(params.token, config.token)) {
-    response.cookies.set(ATACADO_COOKIE, params.token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: ATACADO_COOKIE_MAX_AGE,
-    });
-  } else {
-    response.cookies.delete(ATACADO_COOKIE);
-  }
+  response.cookies.delete("kvo_atacado");
   return response;
 }

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createNoStoreAdminClient } from "@/lib/supabase/admin-no-store";
-import { checkAtacadoAccess } from "@/lib/atacado/access";
 import { varianteDisponivelAtacado } from "@/lib/atacado/disponibilidade";
 
 export const runtime = "nodejs";
@@ -14,9 +13,6 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // sinaliza e bloqueia o envio até a cliente remover. Só devolve ids: o número
 // do estoque nunca sai daqui.
 export async function POST(request: NextRequest) {
-  const { ok } = await checkAtacadoAccess();
-  if (!ok) return NextResponse.json({ error: "Link de atacado expirado." }, { status: 401 });
-
   let body: { productIds?: unknown; variantIds?: unknown };
   try {
     body = await request.json();

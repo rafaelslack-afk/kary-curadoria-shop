@@ -1,19 +1,15 @@
-import { checkAtacadoAccess } from "@/lib/atacado/access";
-import { getRegraPrecoAtacado } from "@/lib/atacado/config";
+import { getAtacadoConfig, getRegraPrecoAtacado } from "@/lib/atacado/config";
 import { AtacadoProvider } from "@/components/atacado/AtacadoProvider";
 import { AtacadoHeader } from "@/components/atacado/AtacadoHeader";
-import { LinkExpirado } from "@/components/atacado/LinkExpirado";
 import { WhatsAppAtacadoFloat } from "@/components/atacado/WhatsAppAtacadoFloat";
 
 export const dynamic = "force-dynamic";
 
-// Toda página /atacado/** (exceto o romaneio) passa por aqui: sem cookie ou
-// com token antigo, mostra a página de link expirado. Layout próprio: nada do
+// Toda página /atacado/** (exceto o romaneio) passa por aqui. Acesso livre em
+// endereço fixo (sem token nem cookie). Layout próprio: nada do
 // varejo (assistente virtual, cupom flutuante, pop-ups, WhatsApp da loja).
 export default async function AtacadoAreaLayout({ children }: { children: React.ReactNode }) {
-  const { ok, config } = await checkAtacadoAccess();
-  if (!ok) return <LinkExpirado whatsapp={config.whatsapp} />;
-
+  const config = await getAtacadoConfig();
   const regra = await getRegraPrecoAtacado(config);
 
   return (

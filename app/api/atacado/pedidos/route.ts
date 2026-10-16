@@ -1,8 +1,7 @@
 import { createHmac } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { checkAtacadoAccess } from "@/lib/atacado/access";
-import { getRegraPrecoAtacado, newRomaneioToken } from "@/lib/atacado/config";
+import { getAtacadoConfig, getRegraPrecoAtacado, newRomaneioToken } from "@/lib/atacado/config";
 import { isFormaPagamento, labelFormaPagamento, precoAtacado } from "@/lib/atacado/pricing";
 import { formatarDocumento, validarDocumento } from "@/lib/atacado/documento";
 import { buildAtacadoWhatsAppUrl, mensagemPedidoAtacado } from "@/lib/atacado/whatsapp";
@@ -65,9 +64,9 @@ interface VariantRow {
 }
 
 export async function POST(request: NextRequest) {
-  // 1. Acesso pelo link secreto (cookie)
-  const { ok, config } = await checkAtacadoAccess();
-  if (!ok) return erro("Este link de atacado expirou. Peça um novo link à nossa equipe.", 401);
+  // 1. Configuração do atacado (acesso livre: sem token nem cookie; o abuso é
+  // contido pelo limite de envios por IP abaixo)
+  const config = await getAtacadoConfig();
 
   let body: Record<string, unknown>;
   try {
