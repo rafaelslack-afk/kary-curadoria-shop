@@ -1,3 +1,6 @@
+// atacado_token continua no banco, sem uso: o catálogo agora é aberto em
+// endereço fixo (/atacado).
+//
 // Configurações do atacado em system_config, lidas sem cache (mudanças no
 // admin valem na hora, sem deploy). Server-only: usa service role.
 import { randomBytes } from "crypto";
@@ -13,14 +16,13 @@ export interface AvisoNovidades {
 export interface AtacadoConfig {
   descontos: DescontosAtacado;
   minimoPecas: number;
-  token: string | null; // null → nenhum link válido (configuração ausente)
   whatsapp: string;
   aviso: AvisoNovidades;
 }
 
 export const AVISO_MAX_CHARS = 250;
 
-const DEFAULTS: Omit<AtacadoConfig, "token"> = {
+const DEFAULTS: AtacadoConfig = {
   descontos: { pix: 20, credit_card: 10 },
   minimoPecas: 6,
   whatsapp: "5511940224088",
@@ -34,7 +36,6 @@ const DEFAULTS: Omit<AtacadoConfig, "token"> = {
 const KEYS = {
   descontos: "atacado_descontos",
   minimoPecas: "atacado_minimo_pecas",
-  token: "atacado_token",
   whatsapp: "atacado_whatsapp",
   aviso: "atacado_aviso_novidades",
 } as const;
@@ -61,7 +62,6 @@ export async function getAtacadoConfig(): Promise<AtacadoConfig> {
   const descontos = parseJson<Partial<DescontosAtacado>>(get(KEYS.descontos));
   const minimo = Number(get(KEYS.minimoPecas));
   const aviso = parseJson<Partial<AvisoNovidades>>(get(KEYS.aviso));
-  const token = get(KEYS.token)?.trim();
 
   return {
     descontos: {
@@ -69,8 +69,6 @@ export async function getAtacadoConfig(): Promise<AtacadoConfig> {
       credit_card: pct(descontos?.credit_card, DEFAULTS.descontos.credit_card),
     },
     minimoPecas: Number.isInteger(minimo) && minimo > 0 ? minimo : DEFAULTS.minimoPecas,
-    // Token curto demais não vale: sem configuração, ninguém entra
-    token: token && token.length >= 16 ? token : null,
     whatsapp: (get(KEYS.whatsapp) ?? "").replace(/\D/g, "") || DEFAULTS.whatsapp,
     aviso: {
       ativo: typeof aviso?.ativo === "boolean" ? aviso.ativo : DEFAULTS.aviso.ativo,
@@ -102,13 +100,6 @@ export async function saveAtacadoConfig(patch: {
   if (patch.minimoPecas !== undefined) await upsert(KEYS.minimoPecas, String(patch.minimoPecas));
   if (patch.whatsapp !== undefined) await upsert(KEYS.whatsapp, patch.whatsapp);
   if (patch.aviso) await upsert(KEYS.aviso, JSON.stringify(patch.aviso));
-}
-
-/** Gera um token novo (32 caracteres): o link e os cookies anteriores deixam de valer. */
-export async function regenerateAtacadoToken(): Promise<string> {
-  const token = randomBytes(16).toString("hex");
-  await upsert(KEYS.token, token);
-  return token;
 }
 
 export function newRomaneioToken(): string {

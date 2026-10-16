@@ -6,14 +6,14 @@ import { SITE_URL } from "@/lib/site";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// GET /api/admin/atacado/config — configurações e link secreto atual
+// GET /api/admin/atacado/config — configurações e o link fixo do catálogo
 export async function GET() {
   const unauthorized = await requireAdmin();
   if (unauthorized) return unauthorized;
 
   const config = await getAtacadoConfig();
   return NextResponse.json(
-    { ...config, link: config.token ? `${SITE_URL}/atacado/${config.token}` : null },
+    { ...config, link: `${SITE_URL}/atacado` },
     { headers: { "Cache-Control": "no-store" } }
   );
 }

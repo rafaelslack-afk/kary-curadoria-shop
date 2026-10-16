@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, Copy, RefreshCw, Save } from "lucide-react";
+import { ChevronLeft, Copy, Save } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const AVISO_MAX = 250;
@@ -14,13 +14,12 @@ interface Config {
   minimoPecas: number;
   whatsapp: string;
   aviso: { ativo: boolean; texto: string };
-  link: string | null;
+  link: string;
 }
 
 export default function AtacadoConfigPage() {
   const [cfg, setCfg] = useState<Config | null>(null);
   const [saving, setSaving] = useState(false);
-  const [gerando, setGerando] = useState(false);
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
 
@@ -56,24 +55,6 @@ export default function AtacadoConfigPage() {
     }
   }
 
-  async function novoLink() {
-    if (!window.confirm("Gerar um novo link? O link atual deixa de funcionar na hora, inclusive para quem já está com ele aberto.")) return;
-    setGerando(true);
-    setError("");
-    setMsg("");
-    try {
-      const res = await fetch("/api/admin/atacado/config/novo-link", { method: "POST" });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error ?? "Erro ao gerar o link.");
-      setCfg((c) => (c ? { ...c, link: d.link } : c));
-      setMsg("Novo link gerado. O link anterior não funciona mais.");
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setGerando(false);
-    }
-  }
-
   if (!cfg) return <p className="text-sm text-gray-500">{error || "Carregando…"}</p>;
 
   return (
@@ -86,29 +67,20 @@ export default function AtacadoConfigPage() {
       {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg mb-4">{error}</div>}
       {msg && <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm px-4 py-3 rounded-lg mb-4">{msg}</div>}
 
-      {/* Link secreto */}
+      {/* Link fixo do catálogo */}
       <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
-        <p className="text-sm font-medium text-kc-dark mb-2">Link secreto do catálogo</p>
+        <p className="text-sm font-medium text-kc-dark mb-2">Link do atacado</p>
         <div className="flex flex-col sm:flex-row gap-2">
-          <input className={cn(input, "font-mono text-xs")} readOnly value={cfg.link ?? "Nenhum link configurado"} />
+          <input className={cn(input, "font-mono text-xs")} readOnly value={cfg.link} />
           <button
             type="button"
-            disabled={!cfg.link}
-            onClick={() => cfg.link && navigator.clipboard.writeText(cfg.link).then(() => setMsg("Link copiado."))}
-            className="inline-flex items-center justify-center gap-1.5 text-sm border border-gray-200 rounded-md px-3 py-2 hover:bg-gray-50 disabled:opacity-40"
+            onClick={() => navigator.clipboard.writeText(cfg.link).then(() => setMsg("Link copiado."))}
+            className="inline-flex items-center justify-center gap-1.5 text-sm border border-gray-200 rounded-md px-3 py-2 hover:bg-gray-50"
           >
             <Copy size={15} /> Copiar link
           </button>
-          <button
-            type="button"
-            onClick={novoLink}
-            disabled={gerando}
-            className="inline-flex items-center justify-center gap-1.5 text-sm border border-red-200 text-red-700 rounded-md px-3 py-2 hover:bg-red-50 disabled:opacity-40"
-          >
-            <RefreshCw size={15} /> {gerando ? "Gerando…" : "Gerar novo link"}
-          </button>
         </div>
-        <p className="text-xs text-gray-500 mt-2">Quem abre o link fica com acesso por 30 dias. Gerar um novo link derruba o acesso de todos os links anteriores.</p>
+        <p className="text-xs text-gray-500 mt-2">Endereço fixo, sem expiração. Links antigos de atacado levam a este endereço.</p>
       </div>
 
       {/* Preço e pedido */}
