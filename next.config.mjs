@@ -43,6 +43,10 @@ const nextConfig = {
       { source: "/favicon-32.png", headers: [oneYearImmutable] },
       { source: "/icon-512.png", headers: [oneYearImmutable] },
       { source: "/apple-touch-icon.png", headers: [oneYearImmutable] },
+      // Atacado (inclusive romaneios): fora dos buscadores também pelo header,
+      // além da meta robots. Não afeta os robôs de preview de link.
+      { source: "/atacado", headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }] },
+      { source: "/atacado/:path*", headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }] },
     ];
   },
 };
