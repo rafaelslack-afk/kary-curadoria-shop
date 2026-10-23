@@ -81,6 +81,50 @@ async function loadBy(column: "id" | "romaneio_token", value: string): Promise<W
   return normalize(order, items ?? []);
 }
 
+// ── Só ADMIN: preço bruto e percentuais do pedido ───────────────────────────
+// Carregador separado de propósito: o romaneio público usa loadBy (colunas sem
+// base_unit_price nem discount_snapshot), então o bruto nunca chega a ele.
+export interface WholesaleOrderItemAdmin extends WholesaleOrderItem {
+  base_unit_price: number | null; // NULL em pedidos antigos
+}
+
+export interface WholesaleOrderAdmin extends Omit<WholesaleOrder, "items"> {
+  discount_snapshot: { pix: number; credit_card: number } | null;
+  items: WholesaleOrderItemAdmin[];
+}
+
+export async function getWholesaleOrderAdminById(id: string): Promise<WholesaleOrderAdmin | null> {
+  const db = createNoStoreAdminClient();
+  const { data: order } = await db
+    .from("wholesale_orders")
+    .select(`${ORDER_COLS}, discount_snapshot`)
+    .eq("id", id)
+    .maybeSingle();
+  if (!order) return null;
+  const { data: items } = await db
+    .from("wholesale_order_items")
+    .select(`${ITEM_COLS}, base_unit_price`)
+    .eq("order_id", order.id);
+  const base = normalize(order, items ?? []);
+  const rawItems = (items ?? []) as Record<string, unknown>[];
+  return {
+    ...base,
+    discount_snapshot: parseSnapshot((order as Record<string, unknown>).discount_snapshot),
+    items: base.items.map((it) => {
+      const raw = rawItems.find((r) => r.id === it.id);
+      return { ...it, base_unit_price: raw?.base_unit_price == null ? null : num(raw.base_unit_price) };
+    }),
+  };
+}
+
+export function parseSnapshot(v: unknown): { pix: number; credit_card: number } | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  const pix = Number(o.pix);
+  const card = Number(o.credit_card);
+  return Number.isFinite(pix) && Number.isFinite(card) ? { pix, credit_card: card } : null;
+}
+
 export function getWholesaleOrderById(id: string) {
   return loadBy("id", id);
 }

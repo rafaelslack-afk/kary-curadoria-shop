@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createNoStoreAdminClient } from "@/lib/supabase/admin-no-store";
 import { getRegraPrecoAtacado } from "@/lib/atacado/config";
-import { precoAtacado } from "@/lib/atacado/pricing";
+import { precoAtacado, precoBrutoAtacado } from "@/lib/atacado/pricing";
 import { sortSizes } from "@/lib/atacado/types";
 import { variantesDisponiveisAtacado } from "@/lib/atacado/disponibilidade";
 
@@ -55,6 +55,7 @@ export async function GET(request: NextRequest) {
           color: v.color ?? "Única",
           size: v.size,
           sku: v.sku,
+          base: precoBrutoAtacado(Number(p.price), v.size, regra.markups), // bruto: só admin
           suggested: {
             pix: precoAtacado(Number(p.price), v.size, "pix", regra),
             credit_card: precoAtacado(Number(p.price), v.size, "credit_card", regra),

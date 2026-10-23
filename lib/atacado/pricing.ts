@@ -52,6 +52,25 @@ export function precoAtacado(
   return centavos(comPlusSize * (1 - desconto / 100));
 }
 
+/**
+ * Preço BRUTO de atacado: preço de varejo atual (promocional, se houver) já com
+ * o acréscimo plus size e SEM desconto. Guardado em wholesale_order_items
+ * (base_unit_price) só para o admin; nunca exibir em área pública.
+ */
+export function precoBrutoAtacado(precoVarejo: number, tamanho: string, markups: Record<string, number>): number {
+  return centavos(calcularPrecoComPlusSize(Number(precoVarejo), tamanho, markups));
+}
+
+/** Aplica o desconto da forma de pagamento ao preço bruto (mesma conta de precoAtacado). */
+export function precoComDesconto(
+  precoBruto: number,
+  formaPagamento: FormaPagamentoAtacado,
+  descontos: DescontosAtacado
+): number {
+  const desconto = Math.min(Math.max(Number(descontos[formaPagamento]) || 0, 0), 100);
+  return centavos(Number(precoBruto) * (1 - desconto / 100));
+}
+
 // ── Plus size no card (mesmo padrão de rótulo dos cards do assistente) ──────
 
 export const PLUS_SIZES = ["G1", "G2", "G3"];
