@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createNoStoreAdminClient } from "@/lib/supabase/admin-no-store";
-import { getWholesaleOrderById } from "@/lib/atacado/pedidos";
+import { getWholesaleOrderAdminById } from "@/lib/atacado/pedidos";
 import { isStatusAtacado } from "@/lib/atacado/status";
-import { isFormaPagamento, precoAtacado } from "@/lib/atacado/pricing";
+import { isFormaPagamento, precoBrutoAtacado, precoComDesconto } from "@/lib/atacado/pricing";
 import { getRegraPrecoAtacado } from "@/lib/atacado/config";
+import { descontosDoPedido, montarPedidoAdmin } from "@/lib/atacado/recalculo";
 import { validarDocumento } from "@/lib/atacado/documento";
 
 export const runtime = "nodejs";
@@ -21,38 +22,15 @@ function money(v: unknown): number | null {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
-// GET /api/admin/atacado/pedidos/[id]
+// GET /api/admin/atacado/pedidos/[id] — pedido com preço bruto (só admin)
 export async function GET(_request: NextRequest, { params }: { params: { id: string } }) {
   const unauthorized = await requireAdmin();
   if (unauthorized) return unauthorized;
   if (!UUID_RE.test(params.id)) return NextResponse.json({ error: "Pedido não encontrado." }, { status: 404 });
 
-  const order = await getWholesaleOrderById(params.id);
+  const order = await getWholesaleOrderAdminById(params.id);
   if (!order) return NextResponse.json({ error: "Pedido não encontrado." }, { status: 404 });
-  return NextResponse.json(
-    { order, sugestoes: await precosSugeridos(order.items) },
-    { headers: { "Cache-Control": "no-store" } }
-  );
-}
-
-// Preço sugerido (regra de atacado, preço de varejo ATUAL) de cada variante
-// do pedido nas duas formas de pagamento: usado ao trocar a forma no admin.
-async function precosSugeridos(items: { variant_id: string | null }[]) {
-  const ids = Array.from(new Set(items.map((i) => i.variant_id).filter((v): v is string => !!v)));
-  const out: Record<string, { pix: number; credit_card: number }> = {};
-  if (ids.length === 0) return out;
-  const db = createNoStoreAdminClient();
-  const { data } = await db.from("product_variants").select("id, size, products(price)").in("id", ids);
-  const regra = await getRegraPrecoAtacado();
-  for (const v of (data ?? []) as unknown as { id: string; size: string; products: { price: number | string } | null }[]) {
-    if (!v.products) continue;
-    const price = Number(v.products.price);
-    out[v.id] = {
-      pix: precoAtacado(price, v.size, "pix", regra),
-      credit_card: precoAtacado(price, v.size, "credit_card", regra),
-    };
-  }
-  return out;
+  return NextResponse.json({ order: await montarPedidoAdmin(order) }, { headers: { "Cache-Control": "no-store" } });
 }
 
 // PUT /api/admin/atacado/pedidos/[id] — salva o pedido inteiro (dados da
@@ -70,9 +48,17 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     return NextResponse.json({ error: "Dados inválidos." }, { status: 400 });
   }
 
+  const atual = await getWholesaleOrderAdminById(params.id);
+  if (!atual) return NextResponse.json({ error: "Pedido não encontrado." }, { status: 404 });
+
   if (!isStatusAtacado(body.status)) return NextResponse.json({ error: "Status inválido." }, { status: 400 });
   if (!isFormaPagamento(body.payment_method)) {
     return NextResponse.json({ error: "Forma de pagamento inválida." }, { status: 400 });
+  }
+  // A troca da forma de pagamento recalcula os preços e passa por
+  // /pagamento (conta no servidor, com confirmação); aqui ela não muda.
+  if (body.payment_method !== atual.payment_method) {
+    return NextResponse.json({ error: "Para trocar a forma de pagamento use a troca de pagamento do pedido." }, { status: 400 });
   }
 
   const document = text(body.document, 20).replace(/\D/g, "");
@@ -97,8 +83,26 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     return NextResponse.json({ error: "Frete inválido." }, { status: 400 });
   }
 
-  // Itens
+  // Itens. O preço bruto nunca vem do navegador: itens que já estavam no pedido
+  // mantêm o bruto gravado; itens novos têm o bruto calculado aqui, pelo preço
+  // atual do produto. A marca "editado" também é derivada no servidor.
   const rawItems = Array.isArray(body.items) ? body.items.slice(0, 500) : [];
+  const existentes = new Map(atual.items.map((it) => [it.id, it]));
+  const descontos = await descontosDoPedido(atual);
+  const forma = atual.payment_method;
+  const idsNovos = rawItems
+    .map((raw) => (raw ?? {}) as Record<string, unknown>)
+    .filter((it) => !(typeof it.id === "string" && existentes.has(it.id)) && typeof it.variant_id === "string" && UUID_RE.test(it.variant_id))
+    .map((it) => it.variant_id as string);
+  const brutoNovo = new Map<string, number>();
+  if (idsNovos.length > 0) {
+    const db0 = createNoStoreAdminClient();
+    const { data: vs } = await db0.from("product_variants").select("id, size, products(price)").in("id", idsNovos);
+    const regra = await getRegraPrecoAtacado();
+    for (const v of (vs ?? []) as unknown as { id: string; size: string; products: { price: number | string } | null }[]) {
+      if (v.products) brutoNovo.set(v.id, precoBrutoAtacado(Number(v.products.price), v.size, regra.markups));
+    }
+  }
   const items = [];
   for (const raw of rawItems) {
     const it = (raw ?? {}) as Record<string, unknown>;
@@ -108,6 +112,13 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     if (!name || !Number.isFinite(quantity) || quantity <= 0 || quantity > 9999 || unit === null) {
       return NextResponse.json({ error: "Item inválido no pedido." }, { status: 400 });
     }
+    const antigo = typeof it.id === "string" ? existentes.get(it.id) : undefined;
+    const variantId = typeof it.variant_id === "string" && UUID_RE.test(it.variant_id) ? it.variant_id : null;
+    const base = antigo ? antigo.base_unit_price : variantId ? brutoNovo.get(variantId) ?? null : null;
+    // Editar o preço à mão marca "editado"; editar só a quantidade não mexe no preço
+    const overridden = antigo
+      ? antigo.price_overridden || Math.abs(unit - antigo.unit_price) > 0.004
+      : base != null && Math.abs(unit - precoComDesconto(base, forma, descontos)) > 0.004;
     items.push({
       order_id: params.id,
       product_id: typeof it.product_id === "string" && UUID_RE.test(it.product_id) ? it.product_id : null,
@@ -120,7 +131,8 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       quantity,
       unit_price: unit,
       total_price: Math.round(unit * quantity * 100) / 100,
-      price_overridden: it.price_overridden === true,
+      price_overridden: overridden,
+      base_unit_price: base,
     });
   }
   if (items.length === 0) return NextResponse.json({ error: "O pedido precisa de pelo menos um item." }, { status: 400 });
@@ -160,6 +172,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     .eq("id", params.id);
   if (updateError) return NextResponse.json({ error: "Não foi possível salvar o pedido." }, { status: 500 });
 
-  const order = await getWholesaleOrderById(params.id);
-  return NextResponse.json({ order });
+  const order = await getWholesaleOrderAdminById(params.id);
+  if (!order) return NextResponse.json({ error: "Pedido não encontrado." }, { status: 404 });
+  return NextResponse.json({ order: await montarPedidoAdmin(order) });
 }

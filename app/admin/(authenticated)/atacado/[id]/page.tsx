@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, Copy, MessageCircle, Plus, Printer, Save, Search, Trash2 } from "lucide-react";
 import { STATUS_ATACADO } from "@/lib/atacado/status";
@@ -21,6 +21,8 @@ interface Item {
   quantity: number;
   unit_price: number;
   price_overridden: boolean;
+  base_unit_price: number | null; // bruto (com plus size, sem desconto); null em pedidos antigos
+  alt_unit: Record<FormaPagamentoAtacado, number>; // preço unitário em cada forma (só valores)
 }
 
 interface Order {
@@ -40,17 +42,28 @@ interface Order {
   created_at: string;
 }
 
-type Sugestoes = Record<string, { pix: number; credit_card: number }>;
+// Resumo da troca de pagamento (servidor): só valores, nenhum percentual
+interface ResumoTroca {
+  editados: number;
+  semBase: string[];
+  totalAntigo: { itens: number; geral: number };
+  totalNovo: { itens: number; geral: number };
+}
 
 interface SearchProduct {
   id: string;
   name: string;
   reference: string | null;
-  variants: { id: string; color: string; size: string; sku: string | null; suggested: { pix: number; credit_card: number } }[];
+  variants: { id: string; color: string; size: string; sku: string | null; base: number; suggested: { pix: number; credit_card: number } }[];
 }
 
 const input = "w-full border border-gray-200 rounded-md px-3 py-2 text-sm bg-white";
 const label = "block text-[11px] uppercase tracking-wide text-gray-500 mb-1";
+
+// Foto do que está na tela, para saber se há alterações não salvas
+function snapshotOf(o: Order, its: Item[], ship: string) {
+  return JSON.stringify([o, its.map((it) => [it.key, it.quantity, it.unit_price, it.price_overridden]), ship]);
+}
 
 let localKey = 0;
 const nextKey = () => `novo-${++localKey}`;
@@ -58,7 +71,9 @@ const nextKey = () => `novo-${++localKey}`;
 export default function AtacadoPedidoAdminPage({ params }: { params: { id: string } }) {
   const [order, setOrder] = useState<Order | null>(null);
   const [items, setItems] = useState<Item[]>([]);
-  const [sugestoes, setSugestoes] = useState<Sugestoes>({});
+  const baseline = useRef("");
+  // Troca de pagamento: forma pretendida, resumo do servidor e escolha sobre editados
+  const [troca, setTroca] = useState<{ forma: FormaPagamentoAtacado; resumo: ResumoTroca | null; recalcularEditados: boolean; busy: boolean } | null>(null);
   const [shipping, setShipping] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -72,12 +87,14 @@ export default function AtacadoPedidoAdminPage({ params }: { params: { id: strin
   const [varianteSel, setVarianteSel] = useState("");
   const [qtdNova, setQtdNova] = useState(1);
 
-  const applyLoaded = useCallback((data: { order: Order & { items: (Omit<Item, "key"> & { id: string })[]; shipping_cost: number | null }; sugestoes?: Sugestoes }) => {
+  const applyLoaded = useCallback((data: { order: Order & { items: (Omit<Item, "key"> & { id: string })[]; shipping_cost: number | null } }) => {
     const { items: its, ...o } = data.order;
+    const loaded = its.map((it) => ({ ...it, key: it.id }));
+    const ship = o.shipping_cost == null ? "" : String(o.shipping_cost);
     setOrder(o);
-    setItems(its.map((it) => ({ ...it, key: it.id })));
-    setShipping(o.shipping_cost == null ? "" : String(o.shipping_cost));
-    if (data.sugestoes) setSugestoes(data.sugestoes);
+    setItems(loaded);
+    setShipping(ship);
+    baseline.current = snapshotOf(o, loaded, ship);
   }, []);
 
   const load = useCallback(async () => {
@@ -105,6 +122,14 @@ export default function AtacadoPedidoAdminPage({ params }: { params: { id: strin
   const pieces = items.reduce((n, it) => n + it.quantity, 0);
   const shippingNum = shipping.trim() === "" ? 0 : Number(shipping.replace(",", ".")) || 0;
   const total = Math.round((itemsTotal + shippingNum) * 100) / 100;
+  const dirty = order !== null && snapshotOf(order, items, shipping) !== baseline.current;
+
+  // Total bruto: só quando TODOS os itens têm preço bruto (pedido antigo → "—")
+  const totalBruto = items.length > 0 && items.every((it) => it.base_unit_price != null)
+    ? Math.round(items.reduce((s, it) => s + (it.base_unit_price as number) * it.quantity, 0) * 100) / 100
+    : null;
+  const totalNaForma = (f: FormaPagamentoAtacado) =>
+    Math.round(items.reduce((s, it) => s + (it.alt_unit?.[f] ?? it.unit_price) * it.quantity, 0) * 100) / 100;
 
   function patchOrder(p: Partial<Order>) {
     setOrder((o) => (o ? { ...o, ...p } : o));
@@ -116,28 +141,54 @@ export default function AtacadoPedidoAdminPage({ params }: { params: { id: strin
     setItems((its) => its.map((it) => (it.key === key ? { ...it, ...p } : it)));
   }
 
-  function suggestedFor(it: Item, forma: FormaPagamentoAtacado): number | null {
-    return it.variant_id && sugestoes[it.variant_id] ? sugestoes[it.variant_id][forma] : null;
+  // Trocar a forma de pagamento: a conta é feita no servidor. Primeiro pede o
+  // resumo (totais antigo e novo, itens editados, itens sem bruto), depois grava.
+  async function pedirTroca(forma: FormaPagamentoAtacado, recalcularEditados = false) {
+    if (!order || forma === order.payment_method) return;
+    if (dirty) {
+      setError("Há alterações não salvas. Salve o pedido antes de trocar a forma de pagamento.");
+      return;
+    }
+    setError("");
+    setMsg("");
+    setTroca({ forma, resumo: null, recalcularEditados, busy: true });
+    try {
+      const res = await fetch(`/api/admin/atacado/pedidos/${order.id}/pagamento`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ payment_method: forma, recalcular_editados: recalcularEditados }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Erro ao calcular a troca.");
+      setTroca({ forma, resumo: data, recalcularEditados, busy: false });
+    } catch (e) {
+      setTroca(null);
+      setError((e as Error).message);
+    }
   }
 
-  // Trocar a forma de pagamento recalcula os preços sugeridos; preços editados
-  // à mão só são sobrescritos se o admin confirmar.
-  function changePayment(forma: FormaPagamentoAtacado) {
-    if (!order || forma === order.payment_method) return;
-    const temEditados = items.some((it) => it.price_overridden);
-    const sobrescrever =
-      temEditados &&
-      window.confirm(
-        "Alguns preços foram editados à mão. Sobrescrever também esses preços com o preço sugerido da nova forma de pagamento?\n\nOK = sobrescrever todos · Cancelar = manter os editados"
+  async function confirmarTroca() {
+    if (!order || !troca) return;
+    setTroca({ ...troca, busy: true });
+    try {
+      const res = await fetch(`/api/admin/atacado/pedidos/${order.id}/pagamento`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ payment_method: troca.forma, recalcular_editados: troca.recalcularEditados, aplicar: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Erro ao trocar a forma de pagamento.");
+      applyLoaded(data);
+      setMsg(
+        data.semBase?.length > 0
+          ? `Forma de pagamento trocada. Itens sem preço bruto ficaram como estavam: ${data.semBase.join("; ")}.`
+          : "Forma de pagamento trocada e preços recalculados."
       );
-    setItems((its) =>
-      its.map((it) => {
-        if (it.price_overridden && !sobrescrever) return it;
-        const s = suggestedFor(it, forma);
-        return s === null ? it : { ...it, unit_price: s, price_overridden: false };
-      })
-    );
-    patchOrder({ payment_method: forma });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setTroca(null);
+    }
   }
 
   async function buscarProdutos() {
@@ -153,7 +204,6 @@ export default function AtacadoPedidoAdminPage({ params }: { params: { id: strin
     if (!order || !produtoSel) return;
     const v = produtoSel.variants.find((x) => x.id === varianteSel);
     if (!v || qtdNova < 1) return;
-    setSugestoes((s) => ({ ...s, [v.id]: v.suggested }));
     const existente = items.find((it) => it.variant_id === v.id);
     if (existente) {
       patchItem(existente.key, { quantity: existente.quantity + qtdNova });
@@ -172,6 +222,8 @@ export default function AtacadoPedidoAdminPage({ params }: { params: { id: strin
           quantity: qtdNova,
           unit_price: v.suggested[order.payment_method],
           price_overridden: false,
+          base_unit_price: v.base,
+          alt_unit: v.suggested,
         },
       ]);
     }
@@ -261,7 +313,7 @@ export default function AtacadoPedidoAdminPage({ params }: { params: { id: strin
         </div>
         <div>
           <label className={label}>Forma de pagamento</label>
-          <select className={input} value={order.payment_method} onChange={(e) => changePayment(e.target.value as FormaPagamentoAtacado)}>
+          <select className={input} value={order.payment_method} onChange={(e) => pedirTroca(e.target.value as FormaPagamentoAtacado)}>
             {FORMAS_PAGAMENTO.map((f) => (
               <option key={f.value} value={f.value}>
                 {f.label}
@@ -284,14 +336,14 @@ export default function AtacadoPedidoAdminPage({ params }: { params: { id: strin
               <th className="text-left px-3 py-2 font-medium">Cor</th>
               <th className="text-left px-3 py-2 font-medium">Tam.</th>
               <th className="text-right px-3 py-2 font-medium">Qtd.</th>
-              <th className="text-right px-3 py-2 font-medium">Unitário</th>
+              <th className="text-right px-3 py-2 font-medium">Valor unitário (bruto)</th>
+              <th className="text-right px-3 py-2 font-medium">Valor unitário (atacado)</th>
               <th className="text-right px-3 py-2 font-medium">Subtotal</th>
               <th />
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {items.map((it) => {
-              const sug = suggestedFor(it, order.payment_method);
               return (
                 <tr key={it.key}>
                   <td className="px-3 py-2">
@@ -309,6 +361,9 @@ export default function AtacadoPedidoAdminPage({ params }: { params: { id: strin
                       className="w-16 border border-gray-200 rounded px-2 py-1 text-right"
                     />
                   </td>
+                  <td className="px-3 py-2 text-right whitespace-nowrap text-gray-600">
+                    {it.base_unit_price != null ? formatCurrency(it.base_unit_price) : "—"}
+                  </td>
                   <td className="px-3 py-2 text-right">
                     <input
                       type="number"
@@ -318,8 +373,10 @@ export default function AtacadoPedidoAdminPage({ params }: { params: { id: strin
                       onChange={(e) => patchItem(it.key, { unit_price: Math.max(0, Number(e.target.value) || 0), price_overridden: true })}
                       className="w-24 border border-gray-200 rounded px-2 py-1 text-right"
                     />
-                    {it.price_overridden && sug !== null && (
-                      <p className="text-[10px] text-amber-700 mt-0.5">sugerido {formatCurrency(sug)}</p>
+                    {it.price_overridden && (
+                      <span className="inline-block mt-0.5 text-[10px] uppercase tracking-wide text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-px">
+                        editado
+                      </span>
                     )}
                   </td>
                   <td className="px-3 py-2 text-right whitespace-nowrap">{formatCurrency(it.unit_price * it.quantity)}</td>
@@ -401,11 +458,15 @@ export default function AtacadoPedidoAdminPage({ params }: { params: { id: strin
           )}
         </div>
 
-        <div className="border-t border-gray-100 p-3 text-sm space-y-1 max-w-xs ml-auto">
+        <div className="border-t border-gray-100 p-3 text-sm space-y-1 max-w-sm ml-auto">
           <div className="flex justify-between"><span className="text-gray-500">Peças</span><span>{pieces}</span></div>
-          <div className="flex justify-between"><span className="text-gray-500">Total sem frete</span><span>{formatCurrency(itemsTotal)}</span></div>
+          <div className="flex justify-between"><span className="text-gray-500">Total bruto</span><span>{totalBruto === null ? "—" : formatCurrency(totalBruto)}</span></div>
+          <div className="flex justify-between"><span className="text-gray-500">Total do pedido ({order.payment_method === "pix" ? "PIX" : "cartão"})</span><span>{formatCurrency(itemsTotal)}</span></div>
           <div className="flex justify-between"><span className="text-gray-500">Frete</span><span>{shipping.trim() === "" ? "a calcular" : formatCurrency(shippingNum)}</span></div>
           <div className="flex justify-between font-semibold border-t border-gray-100 pt-1"><span>Total geral</span><span>{formatCurrency(total)}</span></div>
+          <p className="text-xs text-gray-500 pt-1">
+            No PIX: {formatCurrency(totalNaForma("pix"))} · No cartão: {formatCurrency(totalNaForma("credit_card"))}
+          </p>
         </div>
       </div>
 
@@ -430,6 +491,60 @@ export default function AtacadoPedidoAdminPage({ params }: { params: { id: strin
           <div className="md:col-span-2"><label className={label}>Observações</label><textarea className={input} rows={3} value={order.notes ?? ""} onChange={(e) => patchOrder({ notes: e.target.value })} /></div>
         </div>
       </div>
+
+      {troca && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Trocar forma de pagamento">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-5 space-y-4">
+            <h2 className="text-lg font-serif font-medium text-kc-dark">
+              Trocar para {troca.forma === "pix" ? "PIX" : "cartão de crédito"}
+            </h2>
+            {!troca.resumo ? (
+              <p className="text-sm text-gray-500">Calculando…</p>
+            ) : (
+              <>
+                {troca.resumo.editados > 0 && (
+                  <fieldset className="text-sm space-y-2" disabled={troca.busy}>
+                    <legend className="text-gray-700 mb-1">
+                      {troca.resumo.editados} {troca.resumo.editados === 1 ? "item tem" : "itens têm"} preço editado à mão. Recalcular também? (sobrescreve a negociação)
+                    </legend>
+                    <label className="flex items-center gap-2">
+                      <input type="radio" name="editados" checked={!troca.recalcularEditados} onChange={() => pedirTroca(troca.forma, false)} />
+                      Manter preços editados
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input type="radio" name="editados" checked={troca.recalcularEditados} onChange={() => pedirTroca(troca.forma, true)} />
+                      Recalcular todos
+                    </label>
+                  </fieldset>
+                )}
+                {troca.resumo.semBase.length > 0 && (
+                  <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                    Sem preço bruto (pedido antigo), ficam como estavam: {troca.resumo.semBase.join("; ")}.
+                  </p>
+                )}
+                <div className="text-sm border border-gray-100 rounded-md divide-y divide-gray-100">
+                  <div className="flex justify-between px-3 py-2"><span className="text-gray-500">Total antigo</span><span>{formatCurrency(troca.resumo.totalAntigo.geral)}</span></div>
+                  <div className="flex justify-between px-3 py-2 font-semibold"><span>Total novo</span><span>{formatCurrency(troca.resumo.totalNovo.geral)}</span></div>
+                </div>
+                <p className="text-xs text-gray-500">Frete e status permanecem. O estoque não é afetado.</p>
+              </>
+            )}
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setTroca(null)} className="text-sm border border-gray-200 rounded-md px-4 py-2 hover:bg-gray-50">
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmarTroca}
+                disabled={!troca.resumo || troca.busy}
+                className="text-sm bg-kc text-white rounded-md px-4 py-2 hover:bg-kc-dark disabled:opacity-50"
+              >
+                Confirmar troca
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex justify-end sticky bottom-4">
         <button

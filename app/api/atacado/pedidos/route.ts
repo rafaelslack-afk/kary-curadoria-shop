@@ -2,7 +2,7 @@ import { createHmac } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAtacadoConfig, getRegraPrecoAtacado, newRomaneioToken } from "@/lib/atacado/config";
-import { isFormaPagamento, labelFormaPagamento, precoAtacado } from "@/lib/atacado/pricing";
+import { isFormaPagamento, labelFormaPagamento, precoAtacado, precoBrutoAtacado } from "@/lib/atacado/pricing";
 import { formatarDocumento, validarDocumento } from "@/lib/atacado/documento";
 import { buildAtacadoWhatsAppUrl, mensagemPedidoAtacado } from "@/lib/atacado/whatsapp";
 import { mensagemForaDoAtacado, mensagemVarianteIndisponivel, varianteDisponivelAtacado } from "@/lib/atacado/disponibilidade";
@@ -185,6 +185,9 @@ export async function POST(request: NextRequest) {
       quantity,
       unit_price: unit,
       total_price: Math.round(unit * quantity * 100) / 100,
+      // Só para o admin: preço bruto (com plus size, sem desconto). Não entra na
+      // resposta nem no WhatsApp.
+      base_unit_price: precoBrutoAtacado(Number(v.products!.price), v.size, regra.markups),
     };
   });
 
@@ -218,6 +221,7 @@ export async function POST(request: NextRequest) {
       pieces_count: pieces,
       romaneio_token: romaneioToken,
       ip_hash: ipHash,
+      discount_snapshot: regra.descontos, // percentuais vigentes na criação (só admin)
     })
     .select("id, order_number")
     .single();
