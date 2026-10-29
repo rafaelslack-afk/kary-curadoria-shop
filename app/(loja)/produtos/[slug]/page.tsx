@@ -1,3 +1,5 @@
+import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -13,7 +15,8 @@ interface Props {
   params: { slug: string };
 }
 
-async function getProduct(slug: string) {
+// cache() do React: generateMetadata e a página compartilham a mesma consulta
+const getProduct = cache(async (slug: string) => {
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from("products")
@@ -33,17 +36,24 @@ async function getProduct(slug: string) {
     throw new Error(`Falha ao carregar produto ${slug}: ${error.message}`);
   }
   return data;
-}
+});
 
-async function getColors(): Promise<Record<string, string>> {
-  const admin = createAdminClient();
-  const { data } = await admin.from("colors").select("name, hex_code");
-  const map: Record<string, string> = {};
-  for (const c of data ?? []) {
-    map[c.name] = c.hex_code;
-  }
-  return map;
-}
+// Cores mudam raramente: cache de 5 min entre renders de qualquer produto
+const getColors = unstable_cache(
+  async (): Promise<Record<string, string>> => {
+    const admin = createAdminClient();
+    const { data, error } = await admin.from("colors").select("name, hex_code");
+    // Lança em erro para o unstable_cache não guardar um mapa vazio
+    if (error) throw new Error(`Falha ao carregar cores: ${error.message}`);
+    const map: Record<string, string> = {};
+    for (const c of data ?? []) {
+      map[c.name] = c.hex_code;
+    }
+    return map;
+  },
+  ["loja-colors"],
+  { revalidate: 300 }
+);
 
 export async function generateMetadata({ params }: Props) {
   const product = await getProduct(params.slug);
