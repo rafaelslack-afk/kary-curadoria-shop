@@ -21,6 +21,8 @@ export async function GET() {
 
   return NextResponse.json(
     { enabled: available, max_input_chars: limits.max_input_chars },
-    { headers: { "Cache-Control": "no-store" } }
+    // Cache curto no CDN: o widget carrega em toda página da loja e cada
+    // chamada custava 2 consultas (system_config + chat_circuit)
+    { headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60" } }
   );
 }
