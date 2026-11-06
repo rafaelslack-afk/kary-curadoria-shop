@@ -7,7 +7,10 @@ import { PrelaunchHome } from "@/components/loja/prelaunch-home";
 import { formatLaunchDatePtBr, isStorePrelaunchActive } from "@/lib/store-launch";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export const dynamic = "force-dynamic";
+// ISR em vez de force-dynamic: force-dynamic no layout anulava o revalidate de
+// todas as páginas da loja e cada visita consultava o banco. 60 s também limita
+// o atraso da virada do pré-lançamento (avaliado na renderização).
+export const revalidate = 60;
 
 interface NavLink {
   id: string;

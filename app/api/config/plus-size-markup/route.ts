@@ -8,5 +8,9 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   const markups = await getPlusSizeMarkups();
-  return NextResponse.json({ markups });
+  // Só exibição na PDP; o preço cobrado é recalculado no servidor em /api/orders/create
+  return NextResponse.json(
+    { markups },
+    { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" } }
+  );
 }

@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { unstable_cache } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CatalogClient } from "./catalog-client";
 import { getCatalogSeo } from "@/lib/catalog-seo";
@@ -10,8 +11,10 @@ interface Props {
   searchParams: { categoria?: string };
 }
 
-async function getProductsAndCategories() {
-  try {
+// A página lê searchParams em generateMetadata (SEO por categoria) e por isso
+// é renderizada a cada visita; o cache dos dados limita o banco a ~1 ida/min.
+const loadProductsAndCategories = unstable_cache(
+  async () => {
     const supabase = createAdminClient();
 
     const [productsRes, categoriesRes] = await Promise.all([
@@ -27,6 +30,11 @@ async function getProductsAndCategories() {
         .order("name"),
     ]);
 
+    // Lança em erro para o unstable_cache não guardar uma lista vazia
+    if (productsRes.error || categoriesRes.error) {
+      throw new Error(productsRes.error?.message ?? categoriesRes.error?.message);
+    }
+
     const products = (productsRes.data ?? []).map((p) => ({
       ...p,
       total_stock: (p.product_variants as { stock_qty: number }[]).reduce(
@@ -36,6 +44,14 @@ async function getProductsAndCategories() {
     }));
 
     return { products, categories: categoriesRes.data ?? [] };
+  },
+  ["loja-catalogo"],
+  { revalidate: 60 }
+);
+
+async function getProductsAndCategories() {
+  try {
+    return await loadProductsAndCategories();
   } catch {
     return { products: [], categories: [] }; // banco acordando
   }

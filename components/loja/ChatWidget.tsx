@@ -101,7 +101,7 @@ export function ChatWidget() {
   }
 
   useEffect(() => {
-    fetch("/api/chat/status", { cache: "no-store" })
+    fetch("/api/chat/status")
       .then((r) => r.json())
       .then((d) => {
         setEnabled(d.enabled === true);
