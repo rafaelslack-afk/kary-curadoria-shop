@@ -218,36 +218,61 @@ export async function POST(request: NextRequest) {
     not_found: [] as string[],
     errors:    [] as string[],
   };
+  let unchanged = 0;
+
+  // ── Buscar todas as variantes de uma vez (sku é UNIQUE) ──────────────────
+  const skuByItem = body.items.map((item) => buildSku(body.product_code, item.color, item.size, mappings));
+
+  const { data: variantRows, error: variantsError } = await admin
+    .from("product_variants")
+    .select("id, sku, stock_qty, product_id")
+    .in("sku", skuByItem);
+
+  if (variantsError) {
+    console.error("[ERP Sync] Erro ao buscar variantes:", variantsError.message);
+    return NextResponse.json({ error: "Falha ao consultar variantes." }, { status: 500 });
+  }
+
+  const variantBySku = new Map((variantRows ?? []).map((v) => [v.sku, v]));
+
+  // Erros ainda não resolvidos deste produto: não gravar o mesmo erro a cada sync
+  const { data: openErrors } = await admin
+    .from("erp_sync_errors")
+    .select("color_erp, size")
+    .eq("product_code", body.product_code)
+    .eq("resolved", false);
+
+  const openErrorKeys = new Set((openErrors ?? []).map((e) => `${e.color_erp}|${e.size}`));
 
   // ── Processar cada item ───────────────────────────────────────────────────
-  for (const item of body.items) {
-    const sku = buildSku(body.product_code, item.color, item.size, mappings);
+  for (let i = 0; i < body.items.length; i++) {
+    const item = body.items[i];
+    const sku = skuByItem[i];
 
     try {
-      // Buscar variante pelo SKU
-      const { data: variant, error: variantError } = await admin
-        .from("product_variants")
-        .select("id, sku, stock_qty, product_id")
-        .eq("sku", sku)
-        .single();
+      const variant = variantBySku.get(sku);
 
-      if (variantError || !variant) {
+      if (!variant) {
         results.not_found.push(sku);
         console.warn(`[ERP Sync] SKU não encontrado: ${sku}`);
 
-        // Registrar erro para monitoramento no painel admin
-        try {
-          await admin.from("erp_sync_errors").insert({
-            product_code: body.product_code,
-            color_erp:    item.color,
-            size:         item.size,
-            sku_tentado:  sku,
-            quantity:     item.quantity,
-            error_type:   "not_found",
-            resolved:     false,
-          });
-        } catch (insertErr) {
-          console.error("[ERP Sync] Falha ao registrar erro:", insertErr);
+        // Registrar erro para monitoramento no painel admin (uma vez por chave)
+        const errorKey = `${item.color}|${item.size}`;
+        if (!openErrorKeys.has(errorKey)) {
+          openErrorKeys.add(errorKey);
+          try {
+            await admin.from("erp_sync_errors").insert({
+              product_code: body.product_code,
+              color_erp:    item.color,
+              size:         item.size,
+              sku_tentado:  sku,
+              quantity:     item.quantity,
+              error_type:   "not_found",
+              resolved:     false,
+            });
+          } catch (insertErr) {
+            console.error("[ERP Sync] Falha ao registrar erro:", insertErr);
+          }
         }
 
         continue;
@@ -255,6 +280,13 @@ export async function POST(request: NextRequest) {
 
       const oldQty = variant.stock_qty;
       const newQty = item.quantity;
+
+      // Saldo igual ao do ERP: nada a gravar (evita UPDATE e inventory_log "N → N")
+      if (oldQty === newQty) {
+        unchanged++;
+        results.synced.push(sku);
+        continue;
+      }
 
       // Atualizar stock_qty
       const { error: updateError } = await admin
@@ -302,6 +334,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     success:   true,
     synced:    results.synced.length,
+    unchanged,
     not_found: results.not_found,
     errors:    results.errors,
     timestamp: new Date().toISOString(),
