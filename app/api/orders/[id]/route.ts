@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendOrderShippedEmail } from "@/lib/email/send";
+import { waitUntil } from "@vercel/functions";
+import { notifyErpNewSale, ERP_PAID_STATUSES } from "@/lib/erp/notify-sale";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+export const maxDuration = 30;
 
 const NO_CACHE = {
   "Cache-Control": "no-store, no-cache, must-revalidate",
@@ -142,6 +145,17 @@ export async function PUT(
       })
       .eq("order_id", id)
       .eq("type", "reserva");
+  }
+
+  // Marcação manual como paga no admin → notifica o ERP (idempotente via
+  // orders.erp_notified_at; waitUntil garante que o envio termine).
+  const paidStatuses = ERP_PAID_STATUSES as readonly string[];
+  if (!paidStatuses.includes(previousOrder.status) && paidStatuses.includes(data.status)) {
+    try {
+      waitUntil(notifyErpNewSale(id, "admin"));
+    } catch (err) {
+      console.error("[Orders PUT] Falha ao agendar notificação ao ERP:", err);
+    }
   }
 
   // Envia e-mail de envio quando status transita para 'shipped'

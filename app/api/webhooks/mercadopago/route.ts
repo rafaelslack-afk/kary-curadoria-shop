@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sendPaymentConfirmedEmail, sendOrderCancelledEmail, sendLowStockAlertEmail } from "@/lib/email/send";
 import { waitUntil } from "@vercel/functions";
 import { sendOrderPurchase } from "@/lib/tracking/tiktok-server";
+import { notifyErpNewSale, ERP_PAID_STATUSES } from "@/lib/erp/notify-sale";
 
 // Semântica dos status MP no contexto do KVO:
 //
@@ -15,105 +16,6 @@ import { sendOrderPurchase } from "@/lib/tracking/tiktok-server";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
-
-// ── Notificação ERP — nova venda online ───────────────────────────────────────
-// Fire-and-forget: chamada assíncrona que não bloqueia o fluxo do pedido.
-// Erros são logados mas nunca propagados.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function notifyErpNewSale(order: any) {
-  try {
-    const erpUrl    = process.env.ERP_BASE_URL;
-    const erpSecret = process.env.ERP_WEBHOOK_SECRET;
-
-    if (!erpUrl || !erpSecret) {
-      console.warn("[ERP Sale] ERP_BASE_URL ou ERP_WEBHOOK_SECRET não configurados — notificação ignorada.");
-      return;
-    }
-
-    // Buscar itens com dados completos de produto e variante
-    const admin = createAdminClient();
-    const { data: items } = await admin
-      .from("order_items")
-      .select(`
-        product_name,
-        size_snapshot,
-        sku_snapshot,
-        quantity,
-        unit_price,
-        products ( sku_base, notifica_erp_venda, erp_sync_enabled ),
-        product_variants ( color )
-      `)
-      .eq("order_id", order.id);
-
-    // Verificar se algum item do pedido deve notificar o ERP
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const deveNotificar = (items ?? []).some((item: any) => {
-      const prod = Array.isArray(item.products) ? item.products[0] : item.products;
-      return prod?.notifica_erp_venda !== false;
-    });
-
-    if (!deveNotificar) {
-      console.log(`[ERP Sale] Pedido #${order.order_number} — todos os itens com notifica_erp_venda=false, pulando notificação.`);
-      return;
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const mappedItems = (items ?? []).map((item: any) => {
-      const prod    = Array.isArray(item.products)          ? item.products[0]          : item.products;
-      const variant = Array.isArray(item.product_variants)  ? item.product_variants[0]  : item.product_variants;
-      return {
-        product_code: prod?.sku_base ?? null,
-        product_name: item.product_name,
-        color:        variant?.color ?? null,
-        size:         item.size_snapshot,
-        sku:          item.sku_snapshot,
-        quantity:     item.quantity,
-        unit_price:   item.unit_price,
-        // Flag para o ERP: itens sem sync de estoque são "sob encomenda"
-        is_encomenda: prod?.erp_sync_enabled === false,
-      };
-    });
-
-    const hasEncomendaItems = mappedItems.some((i) => i.is_encomenda);
-
-    const payload = {
-      order_id:            order.id,
-      order_number:        order.order_number,
-      customer_name:       order.guest_name    ?? null,
-      customer_phone:      order.customer_phone ?? null,
-      customer_email:      order.guest_email   ?? null,
-      has_encomenda_items: hasEncomendaItems,
-      items:               mappedItems,
-      subtotal:            order.subtotal,
-      shipping_cost:       order.shipping_cost,
-      discount:            order.discount       ?? 0,
-      total:               order.total,
-      payment_method:      order.payment_method,
-      shipping_service:    order.shipping_service,
-      origin:              "kvo_online",
-    };
-
-    const res = await fetch(`${erpUrl}/api/kvo/sale`, {
-      method:  "POST",
-      headers: {
-        "Content-Type":  "application/json",
-        "Authorization": `Bearer ${erpSecret}`,
-      },
-      body:   JSON.stringify(payload),
-      signal: AbortSignal.timeout(5000),
-    });
-
-    if (!res.ok) {
-      const text = await res.text().catch(() => "(sem corpo)");
-      console.error(`[ERP Sale] Resposta inesperada ${res.status}:`, text);
-    } else {
-      console.log(`[ERP Sale] Pedido #${order.order_number} notificado com sucesso.`);
-    }
-  } catch (err) {
-    // Fire-and-forget — logar mas não bloquear o fluxo do pedido
-    console.error("[ERP Sale] Falha ao notificar ERP:", err);
-  }
-}
 
 // ── Mercado Pago Webhook (IPN) ────────────────────────────────────────────────
 // MP envia POST com body: { "type": "payment", "data": { "id": "12345678" } }
@@ -176,17 +78,23 @@ export async function POST(request: Request) {
 
     // Atualizar status do pedido conforme status do MP
     if (payment.status === "approved") {
-      const wasAlreadyPaid = order.status === "paid";
+      // Já pago = qualquer status a partir de "paid". Um payment.updated atrasado
+      // não pode rebaixar um pedido em "preparing"/"shipped" de volta a "paid".
+      const wasAlreadyPaid = (ERP_PAID_STATUSES as readonly string[]).includes(order.status);
 
-      await admin
-        .from("orders")
-        .update({
-          status: "paid",
-          pagbank_status: "approved",
-        })
-        .eq("id", order.id);
+      if (wasAlreadyPaid) {
+        console.log(`[Webhook MP] Pedido #${order.order_number} já estava pago (status: ${order.status}) — status mantido`);
+      } else {
+        await admin
+          .from("orders")
+          .update({
+            status: "paid",
+            pagbank_status: "approved",
+          })
+          .eq("id", order.id);
 
-      console.log(`[Webhook MP] Pedido #${order.order_number} marcado como PAGO`);
+        console.log(`[Webhook MP] Pedido #${order.order_number} marcado como PAGO`);
+      }
 
       if (!wasAlreadyPaid) {
         await admin
@@ -265,9 +173,14 @@ export async function POST(request: Request) {
         console.error("[Webhook MP] Falha ao verificar/enviar alerta de estoque:", stockErr);
       }
 
-      // Notifica o ERP sobre a nova venda (fire-and-forget — não bloqueia)
-      if (!wasAlreadyPaid) {
-        notifyErpNewSale(order).catch(() => {});
+      // Notifica o ERP. Chamado mesmo com wasAlreadyPaid: o cartão aprovado na
+      // criação já chega aqui como "paid". A idempotência fica em
+      // orders.erp_notified_at (só envia uma vez). waitUntil mantém a função
+      // viva até o envio terminar (até 3 tentativas).
+      try {
+        waitUntil(notifyErpNewSale(order.id, "webhook"));
+      } catch (err) {
+        console.error("[Webhook MP] Falha ao agendar notificação ao ERP:", err);
       }
 
       // TikTok Events API — Purchase pela confirmação real do pagamento (PIX,
