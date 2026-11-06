@@ -5,6 +5,7 @@ import { sendOrderCreatedEmail, sendPaymentConfirmedEmail } from "@/lib/email/se
 import { calcularPrecoComPlusSize } from "@/lib/pricing";
 import { getPlusSizeMarkups } from "@/lib/pricing-server";
 import { waitUntil } from "@vercel/functions";
+import { notifyErpNewSale } from "@/lib/erp/notify-sale";
 import {
   requestTrackingContext,
   saveOrderTrackingContext,
@@ -732,6 +733,18 @@ export async function POST(request: NextRequest) {
       })());
     } catch (err) {
       console.error("[orders/create] Falha ao agendar TikTok:", err);
+    }
+
+    // ── 9.55. Notificação ao ERP — cartão aprovado na criação ───────────────
+    // O webhook do MP chega com o pedido já "paid"; por isso a venda é enviada
+    // daqui. Idempotente (orders.erp_notified_at) caso o webhook também envie.
+    // waitUntil mantém a função viva até o envio terminar (até 3 tentativas).
+    if (orderStatus === "paid") {
+      try {
+        waitUntil(notifyErpNewSale(order.id, "orders/create"));
+      } catch (err) {
+        console.error("[orders/create] Falha ao agendar notificação ao ERP:", err);
+      }
     }
 
     // ── 9.6. Checagem do total — FASE 1, só observação ──────────────────────

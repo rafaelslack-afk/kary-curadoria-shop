@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ShoppingBag, AlertTriangle, MessageCircle } from "lucide-react";
+import { ShoppingBag, AlertTriangle, MessageCircle, RefreshCw } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { getPendingAlert } from "@/lib/order-expiration";
 import type { OrderStatus, PaymentMethod } from "@/types/database";
@@ -20,6 +20,21 @@ interface OrderRow {
   tracking_code: string | null;
   shipping_service: string | null;
   shipping_deadline: number | null;
+  erp_notified_at: string | null;
+  erp_notify_started_at: string | null;
+  erp_last_error: string | null;
+}
+
+// Pedido pago há mais de 10 min sem confirmação do ERP (kvo_pending_sales).
+const ERP_ALERT_AFTER_MS = 10 * 60 * 1000;
+const ERP_PAID_STATUSES: OrderStatus[] = ["paid", "preparing", "shipped", "delivered"];
+
+function needsErpAlert(o: OrderRow): boolean {
+  return (
+    ERP_PAID_STATUSES.includes(o.status) &&
+    !o.erp_notified_at &&
+    Date.now() - new Date(o.created_at).getTime() > ERP_ALERT_AFTER_MS
+  );
 }
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
@@ -76,6 +91,33 @@ export default function PedidosPage() {
     }
   }
 
+  const [resending, setResending] = useState<string | null>(null);
+  const [resendMsg, setResendMsg] = useState<Record<string, { ok: boolean; text: string }>>({});
+
+  async function resendToErp(orderId: string) {
+    setResending(orderId);
+    try {
+      const res = await fetch(`/api/admin/orders/${orderId}/erp-resend`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      const ok = Boolean(data.ok);
+      setResendMsg((m) => ({
+        ...m,
+        [orderId]: { ok, text: (data.message ?? (ok ? "Enviado." : "Falha no envio.")) + (data.error && !ok ? ` (${data.error})` : "") },
+      }));
+      if (ok) {
+        setOrders((list) =>
+          list.map((o) => (o.id === orderId ? { ...o, erp_notified_at: new Date().toISOString(), erp_last_error: null } : o))
+        );
+      }
+    } catch (err) {
+      setResendMsg((m) => ({ ...m, [orderId]: { ok: false, text: `Erro de rede: ${String(err)}` } }));
+    } finally {
+      setResending(null);
+    }
+  }
+
+  const erpPending = orders.filter(needsErpAlert);
+
   const displayed = filterStatus
     ? orders.filter((o) => o.status === filterStatus)
     : orders;
@@ -109,6 +151,59 @@ export default function PedidosPage() {
           ))}
         </select>
       </div>
+
+      {/* Alerta: pedidos pagos sem notificação ao ERP */}
+      {!loading && erpPending.length > 0 && (
+        <div className="mb-6 rounded-lg border border-red-300 bg-red-50 p-4">
+          <div className="flex items-center gap-2 text-red-800 font-medium text-sm mb-1">
+            <AlertTriangle size={16} />
+            {erpPending.length} pedido{erpPending.length !== 1 ? "s" : ""} pago{erpPending.length !== 1 ? "s" : ""} há mais de 10 minutos sem confirmação do ERP
+          </div>
+          <p className="text-xs text-red-700 mb-3">
+            Confira no ERP se a venda já está em kvo_pending_sales antes de reenviar, para não duplicar.
+          </p>
+          <ul className="divide-y divide-red-200">
+            {erpPending.map((o) => (
+              <li key={o.id} className="py-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                <Link prefetch={false} href={`/admin/pedidos/${o.id}`} className="font-medium text-kc hover:underline">
+                  #{o.order_number}
+                </Link>
+                <span className="text-gray-600">{o.guest_name || "—"}</span>
+                <span className="text-gray-500 text-xs">{formatDate(o.created_at)}</span>
+                <span className="text-gray-500 text-xs">{o.payment_method ? PAYMENT_LABEL[o.payment_method] : "—"}</span>
+                <span className="text-gray-700 text-xs font-medium">{formatCurrency(o.total)}</span>
+                {o.erp_last_error && (
+                  <span className="text-xs text-red-700 truncate max-w-[320px]" title={o.erp_last_error}>
+                    {o.erp_last_error}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => resendToErp(o.id)}
+                  disabled={resending !== null}
+                  className="ml-auto inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded border border-red-300 bg-white text-red-700 hover:bg-red-100 disabled:opacity-50"
+                >
+                  <RefreshCw size={12} className={cn(resending === o.id && "animate-spin")} />
+                  {resending === o.id ? "Enviando..." : "Reenviar ao ERP"}
+                </button>
+                {resendMsg[o.id] && !resendMsg[o.id].ok && (
+                  <span className="basis-full text-xs text-red-700">{resendMsg[o.id].text}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {Object.entries(resendMsg).some(([id, m]) => m.ok && !erpPending.some((o) => o.id === id)) && (
+        <div className="mb-6 rounded-lg border border-green-300 bg-green-50 p-3 text-xs text-green-800">
+          {Object.entries(resendMsg)
+            .filter(([, m]) => m.ok)
+            .map(([id, m]) => {
+              const o = orders.find((x) => x.id === id);
+              return <p key={id}>#{o?.order_number ?? id}: {m.text}</p>;
+            })}
+        </div>
+      )}
 
       {loading ? (
         <div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-400">

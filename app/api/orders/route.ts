@@ -17,7 +17,7 @@ export async function GET() {
   const { data: orders, error } = await admin
     .from("orders")
     .select(
-      "id, order_number, guest_name, guest_email, customer_phone, status, payment_method, total, created_at, tracking_code, shipping_service, shipping_deadline"
+      "id, order_number, guest_name, guest_email, customer_phone, status, payment_method, total, created_at, tracking_code, shipping_service, shipping_deadline, erp_notified_at, erp_notify_started_at, erp_last_error"
     )
     .order("created_at", { ascending: false })
     .limit(200);
