@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, cn } from "@/lib/utils";
+import { paymentLabelDetalhado } from "@/lib/payment-option";
 import type { OrderStatus, PaymentMethod, NfStatus, Address } from "@/types/database";
 
 // -----------------------------------------------------------------------
@@ -43,6 +44,8 @@ interface FullOrder {
   order_number: number;
   status: OrderStatus;
   payment_method: PaymentMethod | null;
+  payment_type: string | null;
+  installments: number | null;
   pagbank_charge_id: string | null;
   pagbank_status: string | null;
   guest_name: string | null;
@@ -88,12 +91,6 @@ const STATUS_CLASS: Record<OrderStatus, string> = {
   shipped:   "bg-indigo-100 text-indigo-700",
   delivered: "bg-green-100 text-green-700",
   cancelled: "bg-gray-100 text-gray-500",
-};
-
-const PAYMENT_LABEL: Record<PaymentMethod, string> = {
-  pix:         "PIX",
-  credit_card: "Cartão de Crédito",
-  boleto:      "Boleto",
 };
 
 function SectionCard({
@@ -578,7 +575,7 @@ export default function PedidoDetailPage() {
             <div className="grid grid-cols-2 gap-4">
               <Field
                 label="Método"
-                value={order.payment_method ? PAYMENT_LABEL[order.payment_method] : undefined}
+                value={paymentLabelDetalhado(order.payment_method, order.payment_type, order.installments)}
               />
               <Field label="Status MP" value={order.pagbank_status} />
               <Field label="ID Mercado Pago" value={order.pagbank_charge_id} />

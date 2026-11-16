@@ -4,6 +4,7 @@ import { sendPaymentConfirmedEmail, sendOrderCancelledEmail, sendLowStockAlertEm
 import { waitUntil } from "@vercel/functions";
 import { sendOrderPurchase } from "@/lib/tracking/tiktok-server";
 import { notifyErpNewSale, ERP_PAID_STATUSES } from "@/lib/erp/notify-sale";
+import { savePaymentDetails } from "@/lib/payment-details-store";
 
 // Semântica dos status MP no contexto do KVO:
 //
@@ -78,6 +79,10 @@ export async function POST(request: Request) {
 
     // Atualizar status do pedido conforme status do MP
     if (payment.status === "approved") {
+      // Parcelas / tipo de pagamento (só leitura da resposta do MP). Antes da
+      // notificação ao ERP, que envia esses dados. Nunca lança.
+      await savePaymentDetails(order.id, payment, "webhook");
+
       // Já pago = qualquer status a partir de "paid". Um payment.updated atrasado
       // não pode rebaixar um pedido em "preparing"/"shipped" de volta a "paid".
       const wasAlreadyPaid = (ERP_PAID_STATUSES as readonly string[]).includes(order.status);

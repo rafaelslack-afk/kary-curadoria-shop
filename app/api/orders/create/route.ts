@@ -6,6 +6,7 @@ import { calcularPrecoComPlusSize } from "@/lib/pricing";
 import { getPlusSizeMarkups } from "@/lib/pricing-server";
 import { waitUntil } from "@vercel/functions";
 import { notifyErpNewSale } from "@/lib/erp/notify-sale";
+import { savePaymentDetails } from "@/lib/payment-details-store";
 import {
   requestTrackingContext,
   saveOrderTrackingContext,
@@ -547,6 +548,11 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    // ── 5a. Parcelas / tipo de pagamento (só leitura da resposta do MP) ─────
+    // Grava orders.installments e orders.payment_type. Nunca lança e não
+    // altera nada do pedido além desses dois campos.
+    await savePaymentDetails(order.id, mpResponse, "orders/create");
 
     // ── 5b. Marcar abandono como recuperado (fire-and-forget) ───────────────
     // Regra: só é "abandono recuperado" se o cliente demorou ≥ 60 min para
