@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ShoppingBag, AlertTriangle, MessageCircle, RefreshCw } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { getPendingAlert } from "@/lib/order-expiration";
+import { paymentLabelCurto } from "@/lib/payment-option";
 import type { OrderStatus, PaymentMethod } from "@/types/database";
 
 interface OrderRow {
@@ -15,6 +16,8 @@ interface OrderRow {
   customer_phone: string | null;
   status: OrderStatus;
   payment_method: PaymentMethod | null;
+  payment_type: string | null;
+  installments: number | null;
   total: number;
   created_at: string;
   tracking_code: string | null;
@@ -53,12 +56,6 @@ const STATUS_CLASS: Record<OrderStatus, string> = {
   shipped: "bg-indigo-100 text-indigo-700",
   delivered: "bg-green-100 text-green-700",
   cancelled: "bg-gray-100 text-gray-500",
-};
-
-const PAYMENT_LABEL: Record<PaymentMethod, string> = {
-  pix: "PIX",
-  credit_card: "Cartão",
-  boleto: "Boleto",
 };
 
 // Classe Tailwind para cada cor de alerta retornada por getPendingAlert()
@@ -170,7 +167,7 @@ export default function PedidosPage() {
                 </Link>
                 <span className="text-gray-600">{o.guest_name || "—"}</span>
                 <span className="text-gray-500 text-xs">{formatDate(o.created_at)}</span>
-                <span className="text-gray-500 text-xs">{o.payment_method ? PAYMENT_LABEL[o.payment_method] : "—"}</span>
+                <span className="text-gray-500 text-xs">{paymentLabelCurto(o.payment_method, o.payment_type, o.installments)}</span>
                 <span className="text-gray-700 text-xs font-medium">{formatCurrency(o.total)}</span>
                 {o.erp_last_error && (
                   <span className="text-xs text-red-700 truncate max-w-[320px]" title={o.erp_last_error}>
@@ -285,7 +282,7 @@ export default function PedidosPage() {
                     {formatDate(order.created_at)}
                   </td>
                   <td className="px-4 py-3 text-center text-xs text-gray-600">
-                    {order.payment_method ? PAYMENT_LABEL[order.payment_method] : "—"}
+                    {paymentLabelCurto(order.payment_method, order.payment_type, order.installments)}
                   </td>
                   <td className="px-4 py-3 text-center">
                     <div className="flex flex-col items-center gap-1">

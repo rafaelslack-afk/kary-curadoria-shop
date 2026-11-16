@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { paymentOptionParaErp } from "@/lib/payment-option";
 
 // ── Notificação ERP — nova venda online ───────────────────────────────────────
 // Único ponto que envia a venda ao ERP (POST {ERP_BASE_URL}/api/kvo/sale →
@@ -102,7 +103,7 @@ async function notifyInner(orderId: string, source: string): Promise<ErpNotifyRe
   // 2. Dados do pedido e itens.
   const { data: order, error: orderErr } = await admin
     .from("orders")
-    .select("id, order_number, guest_name, guest_email, customer_phone, subtotal, shipping_cost, discount, total, payment_method, shipping_service, erp_notify_attempts")
+    .select("id, order_number, customer_id, guest_name, guest_email, customer_phone, subtotal, shipping_cost, discount, total, payment_method, payment_type, installments, shipping_service, erp_notify_attempts")
     .eq("id", orderId)
     .single();
 
@@ -167,12 +168,23 @@ async function notifyInner(orderId: string, source: string): Promise<ErpNotifyRe
     };
   });
 
+  // E-mail: guest_email do pedido; se vazio, o e-mail da conta da cliente.
+  let customerEmail: string | null = order.guest_email?.trim() || null;
+  if (!customerEmail && order.customer_id) {
+    const { data: customer } = await admin
+      .from("customers")
+      .select("email")
+      .eq("id", order.customer_id)
+      .maybeSingle();
+    customerEmail = customer?.email?.trim() || null;
+  }
+
   const payload = {
     order_id: order.id,
     order_number: order.order_number,
     customer_name: order.guest_name ?? null,
     customer_phone: order.customer_phone ?? null,
-    customer_email: order.guest_email ?? null,
+    customer_email: customerEmail,
     has_encomenda_items: mappedItems.some((i) => i.is_encomenda),
     items: mappedItems,
     subtotal: order.subtotal,
@@ -180,6 +192,8 @@ async function notifyInner(orderId: string, source: string): Promise<ErpNotifyRe
     discount: order.discount ?? 0,
     total: order.total,
     payment_method: order.payment_method,
+    payment_option: paymentOptionParaErp(order.payment_method, order.payment_type, order.installments),
+    installments: order.installments ?? null,
     shipping_service: order.shipping_service,
     origin: "kvo_online",
   };
