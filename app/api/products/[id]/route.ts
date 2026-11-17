@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { normalizeTikTokUrl } from "@/lib/tiktok-shop";
 import type { ProductUpdate } from "@/types/database";
 
 // GET /api/products/[id] — Get a single product with variants
@@ -56,6 +57,23 @@ export async function PUT(
     const bundleItems = body.bundle_items;
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { bundle_items: _bi, ...productData } = body;
+
+    // Link opcional na TikTok Shop: vazio → null; só endereços tiktok.com.
+    if ("tiktok_shop_url" in productData) {
+      const raw = productData.tiktok_shop_url;
+      if (raw === null || (typeof raw === "string" && raw.trim() === "")) {
+        productData.tiktok_shop_url = null;
+      } else {
+        const url = normalizeTikTokUrl(raw);
+        if (!url) {
+          return NextResponse.json(
+            { error: "Link na TikTok Shop inválido: use um endereço tiktok.com." },
+            { status: 400 }
+          );
+        }
+        productData.tiktok_shop_url = url;
+      }
+    }
 
     const { data, error } = await supabase
       .from("products")

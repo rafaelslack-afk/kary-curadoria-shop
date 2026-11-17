@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Package2, Layers, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { slugify } from "@/lib/utils";
+import { normalizeTikTokUrl } from "@/lib/tiktok-shop";
 import { generateVariantSku } from "@/lib/sku";
 import type { Category, Color, Size, ProductType } from "@/types/database";
 
@@ -71,6 +72,7 @@ export default function NovoProdutoPage() {
   const [costPrice, setCostPrice] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [skuBase, setSkuBase] = useState("");
+  const [tiktokShopUrl, setTiktokShopUrl] = useState("");
   const [skuBaseLoading, setSkuBaseLoading] = useState(false);
   const [active, setActive] = useState(true);
   const [featured, setFeatured] = useState(false);
@@ -295,6 +297,13 @@ export default function NovoProdutoPage() {
     e.preventDefault();
     setError("");
 
+    // Link opcional na TikTok Shop: só endereços tiktok.com.
+    const tiktokShopUrlNorm = tiktokShopUrl.trim() ? normalizeTikTokUrl(tiktokShopUrl) : null;
+    if (tiktokShopUrl.trim() && !tiktokShopUrlNorm) {
+      setError("Link na TikTok Shop inválido: use um endereço tiktok.com.");
+      return;
+    }
+
     if (productType === "individual") {
       if (grid.length === 0) {
         setError("Selecione pelo menos uma cor e um tamanho para gerar variações.");
@@ -330,6 +339,7 @@ export default function NovoProdutoPage() {
         width_cm:   widthCm   ? parseInt(widthCm)   : null,
         height_cm:  heightCm  ? parseInt(heightCm)  : null,
         images,
+        tiktok_shop_url: tiktokShopUrlNorm,
       };
 
       const payload =
@@ -449,6 +459,20 @@ export default function NovoProdutoPage() {
             <label className={labelCls}>Descrição</label>
             <textarea value={description} onChange={(e) => setDescription(e.target.value)}
               rows={3} className={`${inputCls} resize-none`} />
+          </div>
+
+          <div>
+            <label className={labelCls}>Link na TikTok Shop (opcional)</label>
+            <input
+              type="url"
+              value={tiktokShopUrl}
+              onChange={(e) => setTiktokShopUrl(e.target.value)}
+              placeholder="https://www.tiktok.com/..."
+              className={inputCls}
+            />
+            <p className="text-[9px] text-gray-400 mt-0.5">
+              Endereço tiktok.com do produto na TikTok Shop. Vazio: o convite na página do produto leva ao perfil @karycuradoria.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

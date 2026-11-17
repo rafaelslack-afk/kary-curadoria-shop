@@ -39,6 +39,7 @@ const menuItems = [
   { href: "/admin/home",       label: "Home",       icon: Home },
   { href: "/admin/tamanhos",   label: "Tamanhos",   icon: Ruler },
   { href: "/admin/configuracoes/plus-size", label: "Plus Size", icon: Settings },
+  { href: "/admin/configuracoes/tiktok-shop", label: "TikTok Shop", icon: Settings },
   { href: "/admin/cupons",     label: "Cupons",     icon: Tag },
   { href: "/admin/clientes",   label: "Clientes",   icon: Users },
   { href: "/admin/atacado",    label: "Atacado",    icon: Store },

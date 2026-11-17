@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Instagram, Mail, MapPin, Shield } from "lucide-react";
 import { buildWhatsAppUrl, INSTAGRAM_URL } from "@/lib/site";
+import { getTikTokShopConfig } from "@/lib/tiktok-shop-server";
+import { TikTokShopFooterItem } from "@/components/loja/tiktok-shop-link";
 
 function WhatsAppIcon({ size = 14 }: { size?: number }) {
   return (
@@ -11,7 +13,9 @@ function WhatsAppIcon({ size = 14 }: { size?: number }) {
   );
 }
 
-export function Footer() {
+export async function Footer() {
+  const tiktokShop = await getTikTokShopConfig();
+
   return (
     <footer className="bg-kc-dark text-kc-cream/75">
 
@@ -49,6 +53,7 @@ export function Footer() {
                   @karycuradoria
                 </a>
               </li>
+              {tiktokShop.ativo && <TikTokShopFooterItem href={tiktokShop.url_perfil} />}
               <li>
                 <a
                   href={buildWhatsAppUrl()}

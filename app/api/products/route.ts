@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { normalizeTikTokUrl } from "@/lib/tiktok-shop";
 import { withRetry } from "@/lib/supabase/retry";
 import type { ProductInsert } from "@/types/database";
 import { STOCK_BUFFER } from "@/lib/constants";
@@ -102,6 +103,23 @@ export async function POST(request: NextRequest) {
     // Extrair campos que não vão para a tabela products
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { variants: _v, bundle_items: _b, ...productData } = body;
+
+    // Link opcional na TikTok Shop: vazio → null; só endereços tiktok.com.
+    if ("tiktok_shop_url" in productData) {
+      const raw = productData.tiktok_shop_url;
+      if (raw === null || (typeof raw === "string" && raw.trim() === "")) {
+        productData.tiktok_shop_url = null;
+      } else {
+        const url = normalizeTikTokUrl(raw);
+        if (!url) {
+          return NextResponse.json(
+            { error: "Link na TikTok Shop inválido: use um endereço tiktok.com." },
+            { status: 400 }
+          );
+        }
+        productData.tiktok_shop_url = url;
+      }
+    }
 
     // Inserir produto
     const { data: product, error: productError } = await supabase
