@@ -8,6 +8,8 @@ import { RelatedProducts } from "@/components/loja/RelatedProducts";
 import { BenefitsBar } from "@/components/loja/BenefitsBar";
 import { buildProductOg } from "@/lib/product-og";
 import { buildCatalogItems, representativeItem } from "@/lib/meta-catalog";
+import { getTikTokShopConfig } from "@/lib/tiktok-shop-server";
+import { normalizeTikTokUrl } from "@/lib/tiktok-shop";
 
 interface Props {
   params: { slug: string };
@@ -73,12 +75,23 @@ export async function generateMetadata({ params }: Props) {
 }
 
 export default async function ProductPage({ params }: Props) {
-  const [product, colorHexMap] = await Promise.all([
+  const [product, colorHexMap, tiktokShopConfig] = await Promise.all([
     getProduct(params.slug),
     getColors(),
+    getTikTokShopConfig(),
   ]);
 
   if (!product) notFound();
+
+  // Convite TikTok Shop: link do produto, se cadastrado; senão, o perfil.
+  const productTikTokUrl = normalizeTikTokUrl(product.tiktok_shop_url);
+  const tiktokShop = tiktokShopConfig.ativo
+    ? {
+        texto: tiktokShopConfig.texto,
+        href: productTikTokUrl ?? tiktokShopConfig.url_perfil,
+        isProductLink: productTikTokUrl !== null,
+      }
+    : null;
 
   const SIZE_ORDER = ["PP", "P", "M", "G", "GG", "G1", "G2", "G3", "GGG", "XG", "EG", "Único"];
 
@@ -139,6 +152,7 @@ export default async function ProductPage({ params }: Props) {
         product={product as Product & { categories: Category | null }}
         variants={variants}
         colorHexMap={colorHexMap}
+        tiktokShop={tiktokShop}
       />
       <div className="max-w-7xl mx-auto px-4 lg:px-6 pb-6">
         <BenefitsBar />

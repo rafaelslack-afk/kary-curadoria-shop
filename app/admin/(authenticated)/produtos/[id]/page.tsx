@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, Save, Package2, Layers, RefreshCw, Upload, X
 import { Button } from "@/components/ui/button";
 import { CopyShortLinkButton } from "@/components/admin/CopyShortLinkButton";
 import { cn, slugify } from "@/lib/utils";
+import { normalizeTikTokUrl } from "@/lib/tiktok-shop";
 import { STOCK_BUFFER } from "@/lib/constants";
 import type { Category, ProductVariant, Color, Size, ProductType } from "@/types/database";
 
@@ -84,6 +85,7 @@ export default function EditarProdutoPage() {
   const [costPrice, setCostPrice]       = useState("");
   const [categoryId, setCategoryId]     = useState("");
   const [skuBase, setSkuBase]           = useState("");
+  const [tiktokShopUrl, setTiktokShopUrl] = useState("");
   const [savedSkuBase, setSavedSkuBase] = useState(""); // sku_base salvo (link curto)
   const [active, setActive]             = useState(true);
   const [featured, setFeatured]         = useState(false);
@@ -142,6 +144,7 @@ export default function EditarProdutoPage() {
         setProductType(product.product_type ?? "individual");
         setCategoryId(product.category_id ?? "");
         setSkuBase(product.sku_base ?? "");
+        setTiktokShopUrl(product.tiktok_shop_url ?? "");
         setSavedSkuBase(product.sku_base ?? "");
         setActive(product.active ?? true);
         setFeatured(product.featured ?? false);
@@ -344,7 +347,15 @@ export default function EditarProdutoPage() {
 
   async function handleSaveProduct(e: React.FormEvent) {
     e.preventDefault();
-    setError(""); setSuccess(""); setLoading(true);
+    setError(""); setSuccess("");
+
+    // Link opcional na TikTok Shop: só endereços tiktok.com.
+    const tiktokShopUrlNorm = tiktokShopUrl.trim() ? normalizeTikTokUrl(tiktokShopUrl) : null;
+    if (tiktokShopUrl.trim() && !tiktokShopUrlNorm) {
+      setError("Link na TikTok Shop inválido: use um endereço tiktok.com.");
+      return;
+    }
+    setLoading(true);
 
     // Validação para conjunto
     if (productType === "conjunto" && Object.keys(bundleSelection).length === 0) {
@@ -368,6 +379,7 @@ export default function EditarProdutoPage() {
         length_cm: lengthCm ? parseInt(lengthCm) : null,
         width_cm:  widthCm  ? parseInt(widthCm)  : null,
         height_cm: heightCm ? parseInt(heightCm) : null,
+        tiktok_shop_url: tiktokShopUrlNorm,
       };
 
       if (productType === "conjunto") {
@@ -712,6 +724,20 @@ export default function EditarProdutoPage() {
           <div>
             <label className={labelCls}>Descrição</label>
             <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className={`${inputCls} resize-none`} />
+          </div>
+
+          <div>
+            <label className={labelCls}>Link na TikTok Shop (opcional)</label>
+            <input
+              type="url"
+              value={tiktokShopUrl}
+              onChange={(e) => setTiktokShopUrl(e.target.value)}
+              placeholder="https://www.tiktok.com/..."
+              className={inputCls}
+            />
+            <p className="text-[9px] text-gray-400 mt-0.5">
+              Endereço tiktok.com do produto na TikTok Shop. Vazio: o convite na página do produto leva ao perfil @karycuradoria.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

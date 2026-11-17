@@ -130,6 +130,7 @@ export interface Product {
   erp_sync_enabled: boolean;         // false = fornecedor/consignado (estoque manual)
   notifica_erp_venda: boolean;       // false = vendas online não notificam o ERP
   atacado_enabled: boolean;          // false = não aparece na área de atacado
+  tiktok_shop_url?: string | null;   // link do produto na TikTok Shop (opcional)
   created_at: string;
   updated_at: string;
 }
@@ -154,6 +155,7 @@ export interface ProductInsert {
   erp_sync_enabled?: boolean;
   notifica_erp_venda?: boolean;
   atacado_enabled?: boolean;
+  tiktok_shop_url?: string | null;
 }
 
 export interface ProductUpdate {
@@ -176,6 +178,7 @@ export interface ProductUpdate {
   erp_sync_enabled?: boolean;
   notifica_erp_venda?: boolean;
   atacado_enabled?: boolean;
+  tiktok_shop_url?: string | null;
 }
 
 // ---- Itens do Conjunto (Bundle) ----

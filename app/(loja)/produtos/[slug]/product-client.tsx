@@ -16,6 +16,7 @@ import { trackConversion } from "@/lib/tracking/events";
 import { tiktokProperties } from "@/lib/tracking/contents";
 import { catalogCode, catalogItemId } from "@/lib/meta-catalog";
 import type { Product, ProductVariant, Category } from "@/types/database";
+import { TikTokShopLink, TikTokIcon } from "@/components/loja/tiktok-shop-link";
 
 // ── Componente de imagem com zoom/pan ────────────────────────────────────────
 
@@ -85,9 +86,11 @@ interface Props {
   product: Product & { categories: Category | null };
   variants: ProductVariant[];
   colorHexMap: Record<string, string>;
+  /** Convite TikTok Shop (null = desligado no admin). */
+  tiktokShop?: { texto: string; href: string; isProductLink: boolean } | null;
 }
 
-export function ProductClient({ product, variants, colorHexMap }: Props) {
+export function ProductClient({ product, variants, colorHexMap, tiktokShop }: Props) {
   const [selectedImage, setSelectedImage] = useState(0);
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
@@ -737,6 +740,20 @@ export function ProductClient({ product, variants, colorHexMap }: Props) {
               Comprar Agora
             </button>
           </div>
+
+          {/* ── Convite TikTok Shop (discreto, sempre abaixo dos botões) ── */}
+          {tiktokShop && (
+            <TikTokShopLink
+              local="produto"
+              href={tiktokShop.href}
+              isProductLink={tiktokShop.isProductLink}
+              skuBase={product.sku_base}
+              className="-mt-2 flex items-center justify-center gap-1.5 text-[11px] text-kc-muted hover:text-kc-dark underline-offset-2 hover:underline transition-colors"
+            >
+              <TikTokIcon size={12} className="shrink-0" />
+              <span>{tiktokShop.texto}</span>
+            </TikTokShopLink>
+          )}
 
           {/* ── Simulador de Frete ── */}
           <div className="border border-kc-line bg-kc-cream/40 p-4 space-y-3">
