@@ -1,5 +1,6 @@
 import * as React from "react";
 import { buildWhatsAppUrl } from "@/lib/site";
+import { getExternalTrackingInfo } from "@/lib/shipping-tracking";
 
 interface OrderShippedProps {
   orderNumber: string;
@@ -19,7 +20,7 @@ const GREEN = "#2D7A4F";
 export function OrderShippedEmail({ orderNumber, customerName, trackingCode, carrier }: OrderShippedProps) {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://karycuradoria.com.br";
   const trackUrl = `${siteUrl}/rastrear?pedido=${orderNumber}`;
-  const correiosUrl = `https://rastreamento.correios.com.br/app/index.php`;
+  const externalTracking = getExternalTrackingInfo(trackingCode, carrier);
   const firstName = customerName.split(" ")[0];
 
   return (
@@ -112,8 +113,8 @@ export function OrderShippedEmail({ orderNumber, customerName, trackingCode, car
                                   <tbody>
                                     <tr>
                                       <td style={{ paddingRight: 8 }}>
-                                        <a href={correiosUrl} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", backgroundColor: ACCENT, color: WHITE, textDecoration: "none", fontFamily: "Arial, sans-serif", fontSize: 12, letterSpacing: 1, padding: "11px 22px", borderRadius: 4 }}>
-                                          Rastrear nos Correios
+                                        <a href={externalTracking.url} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", backgroundColor: ACCENT, color: WHITE, textDecoration: "none", fontFamily: "Arial, sans-serif", fontSize: 12, letterSpacing: 1, padding: "11px 22px", borderRadius: 4 }}>
+                                          {externalTracking.label}
                                         </a>
                                       </td>
                                     </tr>

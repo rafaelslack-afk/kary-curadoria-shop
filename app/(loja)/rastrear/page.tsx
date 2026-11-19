@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Search, Package, Truck, MapPin, ChevronLeft } from "lucide-react";
 import { formatCurrency, cn } from "@/lib/utils";
 import { buildWhatsAppUrl } from "@/lib/site";
+import { getExternalTrackingInfo } from "@/lib/shipping-tracking";
 import type { OrderStatus, PaymentMethod } from "@/types/database";
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -259,14 +260,22 @@ export default function RastrearPage() {
                   <code className="flex-1 bg-gray-50 border border-gray-200 rounded px-3 py-2 text-sm font-mono tracking-widest text-kc-dark">
                     {result.tracking_code}
                   </code>
-                  <a
-                    href={`https://rastreamento.correios.com.br/app/index.php?objeto=${result.tracking_code}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[10px] tracking-[0.16em] uppercase text-kc hover:underline whitespace-nowrap"
-                  >
-                    Ver nos Correios →
-                  </a>
+                  {(() => {
+                    const tracking = getExternalTrackingInfo(
+                      result.tracking_code,
+                      result.shipping_service
+                    );
+                    return (
+                      <a
+                        href={tracking.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] tracking-[0.16em] uppercase text-kc hover:underline whitespace-nowrap"
+                      >
+                        {tracking.label} →
+                      </a>
+                    );
+                  })()}
                 </div>
               </div>
             )}
