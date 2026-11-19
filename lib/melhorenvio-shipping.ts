@@ -46,8 +46,14 @@ export interface MEOrderData {
 
 // Passo 1: Adicionar frete ao carrinho do ME
 export async function addToMECart(orderData: MEOrderData) {
-  // PAC = 1, SEDEX = 2
-  const serviceId = orderData.service.toUpperCase().includes('SEDEX') ? 2 : 1
+  // PAC = 1, SEDEX = 2, J&T Express Standard = 33
+  const serviceUpper = orderData.service.toUpperCase()
+  const serviceId =
+    serviceUpper.includes('J&T') || serviceUpper.includes('STANDARD')
+      ? 33
+      : serviceUpper.includes('SEDEX')
+        ? 2
+        : 1
 
   const payload = {
     service: serviceId,

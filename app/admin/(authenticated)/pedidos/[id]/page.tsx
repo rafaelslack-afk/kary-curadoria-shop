@@ -20,6 +20,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { formatCurrency, cn } from "@/lib/utils";
 import { paymentLabelDetalhado } from "@/lib/payment-option";
+import { getExternalTrackingInfo } from "@/lib/shipping-tracking";
 import type { OrderStatus, PaymentMethod, NfStatus, Address } from "@/types/database";
 
 // -----------------------------------------------------------------------
@@ -690,16 +691,22 @@ export default function PedidoDetailPage() {
               className="w-full border border-gray-200 rounded px-3 py-2 text-sm font-mono tracking-widest focus:outline-none focus:border-kc mb-3"
             />
             <SaveButton section="tracking" />
-            {order.tracking_code && (
-              <a
-                href={`https://rastreamento.correios.com.br/app/index.php?objeto=${order.tracking_code}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block text-xs text-kc hover:underline mt-2"
-              >
-                Rastrear nos Correios →
-              </a>
-            )}
+            {order.tracking_code && (() => {
+              const tracking = getExternalTrackingInfo(
+                order.tracking_code,
+                order.shipping_service
+              );
+              return (
+                <a
+                  href={tracking.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block text-xs text-kc hover:underline mt-2"
+                >
+                  {tracking.label} →
+                </a>
+              );
+            })()}
 
             {/* Gerar / Imprimir Etiqueta Melhor Envio */}
             {(order.status === "paid" || order.status === "preparing" || labelUrl) && (

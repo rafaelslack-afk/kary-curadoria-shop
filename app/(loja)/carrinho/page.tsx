@@ -408,7 +408,9 @@ export default function CarrinhoPage() {
                                 {selected && <div className="w-1.5 h-1.5 rounded-full bg-kc" />}
                               </div>
                               <div>
-                                <p className="text-xs font-medium text-kc-dark">{opt.name}</p>
+                                <p className="text-xs font-medium text-kc-dark">
+                                  {opt.company} · {opt.name}
+                                </p>
                                 <p className="text-[9px] text-kc-muted">
                                   até {opt.prazo} dia{opt.prazo !== 1 ? "s" : ""} útil{opt.prazo !== 1 ? "s" : ""}
                                 </p>
@@ -446,7 +448,9 @@ export default function CarrinhoPage() {
 
               {shipping.opcaoSelecionada ? (
                 <div className="flex justify-between text-xs text-kc-muted">
-                  <span>Frete ({shipping.opcaoSelecionada.name})</span>
+                  <span>
+                    Frete ({shipping.opcaoSelecionada.company} · {shipping.opcaoSelecionada.name})
+                  </span>
                   <span className="text-kc-dark">{formatCurrency(shipping.opcaoSelecionada.preco)}</span>
                 </div>
               ) : (

@@ -317,7 +317,7 @@ export function ProductClient({ product, variants, colorHexMap, tiktokShop }: Pr
   // ── Simulador de frete ───────────────────────────────────────────────────
   const [cep, setCep] = useState("");
   const [freteOpcoes, setFreteOpcoes] = useState<
-    { id: number; name: string; preco: number; prazo: number }[]
+    { id: number; name: string; company?: string; preco: number; prazo: number }[]
   >([]);
   const [freteLoading, setFreteLoading] = useState(false);
   const [freteErro, setFreteErro] = useState("");
@@ -798,7 +798,9 @@ export function ProductClient({ product, variants, colorHexMap, tiktokShop }: Pr
                     key={op.id}
                     className="flex items-center justify-between bg-white border border-kc-line px-3 py-2.5"
                   >
-                    <span className="text-xs text-kc-dark">{op.name}</span>
+                    <span className="text-xs text-kc-dark">
+                      {op.company ? `${op.company} · ${op.name}` : op.name}
+                    </span>
                     <div className="text-right">
                       <span className="text-xs font-medium text-kc">
                         {op.preco === 0

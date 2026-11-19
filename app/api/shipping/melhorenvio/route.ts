@@ -125,18 +125,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ opcoes: withQuoteTokens(mockOptions(cepDestino), cepDestino) });
     }
 
-    // Filtra apenas serviços dos Correios (company.id === 1 ou nome contém "correios")
+    // Filtra apenas serviços permitidos:
+    // - Correios (company.id === 1 ou nome contém "correios") — PAC/SEDEX
+    // - J&T Express na modalidade Standard (service.id === 33 na API v2 do ME)
     const CORREIOS_COMPANY_ID = 1;
+    const JET_STANDARD_SERVICE_ID = 33;
     const allValid = (data as Record<string, unknown>[]).filter((s) => !s.error);
-    const correiosOnly = allValid.filter((s) => {
+    const allowedServices = allValid.filter((s) => {
+      const serviceId = Number(s.id);
+      const serviceName = String(s.name ?? "").toLowerCase();
       const company = s.company as { id?: number; name?: string } | undefined;
-      return (
+      const companyName = (company?.name ?? "").toLowerCase();
+
+      const isCorreios =
         company?.id === CORREIOS_COMPANY_ID ||
-        company?.name?.toLowerCase().includes("correios")
-      );
+        companyName.includes("correios");
+
+      const isJetStandard =
+        serviceId === JET_STANDARD_SERVICE_ID ||
+        (companyName.includes("j&t") && serviceName.includes("standard"));
+
+      return isCorreios || isJetStandard;
     });
-    // Fallback: se nenhum serviço dos Correios disponível, usa todos
-    const filtered = correiosOnly.length > 0 ? correiosOnly : allValid;
+    // Fallback: se nenhum serviço permitido estiver disponível, usa todos
+    const filtered = allowedServices.length > 0 ? allowedServices : allValid;
 
     const opcoes: ShippingOption[] = filtered
       .map((s) => ({
