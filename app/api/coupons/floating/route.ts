@@ -12,8 +12,10 @@ export async function GET() {
     .select("code, floating_title, floating_description, value, type")
     .eq("is_floating", true)
     .eq("active", true)
-    .single();
+    .maybeSingle();
 
-  if (!data) return NextResponse.json(null);
-  return NextResponse.json(data);
+  // maybeSingle: sem cupom flutuante ativo não é erro (.single() gerava 406 a cada visita)
+  return NextResponse.json(data ?? null, {
+    headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" },
+  });
 }
